@@ -22,8 +22,8 @@
 
 \newcommand{\dd}[0]{ \mathrm{d} }
 
-\title{ Some notes on implicit Runge-Kutta methods } 
-\author{ Stefan Paquay } 
+\title{ Some notes on implicit Runge-Kutta methods }
+\author{ Stefan Paquay }
 \date{  }
 
 \begin{document}
@@ -38,8 +38,100 @@ That is, if we have $\dd t/ \dd t = f(t,y),$ and $y_n$ is the numerical approxim
 \end{equation*}
 The methods can be summarized easily in so-called Butcher tableaus, which conveniently list $b_i,~c_i$ and $\alpha_{i,j}.$ See \ref{tab:butcher} for the Butcher tableau of some methods.
 
-\section{The implementation}
+\begin{table}[b]
+  \centering
+  \caption{Butcher tableaus for some Runge-Kutta methods: The implicit midpoint (left), the classical Runge-Kutta method (center), and the fourth order Gauss-Legendre method (right). \label{tab:butcher}}
+  \begin{tabular}{c|c}
+    $\half$ & $\half$ \\ \hline
+    & 1
+  \end{tabular} \quad
+  \begin{tabular}{c|cccc}
+    0 & & & & \\
+    $\half$ & $\half$ & & & \\
+    $\half$ & & $\half$ & & \\
+    1 & & & 1 & \\ \hline
+    {} & $\frac{1}{6}$ & $\frac{2}{6}$ & $\frac{2}{6}$ & $\frac{1}{6}$
+  \end{tabular}
+  \begin{tabular}{c|cc}
+    $\half - \frac{\sqrt{3}}{6}$ & $\frac{1}{4}$ & $\frac{1}{4} - \frac{\sqrt{3}}{6}$ \\
+    $\half + \frac{\sqrt{3}}{6}$ & $\frac{1}{4} + \frac{\sqrt{3}}{6}$ & $\frac{1}{4}$ \\ \hline
+    {} & $\half$ & $\half$ \\
+    {} & $\half + \half\sqrt{3}$ & $\half - \half\sqrt{3}$ \\
+  \end{tabular}
+\end{table}
 
+\section{The implementation}
+A general, implicit Runge-Kutta method (RK method) involves solving a system of non-linear equations every time step.
+The exact shape of this system depends on the number of equations in the system of ODEs \emph{and} the number of stages in the method.
+If the ODE has $N_{ode}$ equations and the RK method has $N_s$ stages then the total non-linear system has $N_{ode} \times N_s$ equations.
+To ease implementation of a general implicit RK method we deduce the general form of the system of equations to solve for a general number of stages and ODEs.
+If we denote $\bvec{f}(t,\bvec{y}) = (\bvec{f}_0, \bvec{f}_1, \hdots, \bvec{f}_{N-1})^T$ then we have
+\begin{align*}
+  \bvec{F} = 
+  \begin{pmatrix}
+    \bvec{f}\left( t + c_0\Delta t, \bvec{y} + \Delta t \sum_{j=0}^{N_s-1} \alpha_{0,j} \bvec{k}_j \right) - \bvec{k}_0 \\
+    \vdots \\
+    \bvec{f}\left( t + c_0\Delta t, \bvec{y} + \Delta t \sum_{j=0}^{N_s-1} \alpha_{n,j} \bvec{k}_j \right) - \bvec{k}_n \\
+    \vdots \\
+        \bvec{f}\left( t + c_0\Delta t, \bvec{y} + \Delta t \sum_{j=0}^{N_s-1} \alpha_{N_s-1,j} \bvec{k}_j \right) - \bvec{k}_{N_s-1}
+      \end{pmatrix} =
+  \bvec{0}
+\end{align*}
+To solve such a system we employ Newton iteration.
+Although Newton iteration is typically costly, we shall see we only need to evaluate $N_{s}$ evaluations of $\bvec{f}$ and its Jacobi matrix $\bvec{J}.$
+To find the general expression of the Jacobi matrix, we will apply a general three-stage method to the following system of ODEs:
+\begin{align*}
+  \bvec{f}(t, \bvec{y}) = -\lambda \bvec{y}
+\end{align*}
+Then we have
+\begin{align*}
+  \bvec{F} = \begin{pmatrix}
+    -\lambda \bvec{y} - \lambda \Delta t \left( \alpha_{0,0}\bvec{k}_0 + \alpha_{0,1}\bvec{k}_1 + \alpha_{0,2}\bvec{k}_2  \right) - \bvec{k}_0 \\
+    -\lambda \bvec{y} - \lambda \Delta t \left( \alpha_{1,0}\bvec{k}_0 + \alpha_{1,1}\bvec{k}_1 + \alpha_{1,2}\bvec{k}_2  \right) - \bvec{k}_1 \\
+    -\lambda \bvec{y} - \lambda \Delta t \left( \alpha_{2,0}\bvec{k}_0 + \alpha_{2,1}\bvec{k}_1 + \alpha_{2,2}\bvec{k}_2  \right) - \bvec{k}_2
+\end{pmatrix}\end{align*}
+The Jacobi matrix of $\bvec{f}$ is given by $-\lambda \bvec{I},$ so the Jacobi matrix of $F$ with respect to $\bvec{k}_i$ becomes
+\begin{equation*}
+  \bvec{J}_\bvec{k} = \begin{pmatrix}
+    -\lambda \Delta t \alpha_{0,0}\bvec{I} - \bvec{I} & -\lambda \Delta t \alpha_{0,1}\bvec{I} & -\lambda \Delta t \alpha_{0,2}\bvec{I} \\
+    -\lambda \Delta t \alpha_{1,0}\bvec{I}  & -\lambda \Delta t \alpha_{1,1}\bvec{I}  - \bvec{I} & -\lambda \Delta t \alpha_{1,2}\bvec{I} \\
+    -\lambda \Delta t \alpha_{2,0}\bvec{I} & -\lambda \Delta t \alpha_{2,1}\bvec{I} & -\lambda \Delta t \alpha_{2,2}\bvec{I} - \bvec{I} \\
+  \end{pmatrix}
+\end{equation*}
+Now note that $-\lambda \bvec{I}$ is really the Jacobi matrix of $\bvec{J}$ evaluated at specific points. If we write $\bvec{J}\left( t + c_i \Delta t, \bvec{y}_n + \Delta t \sum_{j=0}^{N_s-1} \alpha_{i,j} \bvec{k}_j \right) := \bvec{J}_{i}$ then we have in general that
+\begin{align*}
+  \bvec{J}_\bvec{k} =& \Delta t\begin{pmatrix}
+      \alpha_{0,0} \bvec{J}_0 &  \alpha_{0,1} \bvec{J}_0 &  \alpha_{0,2} \bvec{J}_0 \\
+     \alpha_{1,0} \bvec{J}_1  &  \alpha_{1,1} \bvec{J}_1   &  \alpha_{1,2} \bvec{J}_2 \\
+     \alpha_{2,0} \bvec{J}_2 &  \alpha_{2,1} \bvec{J}_2 &  \alpha_{2,2} \bvec{J}_2  \\
+   \end{pmatrix} - \bvec{I}
+\end{align*}
+Note that we only need $N_s$ evaluations of the Jacobi matrix of $f$ and not $N_s^2.$
+If we have a more general system of ODEs
+\begin{equation*}
+  \bvec{f}(t,\bvec{y}) = \begin{pmatrix} f_1( t, \bvec{y} ) \\
+    f_2( t, \bvec{y} ) 
+  \end{pmatrix}, \qquad \left(\frac{\partial f_k}{\partial z}\right)_i := \frac{ \partial f}{\partial z}\left(t + c_i \Delta t, \bvec{y} + \Delta t \sum_{j=0}^{N_s-1}\alpha_{i,j} \bvec{k}_j\right)
+\end{equation*}
+with $z = x,y$ and $k = 1,2$ then the total Jacobi matrix system becomes
+\begin{align*}
+  \bvec{J}_\bvec{k} =& \Delta t\begin{pmatrix}
+    \alpha_{0,0} \left( \frac{\partial f_1}{\partial x} \right)_0 & \alpha_{0,0} \left( \frac{\partial f_1}{\partial y} \right)_0 &  \alpha_{0,1} \left( \frac{\partial f_1}{\partial x} \right)_0 & \alpha_{0,1} \left( \frac{\partial f_1}{\partial y} \right)_0 &  \alpha_{0,2} \left( \frac{\partial f_1}{\partial x} \right)_0 & \alpha_{0,2} \left( \frac{\partial f_1}{\partial y} \right)_0 \\
+    \alpha_{0,0} \left( \frac{\partial f_2}{\partial x} \right)_0 & \alpha_{0,0} \left( \frac{\partial f_2}{\partial y} \right)_0 &  \alpha_{0,1} \left( \frac{\partial f_2}{\partial x} \right)_0 & \alpha_{0,1} \left( \frac{\partial f_2}{\partial y} \right)_0 &  \alpha_{0,2} \left( \frac{\partial f_2}{\partial x} \right)_0 & \alpha_{0,2} \left( \frac{\partial f_2}{\partial y} \right)_0 \\
+    \alpha_{1,0} \left( \frac{\partial f_1}{\partial x} \right)_1 & \alpha_{1,0} \left( \frac{\partial f_1}{\partial y} \right)_1 &  \alpha_{1,1} \left( \frac{\partial f_1}{\partial x} \right)_1 & \alpha_{1,1} \left( \frac{\partial f_1}{\partial y} \right)_1 &  \alpha_{1,2} \left( \frac{\partial f_1}{\partial x} \right)_1 & \alpha_{1,2} \left( \frac{\partial f_1}{\partial y} \right)_1 \\
+    \alpha_{1,0} \left( \frac{\partial f_2}{\partial x} \right)_1 & \alpha_{1,0} \left( \frac{\partial f_2}{\partial y} \right)_1 &  \alpha_{1,1} \left( \frac{\partial f_2}{\partial x} \right)_1 & \alpha_{1,1} \left( \frac{\partial f_2}{\partial y} \right)_1 &  \alpha_{1,2} \left( \frac{\partial f_2}{\partial x} \right)_1 & \alpha_{1,2} \left( \frac{\partial f_2}{\partial y} \right)_1 \\
+    \alpha_{2,0} \left( \frac{\partial f_1}{\partial x} \right)_2 & \alpha_{2,0} \left( \frac{\partial f_1}{\partial y} \right)_2 &  \alpha_{2,1} \left( \frac{\partial f_1}{\partial x} \right)_2 & \alpha_{2,1} \left( \frac{\partial f_1}{\partial y} \right)_2 &  \alpha_{2,2} \left( \frac{\partial f_1}{\partial x} \right)_2 & \alpha_{2,2} \left( \frac{\partial f_1}{\partial y} \right)_2 \\
+    \alpha_{2,0} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,0} \left( \frac{\partial f_2}{\partial y} \right)_2 &  \alpha_{2,1} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,1} \left( \frac{\partial f_2}{\partial y} \right)_2 &  \alpha_{2,2} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,2} \left( \frac{\partial f_2}{\partial y} \right)_2 \\    
+   \end{pmatrix} - \bvec{I}
+\end{align*}
+which, in ``prettier'' notation, is
+\begin{equation*}
+  \bvec{J}_\bvec{k} = \Delta t \begin{pmatrix}
+    \alpha_{0,0}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_0 & \alpha_{0,1}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_0 & \alpha_{0,2}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_0 \\
+    \alpha_{1,0}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_1 & \alpha_{1,1}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_1 & \alpha_{1,2}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_1 \\
+    \alpha_{2,0}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_2 & \alpha_{2,1}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_2 & \alpha_{2,2}\left( \frac{\partial \bvec{f}}{\partial \bvec{y}} \right)_2
+  \end{pmatrix} - \bvec{I}
+\end{equation*}
 
 
 \end{document}
