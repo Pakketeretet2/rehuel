@@ -1,0 +1,45 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{epstopdf}
+\usepackage{abstract}
+\usepackage[toc,page]{appendix}
+\usepackage[sort]{cite}
+
+
+\usepackage{hyperref}
+
+
+\newcommand{\half}[0]{\frac{1}{2}}
+\newcommand{\bvec}[1]{\mathbf{#1}}
+\newcommand{\bigO}[2]{\mathcal{O}\left(#1^{#2} \right)}
+\newcommand{\dotprod}[2]{ \left<#1 , #2 \right> }
+
+\newcommand{\dd}[0]{ \mathrm{d} }
+
+\title{ Some notes on implicit Runge-Kutta methods } 
+\author{ Stefan Paquay } 
+\date{  }
+
+\begin{document}
+\maketitle
+
+\section{The idea}
+Runge-Kutta methods are multi-stage, single-step methods aimed towards solving (systems of) ODEs.
+They work by constructing at each time step approximations to the derivative of the function in between the current time level $t$ and the next $t + \Delta t,$ after which a linear combination of these stages is used to advance the numerical approximation to $y$ to the next level.
+That is, if we have $\dd t/ \dd t = f(t,y),$ and $y_n$ is the numerical approximation to $y$ at $t_n = n \Delta t,$ then we have
+\begin{equation*}
+  k_i = f\left( t + c_i \Delta t, y_n + \Delta t \sum_{j=0}^{N-1} \alpha_{i,j} k_j \right), \qquad y_{n+1} = y_n + \Delta t \sum_{i=0}^{N-1} b_i k_i.
+\end{equation*}
+The methods can be summarized easily in so-called Butcher tableaus, which conveniently list $b_i,~c_i$ and $\alpha_{i,j}.$ See \ref{tab:butcher} for the Butcher tableau of some methods.
+
+\section{The implementation}
+
+
+
+\end{document}
