@@ -1,5 +1,9 @@
+#ifndef NEWTON_HPP
+#define NEWTON_HPP
+
 // Functions for performing Newton iteration.
 
+#define AMRA_USE_CXX11
 #include <armadillo>
 
 namespace newton {
@@ -22,7 +26,7 @@ enum newton_solve_ret_codes {
    \returns A status code.
 */
 template <typename func_rhs, typename func_Jac >
-arma::vec newton_solve( const func_rhs &F, const func_Jac &J, arma::vec x,
+arma::vec solve( const func_rhs &F, const func_Jac &J, arma::vec x,
                         double tol, int maxit, int &status,
                         double &res, int &iters )
 {
@@ -50,3 +54,6 @@ arma::vec newton_solve( const func_rhs &F, const func_Jac &J, arma::vec x,
 }
 
 } // namespace newton
+
+
+#endif // NEWTON

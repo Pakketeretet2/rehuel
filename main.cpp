@@ -26,59 +26,104 @@ arma::mat test_J( const arma::vec &x )
 	return J;
 }
 
-arma::vec ode( double t, const arma::vec &y )
+
+arma::vec blue_sky_catastrophe( double t, const arma::vec &yy,
+                                double mu, double eps )
 {
-	return -y;
+	arma::vec rhs(3);
+	double x = yy[0];
+	double y = yy[1];
+	double z = yy[2];
+
+	double x2 = x*x;
+	double y2 = y*y;
+	double z2 = z*z;
+	double z3 = z2*z;
+
+	rhs(0) = x*(2 + mu - 10*(x2 + y2)) + z2 + x2 + y2 + 2*y;
+	rhs(1) = -z3 - (1+y)*(z2+y2+2*y) - 4*x + mu*y;
+	rhs(2) = (1+y)*z2 + x2 - eps;
+
+	return rhs;
 }
 
-arma::mat ode_J( double t, const arma::vec &v )
+arma::mat blue_sky_catastrophe_J( double t, const arma::vec &yy,
+                                  double mu, double eps )
 {
-	arma::mat JJ;
-	JJ.eye(1,1);
-	return JJ;
+	arma::mat J(3,3);
+
+	double x = yy[0];
+	double y = yy[1];
+	double z = yy[2];
+
+	double x2 = x*x;
+	double y2 = y*y;
+	double z2 = z*z;
+	double z3 = z2*z;
+
+	J(0,0) = (2 + mu - 10*(x2 + y2)) + 2*x + x*( -20*x);
+	J(0,1) = x*(2 + mu - 20*y) + 2*y + 2;
+	J(0,2) = 2*z;
+
+	J(1,0) = -4.0;
+	J(1,1) =  (z2+y2+2*y) + mu + y*( 2*y + 2 );
+	J(1,2) = -3*z2 - (1+y)*2*z;
+
+	J(2,0) = 2*x;
+	J(2,1) = z2;
+	J(2,2) = 2*z;
+
+	return J;
 }
+
 
 int main( int argc, char **argv )
 {
-	// Test newton on a simple function.
+	// Do a simple ODE.
+	double dt = 0.25;
+	int method = radau::LOBATTO_IIIA_3;
 
-	arma::vec x0({ 0.0, 0.0 });
-	std::cerr << "x0 = " << x0 << ".\n";
-	std::cerr << "F(x0) = " << test_func(x0) << ".\n";
-	std::cerr << "J(x0) = " << test_J(x0) << ".\n";
-
-	double tol = 1e-4;
-	int maxit = 1000;
-	int status = 0;
-	double res = 0.0;
-	int iters = 0;
-	arma::vec xsol = newton::newton_solve( test_func, test_J, x0, tol,
-	                                       maxit, status, res, iters );
-	if( status == newton::SUCCESS ){
-		std::cerr << "Newton iteration successfully converged to "
-		          << xsol << " with residual " << res << " after "
-		          << iters << " iterations.\n";
-	} else {
-		std::cerr << "Newton iteration failed to converge within "
-		          << maxit << " iterations! Final point was "
-		          << xsol << " with residual " << res << "!\n";
+	if( argc > 1 ){
+		int i = 1;
+		while( i < argc ){
+			const char *arg = argv[i];
+			if( strcmp(arg, "-m") == 0 ){
+				method = std::atoi( argv[i+1] );
+				i += 2;
+			}else if( strcmp(arg, "-dt") == 0 ){
+				dt = std::atof( argv[i+1] );
+				i += 2;
+			}else{
+				std::cerr << "Arg " << argv[i]
+				          << " not recognized!\n";
+				return -1;
+			}
+		}
 	}
 
-	// Do a simple ODE.
-	radau::solver_coeffs sc;
-	double dt = 0.1;
-
-	sc.b = {1.0};
-	sc.c = {1.0};
-	sc.A = {1.0};
+	radau::solver_coeffs sc = radau::get_coefficients( method );
 	sc.dt = dt;
-	arma::vec F = { 0.0 };
-	arma::mat J = { 0.0 };
-	double t = 0.0;
-	arma::vec y = {1.0};
-	radau::construct_F_and_J( F, J, t, y, sc, ode, ode_J );
+
+	std::vector<double> t;
+	std::vector<arma::vec> y;
+	arma::vec y0 = { 1.0, 1.0, 1.0 };
+	double mu = 10.0;
+	double eps = 3.0;
+	auto ode   = [&mu, &eps]( double t, const arma::vec &y )
+		{ return blue_sky_catastrophe( t, y, mu, eps ); };
+	auto ode_J = [&mu, &eps]( double t, const arma::vec &y )
+		{ return blue_sky_catastrophe_J( t, y, mu, eps); };
 
 
+	int odeint_status = radau::odeint( 0.0, 500.0, sc, y0, ode, ode_J, t, y );
+
+	for( std::size_t i = 0; i < t.size(); ++i ){
+		std::cout << t[i];
+		for( std::size_t j = 0; j < y[i].size(); ++j ){
+			std::cout << " " << y[i][j];
+		}
+		std::cout << "\n";
+	}
 
 	return 0;
 }
