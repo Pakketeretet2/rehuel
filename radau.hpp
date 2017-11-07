@@ -216,8 +216,45 @@ template <typename func_type, typename Jac_type> inline
 bool verify_jacobi_matrix( double t, const arma::vec &y,
                            const func_type &fun, const Jac_type &jac )
 {
+	double h = 1e-4;
+	std::size_t N = y.size();
+	arma::mat J_approx(N,N);
+	J_approx.zeros(N,N);
 
-	return true;
+	for( int j = 0; j < N; ++j ){
+		arma::vec new_yp = y;
+		arma::vec new_ym = y;
+
+		new_yp(j) += h;
+		new_ym(j) -= h;
+		arma::vec fp = fun( new_yp );
+		arma::vec fm = fun( new_yp );
+		arma::vec delta = fp - fm;
+		delta /= 2.0*h;
+
+		for( int i = 0; i < N; ++i ){
+			J_approx(i,j) = delta(i,j);
+		}
+	}
+
+	arma::mat J_fun = jac( t, y );
+
+	double max_diff2 = 0;
+	for( int i = 0; i < N; ++i ){
+		for( int j = 0; j < N; ++j ){
+			double delta = J_approx(i,j) - J_fun(i,j);
+			double delta2 = delta*delta;
+			if( delta2 > max_diff2 ) delta2 = max_diff2;
+		}
+	}
+
+	double max_diff = sqrt( max_diff2 );
+	std::cerr << "Largest diff is " << max_diff << "\n";
+	if( max_diff > 1e-8 ){
+		return false;
+	}else{
+		return true;
+	}
 }
 
 
