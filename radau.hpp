@@ -227,8 +227,8 @@ bool verify_jacobi_matrix( double t, const arma::vec &y,
 
 		new_yp(j) += h;
 		new_ym(j) -= h;
-		arma::vec fp = fun( new_yp );
-		arma::vec fm = fun( new_yp );
+		arma::vec fp = fun( t, new_yp );
+		arma::vec fm = fun( t, new_yp );
 		arma::vec delta = fp - fm;
 		delta /= 2.0*h;
 
