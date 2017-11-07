@@ -233,7 +233,7 @@ bool verify_jacobi_matrix( double t, const arma::vec &y,
 		delta /= 2.0*h;
 
 		for( int i = 0; i < N; ++i ){
-			J_approx(i,j) = delta(i,j);
+			J_approx(i,j) = delta(i);
 		}
 	}
 
