@@ -1,87 +1,69 @@
 #include "radau.hpp"
+#include "odes.hpp"
 #include "newton.hpp"
 
 #include <cmath>
 #include <iostream>
 
-arma::vec test_func( const arma::vec &x )
-{
-	double y1 = 1.0 - 2*std::sin(x[0])*std::cos(x[1]);
-	double y2 = -x[1] - std::exp(-x[0]);
-	return arma::vec( {y1, y2} );
-}
-
-arma::mat test_J( const arma::vec &x )
-{
-	auto J = arma::mat( 2, 2 );
-	double s1 = std::sin( x[0] );
-	double c1 = std::cos( x[0] );
-	double s2 = std::sin( x[1] );
-	double c2 = std::cos( x[1] );
-	J(0,0) = -2.0*c1*c2;
-	J(0,1) =  2.0*s1*s2;
-	J(1,0) = -std::exp( -x[0] );
-	J(1,1) = -1.0;
-
-	return J;
-}
-
-
-arma::vec blue_sky_catastrophe( double t, const arma::vec &yy,
-                                double mu, double eps )
-{
-	arma::vec rhs(3);
-	double x = yy[0];
-	double y = yy[1];
-	double z = yy[2];
-
-	double x2 = x*x;
-	double y2 = y*y;
-	double z2 = z*z;
-	double z3 = z2*z;
-
-	rhs(0) = x*(2 + mu - 10*(x2 + y2)) + z2 + x2 + y2 + 2*y;
-	rhs(1) = -z3 - (1+y)*(z2+y2+2*y) - 4*x + mu*y;
-	rhs(2) = (1+y)*z2 + x2 - eps;
-
-	return rhs;
-}
-
-arma::mat blue_sky_catastrophe_J( double t, const arma::vec &yy,
-                                  double mu, double eps )
-{
-	arma::mat J(3,3);
-
-	double x = yy[0];
-	double y = yy[1];
-	double z = yy[2];
-
-	double x2 = x*x;
-	double y2 = y*y;
-	double z2 = z*z;
-	double z3 = z2*z;
-
-	J(0,0) = (2 + mu - 10*(x2 + y2)) + 2*x + x*( -20*x);
-	J(0,1) = x*(2 + mu - 20*y) + 2*y + 2;
-	J(0,2) = 2*z;
-
-	J(1,0) = -4.0;
-	J(1,1) =  (z2+y2+2*y) + mu + y*( 2*y + 2 );
-	J(1,2) = -3*z2 - (1+y)*2*z;
-
-	J(2,0) = 2*x;
-	J(2,1) = z2;
-	J(2,2) = 2*z;
-
-	return J;
-}
 
 
 int main( int argc, char **argv )
 {
+	// Test newton and broyden solvers:
+	int iters;
+	double res;
+	arma::vec x0 = { 0.9, 0.9 };
+	int status;
+	std::cerr << "Testing solvers...\n";
+
+	newton::options opts;
+	newton::status stats;
+	opts.tol = 1e-8;
+	opts.maxit = 50000;
+	opts.time_internals = true;
+	opts.max_step = 1.0;
+	opts.refresh_jac = true;
+
+	double a = 1.0;
+	double b = 100;
+	auto ff = [a,b](const arma::vec &x)
+		{ return newton::test_functions::rosenbrock_F( x, a, b ); };
+	auto JJ = [a,b](const arma::vec &x)
+		{ return newton::test_functions::rosenbrock_J( x, a, b ); };
+
+
+	arma::vec root_newton = newton::solve( ff, x0, opts, stats, JJ );
+
+	std::cerr << "Full Newton ";
+	if( stats.conv_status ){
+		std::cerr << "failed to converge, final approx solution = ";
+	}else{
+		std::cerr << "converged, root = ";
+	}
+	std::cerr << "(" << root_newton(0) << ", "
+	          << root_newton(1) << "); it took " << stats.iters
+	          << " iterations (res = " << stats.res << ").\n";
+
+	arma::vec root_broyden = newton::solve( ff, x0, opts, stats );
+
+	std::cerr << "Broyden  ";
+	if( stats.conv_status ){
+		std::cerr << "failed to converge, final approx solution = ";
+	}else{
+		std::cerr << "converged, root = ";
+	}
+	std::cerr << "(" << root_broyden(0) << ", "
+	          << root_broyden(1) << "); it took " << stats.iters
+	          << " iterations (res = " << stats.res << ").\n";
+
+
 	// Do a simple ODE.
-	double dt = 0.25;
-	int method = radau::LOBATTO_IIIA_3;
+	double dt = 0.025;
+	int method = radau::LOBATTO_IIIA_43;
+	method = radau::GAUSS_LEGENDRE_65;
+	method = radau::DORMAND_PRINCE5_4;
+
+	opts.time_internals = false;
 
 	if( argc > 1 ){
 		int i = 1;
@@ -102,20 +84,26 @@ int main( int argc, char **argv )
 	}
 
 	radau::solver_coeffs sc = radau::get_coefficients( method );
+	radau::solver_options s_opts = radau::default_solver_options();
+
 	sc.dt = dt;
+	s_opts.local_tol = 1e-3;
 
 	std::vector<double> t;
 	std::vector<arma::vec> y;
-	arma::vec y0 = { 1.0, 1.0, 1.0 };
+	arma::vec y0 = { 0.9, 1.0, 1.1 };
+	double t0 = 0.0;
+	double t1 = 50.0;
+
 	double mu = 10.0;
 	double eps = 3.0;
 	auto ode   = [&mu, &eps]( double t, const arma::vec &y )
-		{ return blue_sky_catastrophe( t, y, mu, eps ); };
+		{ return radau::odes::blue_sky_catastrophe( t, y, mu, eps ); };
 	auto ode_J = [&mu, &eps]( double t, const arma::vec &y )
-		{ return blue_sky_catastrophe_J( t, y, mu, eps); };
+		{ return radau::odes::blue_sky_catastrophe_J( t, y, mu, eps); };
 
-
-	int odeint_status = radau::odeint( 0.0, 500.0, sc, y0, ode, ode_J, t, y );
+	int odeint_status = radau::odeint( t0, t1, sc, s_opts, y0,
+	                                   ode, ode_J, t, y );
 
 	for( std::size_t i = 0; i < t.size(); ++i ){
 		std::cout << t[i];

@@ -10,30 +10,73 @@
 #include <armadillo>
 #include <cassert>
 
+#include "my_timer.hpp"
 #include "newton.hpp"
 
 namespace radau {
 
+/**
+   Contains the Butcher tableau plus time step size.
+*/
 struct solver_coeffs
 {
 	arma::vec b, c;
 	arma::mat A;
 	double dt;
+
 	arma::vec b2; // To use for embedding.
+	bool FSAL;    // If FSAL, an optimization is possible.
+};
+
+
+struct solver_options {
+	enum internal_solvers {
+		BROYDEN = 0,
+		NEWTON = 1
+	};
+
+	solver_options()
+		: internal_solver(BROYDEN), adaptive_step_size(true),
+		  local_tol(1e-6) {}
+
+	int internal_solver;
+	bool adaptive_step_size;
+	double local_tol;
 };
 
 enum rk_methods {
-	EXPLICIT_EULER = 0,
-	IMPLICIT_EULER = 1,
-	CLASSIC_RK = 2,
-	GAUSS_LEGENDRE_2 = 3,
-	RADAU_IIA_2 = 4,
-	LOBATTO_IIIA_3 = 5
+	EXPLICIT_EULER      = 10,
+	CLASSIC_RK4         = 11,
+	BOGACKI_SHAMPINE2_3 = 12,
+	CASH_KARP5_4        = 13,
+	DORMAND_PRINCE5_4   = 14,
+
+	IMPLICIT_EULER      = 20,
+	RADAU_IIA_32        = 21,
+	LOBATTO_IIIA_43     = 22,
+	GAUSS_LEGENDRE_65   = 23
+};
+
+enum status_codes {
+	SUCCESS = 0,
+	DT_TOO_LARGE  =  1,
+	DT_TOO_SMALL  =  2,
+	GENERAL_ERROR = -1,
+	INTERNAL_SOLVE_FAILURE = -3,
+	TIME_STEP_TOO_SMALL = -4
 };
 
 bool verify_solver_coeffs( const solver_coeffs &sc );
 
 solver_coeffs get_coefficients( int method );
+solver_options default_solver_options();
+
+
+// Attempts to find a more optimal time step size
+double get_better_time_step( double dt_old, double error_estimate,
+                             const solver_options &opts );
+
+
 
 template <typename func_type, typename Jac_type> inline
 arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
@@ -117,27 +160,20 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 }
 
 template <typename func_type, typename Jac_type> inline
-int take_time_step( double t, arma::vec &y,
+int take_time_step( double t, arma::vec &y, double dt,
                     const radau::solver_coeffs &sc,
-                    const func_type &fun, const Jac_type &jac )
+                    const radau::solver_options &solver_opts,
+                    const func_type &fun, const Jac_type &jac,
+                    bool adaptive_dt, double &err,
+                    arma::vec &K )
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
 	auto NN = Ns*Neq;
 
-	arma::vec F( NN );
 	arma::mat J( NN, NN );
 
 	// Use newton iteration to find the Ks for the next level:
-	arma::vec K( NN );
-	K.zeros();
-
-	double tol = 1e-8;
-	double res = 0.0;
-	int maxit = 100000;
-	int iters = 0;
-	int status = 0;
-
 	auto stages_func = [&t, &y, &sc, &fun, &jac]( const arma::vec &K ){
 		return construct_F( t, y, K, sc, fun, jac );
 	};
@@ -145,26 +181,83 @@ int take_time_step( double t, arma::vec &y,
 		return construct_J( t, y, K, sc, fun, jac );
 	};
 
-	K = newton::solve( stages_func, stages_jac, K, tol, maxit,
-	                   status, res, iters );
-	if( status == newton::SUCCESS ){
-		// You can update the time step.
+	newton::options opts;
+	newton::status stats;
+
+	opts.tol = 1e-8;
+	opts.time_internals = false;
+	opts.refresh_jac = false;
+	opts.maxit = 10000;
+
+	switch( solver_opts.internal_solver ){
+		case solver_options::NEWTON:
+			K = newton::solve( stages_func, K, opts, stats, stages_jac );
+			break;
+		default:
+		case solver_options::BROYDEN:
+			K = newton::solve( stages_func, K, opts, stats );
+			break;
+	}
+
+	bool increase_dt = false;
+
+	if( stats.conv_status == newton::SUCCESS ){
+		arma::vec y_alt;
+		// First, do adaptive time step:
+		if( adaptive_dt ){
+			y_alt = y;
+			for( unsigned int i = 0; i < Ns; ++i ){
+				unsigned int offset = i*Neq;
+				const auto &Ki = K.subvec( offset,
+				                           offset + Neq - 1 );
+				y_alt += dt * sc.b2[i] * Ki;
+			}
+		}
+
+		arma::vec yn = y;
+
 		for( unsigned int i = 0; i < Ns; ++i ){
 			unsigned int offset = i*Neq;
 			const auto &Ki = K.subvec( offset, offset + Neq - 1 );
-			y += sc.dt * sc.b[i] * Ki;
+			yn += dt * sc.b[i] * Ki;
 		}
+
+		if( adaptive_dt ){
+			auto y_err = yn - y_alt;
+			double err_est = arma::norm( y_err, "inf" );
+			err = err_est;
+			if( err > solver_opts.local_tol ){
+				std::cerr << "Error estimate " << err
+				          << " is too large!\n";
+				return DT_TOO_LARGE;
+			}else if( err < solver_opts.local_tol * 0.05 ){
+				// Flag this but do update y anyway.
+				increase_dt = true;
+			}
+		}
+
+		// If you get here, either adaptive_dt == false
+		// or everything is fine.
+		y = yn;
+
+		if( increase_dt ) return DT_TOO_SMALL;
+		else              return SUCCESS;
+
 	}else{
-		// Somehow signal something went wrong.
-		return -1;
+		std::cerr << "Internal solver did not converge to tol "
+		          << opts.tol << " in " << opts.maxit
+			  << " iterations! Final residual is "
+			  << stats.res << "!\n";
+		return INTERNAL_SOLVE_FAILURE;
 	}
 
-	return 0;
+	return SUCCESS;
 }
 
 
 template <typename func_type, typename Jac_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
+            const solver_options &solver_opts,
             const arma::vec &y0, const func_type &fun, const Jac_type &jac,
             std::vector<double> &t_vals, std::vector<arma::vec> &y_vals )
 {
@@ -178,84 +271,122 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	assert( sc.dt > 0 && "Cannot use time step size of 0!" );
 
-	arma::vec y = y0;
-	y_vals.push_back( y );
-	t_vals.push_back( t );
 	double dt = sc.dt;
+
+	double err = 0.0; // For adaptive time step size.
+
+	bool adaptive_dt = solver_opts.adaptive_step_size;
+	if( adaptive_dt ){
+		if( sc.b2.size() != sc.b.size() ){
+			std::cerr << "Adaptive time step requested but chosen "
+			          << "method has no embedded auxillary pair!\n";
+			adaptive_dt = false;
+		}
+	}
+
+	arma::vec y = y0;
+
+	t_vals.push_back( t );
+	y_vals.push_back( y );
 
 	// Main integration loop:
 	int status = 0;
 	int steps = 0;
 
 	std::cerr << "# step  t    dt\n";
-	std::cerr << steps << "  " << t << "  " << dt << "\n";
+	auto print_integrator_stats = [&steps, &t, &dt, &err]{
+		std::cerr << steps << "  " << t << "  " << dt
+		<< " " << err << "\n"; };
+	print_integrator_stats();
+
+	my_timer timer( std::cerr );
+	timer.tic();
+
+
+	std::size_t Neq = y.size();
+	std::size_t Ns  = sc.b.size();
+	std::size_t NN = Ns * Neq;
+
+	arma::vec K( NN );
+	K.zeros( NN );
+	// This might be a better guess:
+	/*
+	for( int i = 0; i < Ns; ++i ){
+		K.subvec( i, i + Neq - 1 ) = y;
+	}
+	*/
 
 	while( t < t1 ){
-		status = take_time_step( sc.dt, y, sc, fun, jac );
-		if( status ){
-			// Handle special status...
-			dt *= 0.5;
-			std::cerr << "Newton iteration failed to converge! "
-			          << "Halving time step to " << dt << "!\n";
-		}else{
-			// OK.
-			t += sc.dt;
-			t_vals.push_back( t );
-			y_vals.push_back( y );
-			++steps;
-			if( steps % 100 == 0 ){
-				std::cerr << steps << "  " << t << "  " << dt << "\n";
-			}
+
+		double old_dt = dt;
+		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
+		                         adaptive_dt, err, K );
+
+		switch( status ){
+			default:
+			case GENERAL_ERROR:
+				std::cerr << "Generic error in odeint!\n";
+				return GENERAL_ERROR;
+
+				break;
+
+
+			case INTERNAL_SOLVE_FAILURE:
+				std::cerr << "Internal solver failed to converge! ";
+			case DT_TOO_LARGE:
+				if( adaptive_dt ){
+					dt = get_better_time_step( dt, err,
+					                           solver_opts );
+				}else{
+					dt *= 0.9*0.3;
+				}
+
+				if( dt < 1e-10 ){
+					std::cerr << "dt is too small!\n";
+					return TIME_STEP_TOO_SMALL;
+				}
+				std::cerr << "dt is now " << dt << ", was " << old_dt << "\n";
+				break;
+
+
+			case DT_TOO_SMALL:
+				if( adaptive_dt ){
+					dt = get_better_time_step( dt, err,
+					                           solver_opts );
+				}else{
+					dt *= 1.2;
+				}
+			case SUCCESS:
+				// OK.
+				t += old_dt;
+				++steps;
+				if( steps % 50000 == 0 ){
+					print_integrator_stats();
+				}
+
+				t_vals.push_back( t );
+				y_vals.push_back( y );
+
+				break;
 		}
+
+		if( status != SUCCESS && status != DT_TOO_SMALL ){
+			continue;
+		}
+
+		// Do some other post-processing here.
+
+	}
+
+	if( solver_opts.internal_solver == solver_options::NEWTON ){
+		timer.toc( "Integrating with Newton iteration" );
+	}else if( solver_opts.internal_solver == solver_options::BROYDEN ){
+		timer.toc( "Integrating with Broyden iteration" );
 	}
 
 	return 0;
 }
 
-template <typename func_type, typename Jac_type> inline
-bool verify_jacobi_matrix( double t, const arma::vec &y,
-                           const func_type &fun, const Jac_type &jac )
-{
-	double h = 1e-4;
-	std::size_t N = y.size();
-	arma::mat J_approx(N,N);
-	J_approx.zeros(N,N);
-
-	for( int j = 0; j < N; ++j ){
-		arma::vec new_yp = y;
-		arma::vec new_ym = y;
-
-		new_yp(j) += h;
-		new_ym(j) -= h;
-		arma::vec fp = fun( t, new_yp );
-		arma::vec fm = fun( t, new_yp );
-		arma::vec delta = fp - fm;
-		delta /= 2.0*h;
-
-		for( int i = 0; i < N; ++i ){
-			J_approx(i,j) = delta(i);
-		}
-	}
-
-	arma::mat J_fun = jac( t, y );
-
-	double max_diff2 = 0;
-	for( int i = 0; i < N; ++i ){
-		for( int j = 0; j < N; ++j ){
-			double delta = J_approx(i,j) - J_fun(i,j);
-			double delta2 = delta*delta;
-			if( delta2 > max_diff2 ) delta2 = max_diff2;
-		}
-	}
-
-	double max_diff = sqrt( max_diff2 );
-	std::cerr << "Largest diff is " << max_diff << "\n";
-	if( max_diff > 1e-8 ){
-		return false;
-	}else{
-		return true;
-	}
-}
 
 
 
