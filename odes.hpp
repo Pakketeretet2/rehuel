@@ -20,6 +20,12 @@ arma::mat blue_sky_catastrophe_J( double t, const arma::vec &yy,
 arma::vec brusselator( double t, const arma::vec &yy, double a, double b );
 arma::mat brusselator_J( double t, const arma::vec &yy, double a, double b );
 
+arma::vec analytic_solvable_func( const arma::vec &yy,
+                                  double a, double b, double w );
+arma::mat analytic_solvable_func_J( const arma::vec &yy,
+                                    double a, double b, double w );
+
+
 } // namespace odes
 
 } //namespace radau

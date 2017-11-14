@@ -100,6 +100,26 @@ arma::mat brusselator_J( double t, const arma::vec &yy, double a, double b )
 	return J;
 }
 
+
+// rhs of y', with y = ( exp(-at)cos(wt), exp(-bt)sin(wt) )
+arma::vec analytic_solvable_func( const arma::vec &yy,
+                                  double a, double b, double w )
+{
+	arma::vec f = { -a*yy[0] - w*yy[1],
+	                -b*yy[1] + w*yy[0] };
+
+	return f;
+}
+
+
+arma::mat analytic_solvable_func_J( const arma::vec &yy,
+                                    double a, double b, double w )
+{
+	arma::mat J = { { -a, -w },
+	                {  w, -b } };
+	return J;
+}
+
 } // namespace odes
 
 } // namespace radau

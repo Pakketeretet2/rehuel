@@ -6,8 +6,7 @@
 #include <iostream>
 
 
-
-int main( int argc, char **argv )
+void test_newton_solvers()
 {
 	// Test newton and broyden solvers:
 	int iters;
@@ -55,15 +54,15 @@ int main( int argc, char **argv )
 	std::cerr << "(" << root_broyden(0) << ", "
 	          << root_broyden(1) << "); it took " << stats.iters
 	          << " iterations (res = " << stats.res << ").\n";
+}
 
 
+
+int main( int argc, char **argv )
+{
 	// Do a simple ODE.
 	double dt = 0.025;
 	int method = radau::LOBATTO_IIIA_43;
-	method = radau::GAUSS_LEGENDRE_65;
-	method = radau::DORMAND_PRINCE5_4;
-
-	opts.time_internals = false;
 
 	if( argc > 1 ){
 		int i = 1;
@@ -95,12 +94,14 @@ int main( int argc, char **argv )
 	double t0 = 0.0;
 	double t1 = 50.0;
 
-	double mu = 10.0;
-	double eps = 3.0;
-	auto ode   = [&mu, &eps]( double t, const arma::vec &y )
-		{ return radau::odes::blue_sky_catastrophe( t, y, mu, eps ); };
-	auto ode_J = [&mu, &eps]( double t, const arma::vec &y )
-		{ return radau::odes::blue_sky_catastrophe_J( t, y, mu, eps); };
+	double a = 20.0;
+	double b = 15.0;
+	double w = 0.05;
+
+	auto ode = [a,b,w]( double t, const arma::vec &yy ){
+		return radau::odes::analytic_solvable_func( yy, a, b, w ); };
+	auto ode_J = [a,b,w]( double t, const arma::vec &yy ){
+		return radau::odes::analytic_solvable_func_J( yy, a, b, w ); };
 
 	int odeint_status = radau::odeint( t0, t1, sc, s_opts, y0,
 	                                   ode, ode_J, t, y );
