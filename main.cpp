@@ -1,6 +1,8 @@
-#include "radau.hpp"
-#include "odes.hpp"
+#include "interpolate.hpp"
 #include "newton.hpp"
+#include "odes.hpp"
+#include "irk.hpp"
+
 
 #include <cmath>
 #include <iostream>
@@ -62,14 +64,19 @@ int main( int argc, char **argv )
 {
 	// Do a simple ODE.
 	double dt = 0.025;
-	int method = radau::LOBATTO_IIIA_43;
+	int method = irk::LOBATTO_IIIA_43;
 
 	if( argc > 1 ){
 		int i = 1;
 		while( i < argc ){
 			const char *arg = argv[i];
 			if( strcmp(arg, "-m") == 0 ){
-				method = std::atoi( argv[i+1] );
+				method = irk::name_to_method( argv[i+1] );
+				if( method < 0 ){
+					std::cerr << "Unrecognized integrator "
+					          << argv[i+1] << "!\n";
+					return -2;
+				}
 				i += 2;
 			}else if( strcmp(arg, "-dt") == 0 ){
 				dt = std::atof( argv[i+1] );
@@ -82,34 +89,67 @@ int main( int argc, char **argv )
 		}
 	}
 
-	radau::solver_coeffs sc = radau::get_coefficients( method );
-	radau::solver_options s_opts = radau::default_solver_options();
+	irk::solver_coeffs sc = irk::get_coefficients( method );
+	irk::solver_options s_opts = irk::default_solver_options();
 
 	sc.dt = dt;
-	s_opts.local_tol = 1e-3;
-
+	s_opts.local_tol = 1e-6;
+	s_opts.internal_solver = irk::solver_options::NEWTON;
 	std::vector<double> t;
 	std::vector<arma::vec> y;
-	arma::vec y0 = { 0.9, 1.0, 1.1 };
+	arma::vec y0 = { 1.0, 0.0 };
 	double t0 = 0.0;
 	double t1 = 50.0;
 
-	double a = 20.0;
-	double b = 15.0;
+	double a = 1.0 / 20.0;
+	double b = 1.0 / 15.0;
 	double w = 0.05;
 
 	auto ode = [a,b,w]( double t, const arma::vec &yy ){
-		return radau::odes::analytic_solvable_func( yy, a, b, w ); };
+		return odes::analytic_solvable_func( yy, a, b, w ); };
 	auto ode_J = [a,b,w]( double t, const arma::vec &yy ){
-		return radau::odes::analytic_solvable_func_J( yy, a, b, w ); };
+		return odes::analytic_solvable_func_J( yy, a, b, w ); };
 
-	int odeint_status = radau::odeint( t0, t1, sc, s_opts, y0,
+	if( y0.size() != ode(t0, y0).size() ){
+		std::cerr << "Dimensions of initial condition and ODE "
+		          << "do not match! Aborting!\n";
+		return -1;
+	}
+
+	int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
 	                                   ode, ode_J, t, y );
 
-	for( std::size_t i = 0; i < t.size(); ++i ){
-		std::cout << t[i];
-		for( std::size_t j = 0; j < y[i].size(); ++j ){
-			std::cout << " " << y[i][j];
+	// Do not output all points but do interpolation on a mesh:
+	std::vector<double> t_grid;
+	double tc = t0;
+	double dtc = 0.01;
+	while( tc < 0.5 ){
+		t_grid.push_back( tc );
+		tc += dtc;
+	}
+	dtc = 0.05;
+	while( tc < 2.5 ){
+		t_grid.push_back( tc );
+		tc += dtc;
+	}
+	dtc = 0.2;
+	while( tc < 10 ){
+		t_grid.push_back( tc );
+		tc += dtc;
+	}
+	dtc = 0.5;
+	while( tc < t1 ){
+		t_grid.push_back( tc );
+		tc += dtc;
+	}
+	t_grid.push_back(t1);
+
+	std::vector<arma::vec> y_interp = interpolate::linear( t, y, t_grid );
+
+	for( std::size_t i = 0; i < t_grid.size(); ++i ){
+		std::cout << t_grid[i];
+		for( std::size_t j = 0; j < y_interp[i].size(); ++i ){
+			std::cout << " " << y_interp[i][j];
 		}
 		std::cout << "\n";
 	}

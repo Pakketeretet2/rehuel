@@ -1,5 +1,5 @@
-#ifndef RADAU_HPP
-#define RADAU_HPP
+#ifndef IRK_HPP
+#define IRK_HPP
 
 // A library to solve ODEs
 
@@ -13,7 +13,7 @@
 #include "my_timer.hpp"
 #include "newton.hpp"
 
-namespace radau {
+namespace irk {
 
 /**
    Contains the Butcher tableau plus time step size.
@@ -46,10 +46,10 @@ struct solver_options {
 
 enum rk_methods {
 	EXPLICIT_EULER      = 10,
-	CLASSIC_RK4         = 11,
-	BOGACKI_SHAMPINE2_3 = 12,
-	CASH_KARP5_4        = 13,
-	DORMAND_PRINCE5_4   = 14,
+        RUNGE_KUTTA_4       = 11,
+	BOGACKI_SHAMPINE_23 = 12,
+	CASH_KARP_54        = 13,
+	DORMAND_PRINCE_54   = 14,
 
 	IMPLICIT_EULER      = 20,
 	RADAU_IIA_32        = 21,
@@ -76,11 +76,12 @@ solver_options default_solver_options();
 double get_better_time_step( double dt_old, double error_estimate,
                              const solver_options &opts );
 
+unsigned int name_to_method( const char *name );
 
 
 template <typename func_type, typename Jac_type> inline
 arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
-                       const radau::solver_coeffs &sc,
+                       const irk::solver_coeffs &sc,
                        const func_type &fun, const Jac_type &jac )
 {
 	auto Ns  = sc.b.size();
@@ -113,7 +114,7 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 
 template <typename func_type, typename Jac_type> inline
 arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
-                       const radau::solver_coeffs &sc,
+                       const irk::solver_coeffs &sc,
                        const func_type &fun, const Jac_type &jac )
 {
 	auto Ns  = sc.b.size();
@@ -161,8 +162,8 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 
 template <typename func_type, typename Jac_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
-                    const radau::solver_coeffs &sc,
-                    const radau::solver_options &solver_opts,
+                    const irk::solver_coeffs &sc,
+                    const irk::solver_options &solver_opts,
                     const func_type &fun, const Jac_type &jac,
                     bool adaptive_dt, double &err,
                     arma::vec &K )
@@ -227,8 +228,6 @@ int take_time_step( double t, arma::vec &y, double dt,
 			double err_est = arma::norm( y_err, "inf" );
 			err = err_est;
 			if( err > solver_opts.local_tol ){
-				std::cerr << "Error estimate " << err
-				          << " is too large!\n";
 				return DT_TOO_LARGE;
 			}else if( err < solver_opts.local_tol * 0.05 ){
 				// Flag this but do update y anyway.
@@ -308,15 +307,13 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	std::size_t NN = Ns * Neq;
 
 	arma::vec K( NN );
-	K.zeros( NN );
-	// This might be a better guess:
-	/*
-	for( int i = 0; i < Ns; ++i ){
+	for( std::size_t i = 0; i < Ns; ++i ){
 		K.subvec( i, i + Neq - 1 ) = y;
 	}
-	*/
+
 
 	while( t < t1 ){
+		bool something_changed = false;
 
 		double old_dt = dt;
 		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
@@ -345,9 +342,9 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 					std::cerr << "dt is too small!\n";
 					return TIME_STEP_TOO_SMALL;
 				}
-				std::cerr << "dt is now " << dt << ", was " << old_dt << "\n";
-				break;
 
+				something_changed = true;
+				break;
 
 			case DT_TOO_SMALL:
 				if( adaptive_dt ){
@@ -356,13 +353,11 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				}else{
 					dt *= 1.2;
 				}
+				something_changed = true;
 			case SUCCESS:
 				// OK.
 				t += old_dt;
 				++steps;
-				if( steps % 50000 == 0 ){
-					print_integrator_stats();
-				}
 
 				t_vals.push_back( t );
 				y_vals.push_back( y );
@@ -374,7 +369,23 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			continue;
 		}
 
-		// Do some other post-processing here.
+		// Do some preparation for the next time step here:
+		if( sc.FSAL ){
+			std::size_t i0 = (Ns-1)*Neq;
+			std::size_t i1 = Ns*Neq - 1;
+			K.subvec( 0, Neq - 1 ) = K.subvec( i0, i1 );
+		}else{
+			K.subvec( 0, Neq - 1 ) = y;
+		}
+		for( std::size_t i = 1; i < Ns; ++i ){
+
+			K.subvec( i, i + Neq - 1 ) = y;
+		}
+
+		if( steps % 1000 == 0 || something_changed ){
+			print_integrator_stats();
+		}
+
 
 	}
 
@@ -390,7 +401,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 
 
-} // namespace radau
+} // namespace irk
 
 
-#endif // RADAU_HPP
+#endif // IRK_HPP

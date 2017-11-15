@@ -1,9 +1,11 @@
 #include <armadillo>
 #include <iostream>
+#include <string>
 
-#include "radau.hpp"
+#include "irk.hpp"
 
-namespace radau {
+
+namespace irk {
 
 
 bool verify_solver_coeffs( const solver_coeffs &sc )
@@ -20,7 +22,6 @@ solver_coeffs get_coefficients( int method )
 	solver_coeffs sc;
 	double one_third = 1.0/3.0;
 	double one_six = 1.0/6.0;
-	double sqrt2 = sqrt(2);
 	double sqrt3 = sqrt(3);
 	sc.FSAL = false;
 
@@ -41,7 +42,7 @@ solver_coeffs get_coefficients( int method )
 
 			break;
 
-		case CLASSIC_RK4:
+		case RUNGE_KUTTA_4:
 			sc.A = { { 0.0, 0.0, 0.0, 0.0 },
 			         { 0.5, 0.0, 0.0, 0.0 },
 			         { 0.0, 0.5, 0.0, 0.0 },
@@ -79,11 +80,11 @@ solver_coeffs get_coefficients( int method )
 			break;
 
 
-		case BOGACKI_SHAMPINE2_3:
-			sc.A  = { {  0.0,  0.0, 0.0 },
-			          {  0.5,  0.0, 0.0 },
-			          {  0.0, 0.75, 0.0 },
-			          { 2.0/9.0, 1.0 / 3.0, 4.0 / 9.0 } };
+		case BOGACKI_SHAMPINE_23:
+			sc.A  = { {  0.0,  0.0, 0.0, 0.0 },
+			          {  0.5,  0.0, 0.0, 0.0 },
+			          {  0.0, 0.75, 0.0, 0.0 },
+			          { 2.0/9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0 } };
 			sc.b  = { 2.0/9.0, 1.0/3.0, 4.0/9.0, 0.0 };
 			sc.b2 = { 7.0/24.0, 0.25, 1.0/3.0, 1.0/8.0 };
 
@@ -93,7 +94,7 @@ solver_coeffs get_coefficients( int method )
 
 
 			break;
-		case CASH_KARP5_4:
+		case CASH_KARP_54:
 			std::cerr << "CASH_KARP5_4 does not work properly!\n";
 			std::terminate();
 
@@ -129,7 +130,7 @@ solver_coeffs get_coefficients( int method )
 
 
 			break;
-		case DORMAND_PRINCE5_4:
+		case DORMAND_PRINCE_54:
 			sc.A = arma::mat(7,7);
 			sc.A.zeros( 7,7 );
 
@@ -190,5 +191,23 @@ double get_better_time_step( double dt_old, double error_estimate,
 	return dt_old * factor;
 }
 
+unsigned int name_to_method( const char *name )
+{
+	std::string n(name);
 
-} // namespace radau
+	if( n == "explicit_euler" )      return EXPLICIT_EULER;
+	if( n == "runge_kutta_4" )       return RUNGE_KUTTA_4;
+	if( n == "bogacki_shampine_23" ) return BOGACKI_SHAMPINE_23;
+	if( n == "cash_karp_54" )        return CASH_KARP_54;
+	if( n == "dormand_prince_54" )   return DORMAND_PRINCE_54;
+
+	if( n == "implicit_euler" )      return IMPLICIT_EULER;
+	if( n == "radau_IIA_32" )        return RADAU_IIA_32;
+	if( n == "lobatto_IIIA_43" )     return LOBATTO_IIIA_43;
+	if( n == "gauss_legendre_65" )   return GAUSS_LEGENDRE_65;
+
+	return -1337;
+}
+
+
+} // namespace irk

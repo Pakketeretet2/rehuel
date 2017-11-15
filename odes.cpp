@@ -1,9 +1,5 @@
 #include "odes.hpp"
 
-using namespace radau::odes;
-
-namespace radau {
-
 namespace odes {
 
 arma::vec test_func( const arma::vec &x )
@@ -61,7 +57,6 @@ arma::mat blue_sky_catastrophe_J( double t, const arma::vec &yy,
 	double x2 = x*x;
 	double y2 = y*y;
 	double z2 = z*z;
-	double z3 = z2*z;
 
 	J(0,0) = (2 + mu - 10*(x2 + y2)) + 2*x + x*( -20*x);
 	J(0,1) = x*(2 + mu - 20*y) + 2*y + 2;
@@ -121,5 +116,3 @@ arma::mat analytic_solvable_func_J( const arma::vec &yy,
 }
 
 } // namespace odes
-
-} // namespace radau

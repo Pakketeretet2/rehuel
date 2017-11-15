@@ -5,8 +5,6 @@
 
 #include <armadillo>
 
-namespace radau {
-
 namespace odes {
 
 arma::vec test_func( const arma::vec &x );
@@ -27,7 +25,5 @@ arma::mat analytic_solvable_func_J( const arma::vec &yy,
 
 
 } // namespace odes
-
-} //namespace radau
 
 #endif // ODES_HPP
