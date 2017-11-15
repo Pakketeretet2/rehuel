@@ -1,8 +1,6 @@
-Rehuel: A simple C++11 library for solving ordinary differential equations.
+Rehuel
 ==============
-
-Summary
-
+A simple C++11 library for solving ordinary differential equations.
 --------------
 
 Rehuel is a relatively simple C++11 library for solving ordinary differential
