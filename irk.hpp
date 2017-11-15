@@ -431,7 +431,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	int status = 0;
 	int steps = 0;
 
-	std::cerr << "# step  t    dt\n";
+	std::cerr << "# step  t    dt   err\n";
 	auto print_integrator_stats = [&steps, &t, &dt, &err]{
 		std::cerr << steps << "  " << t << "  " << dt
 		<< " " << err << "\n"; };
