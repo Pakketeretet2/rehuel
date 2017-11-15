@@ -1,0 +1,17 @@
+auto
+*.dat
+*.*~
+*.so
+rehuel
+*/
+*.png
+*.pdf
+*.out
+*.log
+*.aux
+.*
+*.bak
+html
+obj
+obj_lib
+
