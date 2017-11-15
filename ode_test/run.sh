@@ -1,5 +1,6 @@
 #!/bin/zsh
 #
+# Runs some tests. Assumes rehuel is compiled and works.
 #
 
 METHODS=( implicit_euler
@@ -19,5 +20,5 @@ do
 	METHOD=$METHODS[$i]
 	DT=$DTS[$i]
 	echo "i = $i, method = "$METHOD" and dt = "$DT > "/dev/stderr"
-	../irk -m $METHOD -dt $DT > "ode_"$METHOD".dat"
+	../rehuel -m $METHOD -dt $DT > "ode_"$METHOD".dat"
 done
