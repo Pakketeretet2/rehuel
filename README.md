@@ -8,12 +8,16 @@ equations using Runge-Kutta methods, with an emphasis on implicit Runge-Kutta
 methods. It is named after the Dutch mathematician Rehuel Lobatto.
 
 It needs some compiling but a lot of it is defined in headers.
+There are two Makefiles:
+ - Makefile, creates a standalone executable that integrates a simple ODE
+ - Makefile_lib, creates a shared library for linking from other projects
 
-It contains a bunch of routines it requires itself but might also be useful
+Rehuel contains a bunch of routines it requires itself but might also be useful
 for other projects. Right now they include non-linear solvers (Newton and
 Broyden) and some interpolation routines.
 
 Its only dependency is a C++11-capable compiler and the Armadillo library.
+I have only tested g++ 7.2.0 but the code should be fairly portable.
 
 At some point I might add a C interface.
 
