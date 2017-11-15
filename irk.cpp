@@ -191,8 +191,9 @@ double get_better_time_step( double dt_old, double error_estimate,
 	return dt_old * factor;
 }
 
-unsigned int name_to_method( const char *name )
+int name_to_method( const char *name )
 {
+	std::cerr << "Searching for method named " << name << "\n";
 	std::string n(name);
 
 	if( n == "explicit_euler" )      return EXPLICIT_EULER;

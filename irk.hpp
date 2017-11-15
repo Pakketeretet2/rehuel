@@ -1,10 +1,32 @@
+/*
+   Rehuel: a simple C++ library for solving ODEs
+
+
+   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+============================================================================= */
+
+/**
+   \file irk.hpp
+
+   \brief Contains functions related to performing time integration with
+   Runge-Kutta (RK) methods.
+*/
+
 #ifndef IRK_HPP
 #define IRK_HPP
-
-// A library to solve ODEs
-
-// Constructs the correct Jacobi matrix to solve
-// F( t + ci*dt, y + dt*Sum_{j=0}^{N-1} (a_ij k_j ) ) - k_i
 
 #define AMRA_USE_CXX11
 #include <armadillo>
@@ -13,6 +35,9 @@
 #include "my_timer.hpp"
 #include "newton.hpp"
 
+/**
+   \brief Namespace containing functions related to Runge-Kutta methods.
+ */
 namespace irk {
 
 /**
@@ -20,30 +45,44 @@ namespace irk {
 */
 struct solver_coeffs
 {
-	arma::vec b, c;
-	arma::mat A;
-	double dt;
+	arma::vec b; ///< weights for the new y-value
+	arma::vec c; ///< these set the intermediate time points
+	arma::mat A; ///< alpha coefficients in Butcher tableau
+	double dt;   ///< time step size to use
 
-	arma::vec b2; // To use for embedding.
-	bool FSAL;    // If FSAL, an optimization is possible.
+	arma::vec b2; ///< weights for the new y-value of the embedded RK method
+
+	/// If the method satisfies first-same-as-last (FSAL), set this to
+	/// true to enable the optimizations associated with FSAL.
+	bool FSAL;
 };
 
-
+/**
+   \brief options for the time integrator.
+ */
 struct solver_options {
+	/// \brief Enumerates the possible internal non-linear solvers
 	enum internal_solvers {
-		BROYDEN = 0,
-		NEWTON = 1
+		BROYDEN = 0, ///< Broyden's method
+		NEWTON = 1   ///< Newton's method
 	};
 
+	/// \brief Constructor with default values.
 	solver_options()
 		: internal_solver(BROYDEN), adaptive_step_size(true),
 		  local_tol(1e-6) {}
 
+	/// Internal non-linear solver used (see \ref internal_solvers)
+	/// Broyden typically gives good results in less time.
 	int internal_solver;
+	/// If true, attempt to perform adaptive time stepping using
+	/// an embedded pair.
 	bool adaptive_step_size;
+	/// Local tolerance to satisfy when adaptive time stepping
 	double local_tol;
 };
 
+/// \brief enumerates all implemented RK methods.
 enum rk_methods {
 	EXPLICIT_EULER      = 10,
         RUNGE_KUTTA_4       = 11,
@@ -57,28 +96,77 @@ enum rk_methods {
 	GAUSS_LEGENDRE_65   = 23
 };
 
+/// \brief enumerates possible return codes.
 enum status_codes {
-	SUCCESS = 0,
+	SUCCESS = 0, ///< Everything is A-OK.
+
+	/// The error estimate became too large, so attempt a smaller step size
 	DT_TOO_LARGE  =  1,
+	/// The error estimate is too small, so attempt a larger step
 	DT_TOO_SMALL  =  2,
-	GENERAL_ERROR = -1,
+
+	GENERAL_ERROR = -1, ///< A generic error
+
+	/// Internal solver failed to calculate stages
 	INTERNAL_SOLVE_FAILURE = -3,
+	/// Time step is unacceptably small, problem is likely stiff.
 	TIME_STEP_TOO_SMALL = -4
 };
 
+/**
+   \brief Checks if the solver Butcher tableau is consistent.
+   \param sc The coefficients to check
+   \returns true if the coefficients are alright, false otherwise
+*/
 bool verify_solver_coeffs( const solver_coeffs &sc );
 
+/**
+   \brief Returns coefficients for given integrator.
+   \param method The time integrator to use. See \ref rk_methods
+   \returns solver coefficients for given method.
+*/
 solver_coeffs get_coefficients( int method );
+/**
+   \brief Returns default solver options.
+   \returns default solver options.
+*/
 solver_options default_solver_options();
 
 
-// Attempts to find a more optimal time step size
+/**
+   \brief Attempts to find a more optimal time step size based on error estimate
+
+   \param dt_old           Old time step size
+   \param error_estimate   Current error estimate
+   \param opts             Solver options
+
+   \return A time step size that is estimated to be more optimal.
+*/
 double get_better_time_step( double dt_old, double error_estimate,
                              const solver_options &opts );
 
-unsigned int name_to_method( const char *name );
+/**
+   \brief Converts a string with a method name to an int.
+
+   \param name A string describing the method.
+
+   \returns the enum corresponding to given method. See \ref rk_methods
+*/
+int name_to_method( const char *name );
 
 
+/**
+   \brief Constructs a non-linear system the stages have to satisfy.
+
+   \param t    Current time
+   \param y    Current solution to the ODE at t
+   \param K    Initial guess for the stages
+   \param sc   Solver coefficients
+   \param fun  The RHS of the ODE
+   \param jac  The Jacobian of the RHS of the ODE.
+
+   \returns the value for the non-linear system whose root is the new stages.
+*/
 template <typename func_type, typename Jac_type> inline
 arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
                        const irk::solver_coeffs &sc,
@@ -112,6 +200,18 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 	return F;
 }
 
+/**
+   \brief Constructs the Jacobi matrix of the non-linear system for the stages
+
+   \param t    Current time
+   \param y    Current solution to the ODE at t
+   \param K    Initial guess for the stages
+   \param sc   Solver coefficients
+   \param fun  The RHS of the ODE
+   \param jac  The Jacobian of the RHS of the ODE.
+
+   \returns the Jacobi matrix of the non-linear system for the new stages.
+*/
 template <typename func_type, typename Jac_type> inline
 arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
                        const irk::solver_coeffs &sc,
@@ -160,6 +260,24 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 	return J;
 }
 
+/**
+   \brief Performs one time step from (t,y) to (t+dt, y+dy)
+
+   K shall be unmodified upon failure
+
+   \param t             Current time
+   \param y             Current solution to the ODE at t
+   \param dt            Current time step size
+   \param sc            Solver coefficients
+   \param solver_opts   Options for the solver
+   \param fun           The RHS of the ODE
+   \param jac           The Jacobian of the RHS of the ODE.
+   \param adaptive_dt   If true, also update embedded pair.
+   \param err           Will contain an error estimate, if available.
+   \param K             Will contain the new stages on success.
+
+   \returns a status code (see \ref status_codes)
+*/
 template <typename func_type, typename Jac_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
                     const irk::solver_coeffs &sc,
@@ -173,6 +291,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 	auto NN = Ns*Neq;
 
 	arma::mat J( NN, NN );
+	arma::vec KK = K;
 
 	// Use newton iteration to find the Ks for the next level:
 	auto stages_func = [&t, &y, &sc, &fun, &jac]( const arma::vec &K ){
@@ -192,11 +311,11 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 	switch( solver_opts.internal_solver ){
 		case solver_options::NEWTON:
-			K = newton::solve( stages_func, K, opts, stats, stages_jac );
+			KK = newton::solve( stages_func, K, opts, stats, stages_jac );
 			break;
 		default:
 		case solver_options::BROYDEN:
-			K = newton::solve( stages_func, K, opts, stats );
+			KK = newton::solve( stages_func, K, opts, stats );
 			break;
 	}
 
@@ -209,8 +328,8 @@ int take_time_step( double t, arma::vec &y, double dt,
 			y_alt = y;
 			for( unsigned int i = 0; i < Ns; ++i ){
 				unsigned int offset = i*Neq;
-				const auto &Ki = K.subvec( offset,
-				                           offset + Neq - 1 );
+				const auto &Ki = KK.subvec( offset,
+				                            offset + Neq - 1 );
 				y_alt += dt * sc.b2[i] * Ki;
 			}
 		}
@@ -219,7 +338,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 		for( unsigned int i = 0; i < Ns; ++i ){
 			unsigned int offset = i*Neq;
-			const auto &Ki = K.subvec( offset, offset + Neq - 1 );
+			const auto &Ki = KK.subvec( offset, offset + Neq - 1 );
 			yn += dt * sc.b[i] * Ki;
 		}
 
@@ -250,10 +369,27 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return INTERNAL_SOLVE_FAILURE;
 	}
 
+	K = KK; // Store the new stages.
 	return SUCCESS;
 }
 
+/**
+   \brief Time-integrate a given ODE from t0 to t1, starting at y0
 
+   t_vals and y_vals shall be unmodified upon failure.
+
+   \param t0           Starting time
+   \param t1           Final time
+   \param sc           Solver coefficients
+   \param solver_opts  Options for the internal solver
+   \param y0           Initial values
+   \param fun          RHS to the ODE to integrate
+   \param jac          Jacobi matrix to the ODE to integrate
+   \param t_vals       Will contain the time points corresponding to obtained y
+   \param y_vals       Will contain the numerical solution to the ODE.
+
+   \returns a status code (see \ref status_codes)
+*/
 template <typename func_type, typename Jac_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
             const solver_options &solver_opts,
@@ -284,9 +420,12 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	}
 
 	arma::vec y = y0;
+	std::vector<double> tt;
+	std::vector<arma::vec> yy;
 
-	t_vals.push_back( t );
-	y_vals.push_back( y );
+	tt.push_back(t);
+	yy.push_back(y);
+
 
 	// Main integration loop:
 	int status = 0;
@@ -359,8 +498,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				t += old_dt;
 				++steps;
 
-				t_vals.push_back( t );
-				y_vals.push_back( y );
+				tt.push_back( t );
+				yy.push_back( y );
 
 				break;
 		}
@@ -394,6 +533,10 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	}else if( solver_opts.internal_solver == solver_options::BROYDEN ){
 		timer.toc( "Integrating with Broyden iteration" );
 	}
+
+	// If everything was fine, store the obtained results
+	t_vals = tt;
+	y_vals = yy;
 
 	return 0;
 }

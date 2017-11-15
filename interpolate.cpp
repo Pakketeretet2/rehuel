@@ -2,9 +2,6 @@
 
 namespace interpolate {
 
-/**
-   \brief interpolates x_vals and y_vals to x_grid, linearly.
-*/
 std::vector<arma::vec> linear( const std::vector<double> &x_vals,
                                const std::vector<arma::vec> &y_vals,
                                const std::vector<double> &x_grid )

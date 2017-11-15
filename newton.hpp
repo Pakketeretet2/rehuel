@@ -1,3 +1,27 @@
+/*
+   Rehuel: a simple C++ library for solving ODEs
+
+
+   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+============================================================================= */
+
+/**
+   \file newton.hpp
+*/
+
 #ifndef NEWTON_HPP
 #define NEWTON_HPP
 
@@ -11,36 +35,49 @@
 #include "my_timer.hpp"
 
 
+/// \brief A namespace with solvers for non-linear systems of equations.
 namespace newton {
 
 /// \brief Return codes for newton_solve.
 enum newton_solve_ret_codes {
-	SUCCESS = 0,
-	NOT_CONVERGED = 1
+	SUCCESS = 0,       ///< Converged to tolerance
+	NOT_CONVERGED = 1  ///< Did not converge to tolerance within maxit
 };
 
 
+/**
+   \brief contains options for the solver.
+*/
 struct options {
 	options() : tol(1e-4), maxit(500), time_internals(false),
 	            max_step(-1), refresh_jac(true){}
-	double tol;
-	int maxit;
-	bool time_internals;
-	double max_step;
+
+	double tol;           ///< Desired tolerance.
+	int maxit;            ///< Maximum number of iterations
+	bool time_internals;  ///< Print timings for solver
+	double max_step;      ///< Limit update to this length in N-D.
+
+	/// When Using Newton's method, if this is false, the Jacobi matrix
+	/// is constructed only once at the beginning and never updated.
 	bool refresh_jac;
 };
 
+/**
+   \brief contains status for the solver.
+*/
 struct status {
 	status() : conv_status(SUCCESS), res(0.0), iters(0),
-	           store_final_f(false), store_final_J(false){}
+	           store_final_F(false), store_final_J(false){}
 
-	int conv_status;
-	double res;
-	int iters;
 
-	bool store_final_f, store_final_J;
-	arma::vec final_f;
-	arma::mat final_J;
+	int conv_status;  ///< Status code, see \ref newton_solve_ret_codes
+	double res;       ///< Final residual (F(x_root)^2)
+	int iters;        ///< Number of iterations actually used
+
+	bool store_final_F;  ///< If true, the final value of F(x) is stored
+	bool store_final_J;  ///< If true, the final value of J(x) is stored
+	arma::vec final_F;   ///< if(store_final_F), contains F(x) at found root
+	arma::mat final_J;   ///< if(store_final_J), contains J(x) at found root
 };
 
 
@@ -89,8 +126,8 @@ arma::mat approx_jacobi_matrix( const arma::vec &y,
     \brief Verifies that the function jac produces accurate Jacobi matrix at y.
 
     \param y   Point to test Jacobi matrix at
-    \param fun Function handle.
-    \param jac Jacobi matrix for fun.
+    \param fun Function handle for non-linear system.
+    \param J   Function handle for Jacobi matrix for fun.
 
     \returns true if jac is accurate, false otherwise.
 */
@@ -102,8 +139,8 @@ bool verify_jacobi_matrix( const arma::vec &y, const func_type &fun,
 	arma::mat J_fun = J( y );
 	std::size_t N = y.size();
 	double max_diff2 = 0;
-	for( int i = 0; i < N; ++i ){
-		for( int j = 0; j < N; ++j ){
+	for( std::size_t i = 0; i < N; ++i ){
+		for( std::size_t j = 0; j < N; ++j ){
 			double delta = J_approx(i,j) - J_fun(i,j);
 			double delta2 = delta*delta;
 			if( delta2 > max_diff2 ) delta2 = max_diff2;
@@ -119,6 +156,16 @@ bool verify_jacobi_matrix( const arma::vec &y, const func_type &fun,
 }
 
 
+/**
+   \brief Performs Broyden's method to solve non-linear system F(x) = 0.
+
+   \param F     The non-linear system whose root to find.
+   \param x     Initial guess for root.
+   \param opts  Options for solver (see \ref options)
+   \param stats Will contain solver statistics (see \ref status)
+
+   \returns the root of F(x).
+*/
 template <typename func_rhs>
 arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
                            const options &opts, status &stats )
@@ -202,7 +249,17 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 	return x;
 }
 
+/**
+   \brief Performs Newton's method to solve non-linear system F(x) = 0.
 
+   \param F     The non-linear system whose root to find.
+   \param x     Initial guess for root.
+   \param opts  Options for solver (see \p options)
+   \param stats Will contain solver statistics (see \p status)
+   \param J     The Jacobi-matrix of F(x).
+
+   \returns the root of F(x).
+*/
 template <typename func_rhs, typename func_Jac > inline
 arma::vec newton_iterate( const func_rhs &F, arma::vec x,
                           const options &opts, status &stats,
@@ -220,7 +277,6 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 	double res2 = arma::dot( r, r );
 
 	stats.iters = 0;
-	unsigned int N = x.size();
 	bool low_rcond_warn = false;
 
 	double max_step2;
@@ -325,7 +381,7 @@ arma::vec solve( const func_rhs &F, arma::vec x,
 
     This uses Broyden's method.
 
-    \overloads solve.
+    \overload solve.
 */
 template <typename func_rhs>
 arma::vec solve( const func_rhs &F, arma::vec x,
@@ -347,10 +403,14 @@ arma::vec solve( const func_rhs &F, arma::vec x,
 }
 
 
+/// \brief A namespace with some functions to test the solvers on.
 namespace test_functions {
 
+/// \brief Rosenbrock's function
 double rosenbrock_f( const arma::vec &x, double a, double b );
+/// \brief Gradient of Rosenbrock's function
 arma::vec rosenbrock_F( const arma::vec &x, double a, double b );
+/// \brief Hessian of Rosenbrock's function
 arma::mat rosenbrock_J( const arma::vec &x, double a, double b );
 
 } // namespace test_functions
