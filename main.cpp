@@ -21,11 +21,9 @@
 /**
    \file main.cpp
 */
+#include "rehuel.hpp"
 #include "interpolate.hpp"
-#include "newton.hpp"
 #include "odes.hpp"
-#include "irk.hpp"
-
 
 #include <cmath>
 #include <iostream>
@@ -97,23 +95,24 @@ void test_newton_solvers()
 int solve_test_ode( double dt, int method, double t0, double t1,
                     std::vector<double> &times, std::vector<arma::vec> &ys )
 {
-
 	irk::solver_coeffs sc = irk::get_coefficients( method );
 	irk::solver_options s_opts = irk::default_solver_options();
 
 	sc.dt = dt;
 	s_opts.local_tol = 1e-6;
-	s_opts.internal_solver = irk::solver_options::BROYDEN;
+	s_opts.internal_solver = irk::solver_options::NEWTON;
+	s_opts.adaptive_step_size = true;
+
 	arma::vec y0 = { 1.0, 0.0 };
 
 	double a = 1.0 / 20.0;
 	double b = 1.0 / 15.0;
-	double w = 0.05;
+	double w = 1.0;
 
 	auto ode = [a,b,w]( double t, const arma::vec &yy ){
-		return odes::analytic_solvable_func( yy, a, b, w ); };
+		return odes::analytic_solvable_func( t, yy, a, b, w ); };
 	auto ode_J = [a,b,w]( double t, const arma::vec &yy ){
-		return odes::analytic_solvable_func_J( yy, a, b, w ); };
+		return odes::analytic_solvable_func_J( t, yy, a, b, w ); };
 
 	if( y0.size() != ode(t0, y0).size() ){
 		std::cerr << "Dimensions of initial condition and ODE "
@@ -182,7 +181,7 @@ int main( int argc, char **argv )
 	int method = irk::LOBATTO_IIIA_43;
 
 	double t0 = 0.0;
-	double t1 = 50.0;
+	double t1 = 100.0;
 
 	if( argc > 1 ){
 		int i = 1;
@@ -217,21 +216,36 @@ int main( int argc, char **argv )
 		return -2;
 	}
 
-	// Do not output all points but do interpolation on a mesh:
-	std::vector<double> t_grid = make_time_grid(t0, t1);
-	std::vector<arma::vec> y_interp = interpolate::linear( times, ys,
-	                                                       t_grid );
+	bool output_interpolate = false;
+	if( output_interpolate ){
+		// Do not output all points but do interpolation on a mesh:
+		std::vector<double> t_grid = make_time_grid(t0, t1);
+		std::vector<arma::vec> y_interp = interpolate::linear( times,
+		                                                       ys,
+		                                                       t_grid );
 
-	std::cerr << "Size of time grid: " << t_grid.size() << ".\n";
-	std::cerr << "Size of interp. y: " << y_interp[0].size() << ".\n";
+		std::cerr << "Size of time grid: " << t_grid.size() << ".\n";
+		std::cerr << "Size of interp. y: " << y_interp[0].size() << ".\n";
 
-	for( std::size_t i = 0; i < t_grid.size(); ++i ){
-		std::cout << t_grid[i];
-		for( std::size_t j = 0; j < y_interp[i].size(); ++j ){
-			std::cout << " " << y_interp[i][j];
+		for( std::size_t i = 0; i < t_grid.size(); ++i ){
+			std::cout << t_grid[i];
+			for( std::size_t j = 0; j < y_interp[i].size(); ++j ){
+				std::cout << " " << y_interp[i][j];
+			}
+			std::cout << "\n";
 		}
-		std::cout << "\n";
+	}else{
+		// Just output raw data:
+		for( std::size_t i = 0; i < times.size(); ++i ){
+			if( i % 100 != 0 ) continue;
+			std::cout << times[i];
+			for( std::size_t j = 0; j < ys[i].size(); ++j ){
+				std::cout << " " << ys[i][j];
+			}
+			std::cout << "\n";
+		}
 	}
+
 
 	return 0;
 }

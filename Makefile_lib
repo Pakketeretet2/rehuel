@@ -32,7 +32,7 @@ DEPS = $(OBJ:%.o=%.d)
 all : dirs $(EXE)
 
 install : $(EXE)
-	cp $(EXE) /usr/local/bin
+	cp $(EXE) /usr/local/lib
 
 dirs : $(OBJ_DIR)
 

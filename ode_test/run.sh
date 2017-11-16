@@ -7,13 +7,20 @@ METHODS=( implicit_euler
           runge_kutta_4
           lobatto_IIIA_43
 	  radau_IIA_32
-	  gauss_legendre_65 )
+	  gauss_legendre_43
+	  bogacki_shampine_23
+	  dormand_prince_54
+	  cash_karp_54 )
 
-DTS=( 0.001
-      0.0001
+
+DTS=( 0.01
       0.01
       0.01
-      0.01)
+      0.01
+      0.01
+      0.01
+      0.01
+      0.01 )
 
 for (( i = 1; i <= ${#METHODS}; ++i ));
 do

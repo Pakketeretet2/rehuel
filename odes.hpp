@@ -31,8 +31,8 @@
 
 namespace odes {
 
-arma::vec test_func( const arma::vec &x );
-arma::mat test_J( const arma::vec &x );
+arma::vec test_func( double t, const arma::vec &x );
+arma::mat test_J( double t, const arma::vec &x );
 
 arma::vec blue_sky_catastrophe( double t, const arma::vec &yy,
                                 double mu, double eps );
@@ -42,10 +42,14 @@ arma::mat blue_sky_catastrophe_J( double t, const arma::vec &yy,
 arma::vec brusselator( double t, const arma::vec &yy, double a, double b );
 arma::mat brusselator_J( double t, const arma::vec &yy, double a, double b );
 
-arma::vec analytic_solvable_func( const arma::vec &yy,
+arma::vec analytic_solvable_func( double t, const arma::vec &yy,
                                   double a, double b, double w );
-arma::mat analytic_solvable_func_J( const arma::vec &yy,
+arma::mat analytic_solvable_func_J( double t, const arma::vec &yy,
                                     double a, double b, double w );
+
+arma::vec analytic_stiff( double t, const arma::vec &yy );
+arma::mat analytic_stiff_J( double t, const arma::vec &yy );
+
 
 
 } // namespace odes

@@ -2,14 +2,14 @@
 
 namespace odes {
 
-arma::vec test_func( const arma::vec &x )
+arma::vec test_func( double t, const arma::vec &x )
 {
 	double y1 = 1.0 - 2*std::sin(x[0])*std::cos(x[1]);
 	double y2 = -x[1] - std::exp(-x[0]);
 	return arma::vec( {y1, y2} );
 }
 
-arma::mat test_J( const arma::vec &x )
+arma::mat test_J( double t, const arma::vec &x )
 {
 	auto J = arma::mat( 2, 2 );
 	double s1 = std::sin( x[0] );
@@ -97,22 +97,37 @@ arma::mat brusselator_J( double t, const arma::vec &yy, double a, double b )
 
 
 // rhs of y', with y = ( exp(-at)cos(wt), exp(-bt)sin(wt) )
-arma::vec analytic_solvable_func( const arma::vec &yy,
+arma::vec analytic_solvable_func( double t, const arma::vec &yy,
                                   double a, double b, double w )
 {
 	arma::vec f = { -a*yy[0] - w*yy[1],
-	                -b*yy[1] + w*yy[0] };
+	                -a*yy[1] + w*yy[0] };
 
 	return f;
 }
 
 
-arma::mat analytic_solvable_func_J( const arma::vec &yy,
+arma::mat analytic_solvable_func_J( double t, const arma::vec &yy,
                                     double a, double b, double w )
 {
 	arma::mat J = { { -a, -w },
-	                {  w, -b } };
+	                {  w, -a } };
 	return J;
 }
+
+arma::vec analytic_stiff( double t, const arma::vec &yy )
+{
+	// Solution is ((1000.0/999)*exp(-t) - (1.0/999.0)*exp(-1000t)
+	arma::vec f = { 1.0*yy[1], -1000.0*yy[0] - 1001.0*yy[1] };
+	return f;
+}
+
+arma::mat analytic_stiff_J( double t, const arma::vec &yy )
+{
+	arma::mat J = { {0.0, 1.0},
+	                {-1000.0, -1001.0} };
+	return J;
+}
+
 
 } // namespace odes

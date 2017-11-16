@@ -51,7 +51,7 @@ solver_coeffs get_coefficients( int method )
 			sc.c = { 0.0, 0.5, 0.5, 1.0 };
 
 			break;
-		case GAUSS_LEGENDRE_65:
+		case GAUSS_LEGENDRE_43:
 			sc.A = { { 0.25, 0.25 - sqrt3/6.0 },
 			         { 0.25 + sqrt3/6.0, 0.25 } };
 			sc.c = { 0.5 - sqrt3/6.0, 0.5 + sqrt3/6.0 };
@@ -85,7 +85,8 @@ solver_coeffs get_coefficients( int method )
 			          {  0.5,  0.0, 0.0, 0.0 },
 			          {  0.0, 0.75, 0.0, 0.0 },
 			          { 2.0/9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0 } };
-			sc.b  = { 2.0/9.0, 1.0/3.0, 4.0/9.0, 0.0 };
+			sc.b  =   { 2.0/9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0 };
+
 			sc.b2 = { 7.0/24.0, 0.25, 1.0/3.0, 1.0/8.0 };
 
 			sc.c  = { 0.0, 0.5, 0.75, 1.0 };
@@ -118,12 +119,25 @@ solver_coeffs get_coefficients( int method )
 
 			sc.A(5,4) =  253.0 / 4096.0;
 
-			sc.b = {37.0 / 378.0, 0.0, 250.0 / 621.0, 125.0 / 594.0,
-			        0.0, 512.0 / 1771.0 };
-			sc.b2 = {2825.0/27648.0, 0.0, 18575.0 / 48384.0,
-			         13525.0 / 55296.0, 277.0 / 14336.0, 1.0/4.0 };
+			sc.b = {37.0 / 378.0,
+			        0.0,
+			        250.0 / 621.0,
+			        125.0 / 594.0,
+			        0.0,
+			        512.0 / 1771.0 };
+			sc.b2 = {2825.0/27648.0,
+			         0.0,
+			         18575.0 / 48384.0,
+			         13525.0 / 55296.0,
+			         277.0 / 14336.0,
+			         1.0/4.0 };
 
-			sc.c = { 0.0, 0.2, 0.3, 0.6, 1.0, 7.0/8.0 };
+			sc.c = { 0.0,
+			         0.2,
+			         0.3,
+			         0.6,
+			         1.0,
+			         7.0/8.0 };
 
 
 			break;
@@ -216,7 +230,7 @@ int name_to_method( const char *name )
 	if( n == "implicit_euler" )      return IMPLICIT_EULER;
 	if( n == "radau_IIA_32" )        return RADAU_IIA_32;
 	if( n == "lobatto_IIIA_43" )     return LOBATTO_IIIA_43;
-	if( n == "gauss_legendre_65" )   return GAUSS_LEGENDRE_65;
+	if( n == "gauss_legendre_43" )   return GAUSS_LEGENDRE_43;
 
 	return -1337;
 }

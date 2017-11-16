@@ -336,7 +336,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 		std::cerr << "Internal solver did not converge to tol "
 		          << opts.tol << " in " << opts.maxit
 			  << " iterations! Final residual is "
-			  << stats.res << "!\n";
+		          << stats.res << ", dt = " << dt << "!\n";
 		return INTERNAL_SOLVE_FAILURE;
 	}
 
@@ -378,9 +378,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	assert( sc.dt > 0 && "Cannot use time step size of 0!" );
 
 	double dt = sc.dt;
-
-	double err = 0.0; // For adaptive time step size.
-
+	double err = 0.0;
+	double max_dt = 2 * sc.dt;
 	bool adaptive_dt = solver_opts.adaptive_step_size;
 	if( adaptive_dt ){
 		if( sc.b2.size() != sc.b.size() ){
@@ -388,6 +387,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			          << "method has no embedded auxillary pair!\n";
 			adaptive_dt = false;
 		}
+	}else{
+		std::cerr << "Not using adaptive time step.\n";
 	}
 
 	arma::vec y = y0;
@@ -439,7 +440,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 
 			case INTERNAL_SOLVE_FAILURE:
-				std::cerr << "Internal solver failed to converge! ";
 			case DT_TOO_LARGE:
 				if( adaptive_dt ){
 					dt = get_better_time_step( dt, err,
@@ -447,7 +447,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				}else{
 					dt *= 0.9*0.3;
 				}
-
 				if( dt < 1e-10 ){
 					std::cerr << "dt is too small!\n";
 					return TIME_STEP_TOO_SMALL;
@@ -463,6 +462,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				}else{
 					dt *= 1.2;
 				}
+				dt = std::min( dt, max_dt );
 				something_changed = true;
 			case SUCCESS:
 				// OK.
@@ -493,6 +493,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 
 		if( steps % 1000 == 0 || something_changed ){
+			dt = std::min( dt, max_dt );
 			print_integrator_stats();
 		}
 
