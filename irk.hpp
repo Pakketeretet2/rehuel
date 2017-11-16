@@ -32,6 +32,7 @@
 #include <armadillo>
 #include <cassert>
 
+#include "enums.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
 
@@ -82,37 +83,6 @@ struct solver_options {
 	double local_tol;
 };
 
-/// \brief enumerates all implemented RK methods.
-enum rk_methods {
-	EXPLICIT_EULER      = 10,
-        RUNGE_KUTTA_4       = 11,
-	BOGACKI_SHAMPINE_23 = 12,
-	CASH_KARP_54        = 13,
-	DORMAND_PRINCE_54   = 14,
-
-	IMPLICIT_EULER      = 20,
-	RADAU_IIA_32        = 21,
-	LOBATTO_IIIA_43     = 22,
-	GAUSS_LEGENDRE_65   = 23
-};
-
-/// \brief enumerates possible return codes.
-enum status_codes {
-	SUCCESS = 0, ///< Everything is A-OK.
-
-	/// The error estimate became too large, so attempt a smaller step size
-	DT_TOO_LARGE  =  1,
-	/// The error estimate is too small, so attempt a larger step
-	DT_TOO_SMALL  =  2,
-
-	GENERAL_ERROR = -1, ///< A generic error
-
-	/// Internal solver failed to calculate stages
-	INTERNAL_SOLVE_FAILURE = -3,
-	/// Time step is unacceptably small, problem is likely stiff.
-	TIME_STEP_TOO_SMALL = -4
-};
-
 /**
    \brief Checks if the solver Butcher tableau is consistent.
    \param sc The coefficients to check
@@ -126,6 +96,7 @@ bool verify_solver_coeffs( const solver_coeffs &sc );
    \returns solver coefficients for given method.
 */
 solver_coeffs get_coefficients( int method );
+
 /**
    \brief Returns default solver options.
    \returns default solver options.
@@ -276,7 +247,7 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
    \param err           Will contain an error estimate, if available.
    \param K             Will contain the new stages on success.
 
-   \returns a status code (see \ref status_codes)
+   \returns a status code (see \ref odeint_status_codes)
 */
 template <typename func_type, typename Jac_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
@@ -348,7 +319,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 			err = err_est;
 			if( err > solver_opts.local_tol ){
 				return DT_TOO_LARGE;
-			}else if( err < solver_opts.local_tol * 0.05 ){
+			}else if( err < solver_opts.local_tol * 0.2 ){
 				// Flag this but do update y anyway.
 				increase_dt = true;
 			}
@@ -388,7 +359,7 @@ int take_time_step( double t, arma::vec &y, double dt,
    \param t_vals       Will contain the time points corresponding to obtained y
    \param y_vals       Will contain the numerical solution to the ODE.
 
-   \returns a status code (see \ref status_codes)
+   \returns a status code (see \ref odeint_status_codes)
 */
 template <typename func_type, typename Jac_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
