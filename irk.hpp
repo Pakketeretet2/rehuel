@@ -46,12 +46,16 @@ namespace irk {
 */
 struct solver_coeffs
 {
+	const char *name; ///< Human-friendly name for the method.
 	arma::vec b; ///< weights for the new y-value
 	arma::vec c; ///< these set the intermediate time points
 	arma::mat A; ///< alpha coefficients in Butcher tableau
 	double dt;   ///< time step size to use
 
 	arma::vec b2; ///< weights for the new y-value of the embedded RK method
+
+	int order;   ///< Local convergence order for main method
+	int order2;  ///< Local convergence order for embedded method
 
 	/// If the method satisfies first-same-as-last (FSAL), set this to
 	/// true to enable the optimizations associated with FSAL.
@@ -71,7 +75,7 @@ struct solver_options {
 	/// \brief Constructor with default values.
 	solver_options()
 		: internal_solver(BROYDEN), adaptive_step_size(true),
-		  local_tol(1e-6) {}
+		  rel_tol(1e-5), abs_tol(10*rel_tol), max_dt( 0.5 ) {}
 
 	/// Internal non-linear solver used (see \ref internal_solvers)
 	/// Broyden typically gives good results in less time.
@@ -79,8 +83,12 @@ struct solver_options {
 	/// If true, attempt to perform adaptive time stepping using
 	/// an embedded pair.
 	bool adaptive_step_size;
-	/// Local tolerance to satisfy when adaptive time stepping
-	double local_tol;
+	/// Relative tolerance to satisfy when adaptive time stepping
+	double rel_tol;
+	/// Absolute tolerance to satisfy when adaptive time stepping
+	double abs_tol;
+	/// Maximum time step size
+	double max_dt;
 };
 
 /**
@@ -114,7 +122,8 @@ solver_options default_solver_options();
    \return A time step size that is estimated to be more optimal.
 */
 double get_better_time_step( double dt_old, double error_estimate,
-                             const solver_options &opts );
+                             const solver_options &opts,
+                             const solver_coeffs &sc, double max_dt );
 
 /**
    \brief Converts a string with a method name to an int.
@@ -125,6 +134,18 @@ double get_better_time_step( double dt_old, double error_estimate,
 */
 int name_to_method( const char *name );
 
+
+/**
+   \brief Converts method code to a human-readable string.
+
+   \note This output shall satisfy
+         name_to_method( method_to_name( method ) ) == method.
+
+   \param method The method to convert to a name.
+
+   \returns a string literal representing the method.
+*/
+const char *method_to_name( int method );
 
 /**
    \brief Constructs a non-linear system the stages have to satisfy.
@@ -140,7 +161,7 @@ int name_to_method( const char *name );
 */
 template <typename func_type, typename Jac_type> inline
 arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
-                       const irk::solver_coeffs &sc,
+                       double dt, const irk::solver_coeffs &sc,
                        const func_type &fun, const Jac_type &jac )
 {
 	auto Ns  = sc.b.size();
@@ -154,8 +175,6 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 
 	const arma::vec &c = sc.c;
 	const arma::mat &A = sc.A;
-	double dt = sc.dt;
-
 
 	for( unsigned int i = 0; i < Ns; ++i ){
 		double ti = t + dt * c[i];
@@ -185,7 +204,7 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 */
 template <typename func_type, typename Jac_type> inline
 arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
-                       const irk::solver_coeffs &sc,
+                       double dt, const irk::solver_coeffs &sc,
                        const func_type &fun, const Jac_type &jac )
 {
 	auto Ns  = sc.b.size();
@@ -199,7 +218,6 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 
 	const arma::vec &c = sc.c;
 	const arma::mat &A = sc.A;
-	double dt = sc.dt;
 
 	arma::mat J( NN, NN );
 	J.eye( NN, NN );
@@ -255,7 +273,7 @@ int take_time_step( double t, arma::vec &y, double dt,
                     const irk::solver_options &solver_opts,
                     const func_type &fun, const Jac_type &jac,
                     bool adaptive_dt, double &err,
-                    arma::vec &K )
+                    arma::vec &K, std::ostream *errout )
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
@@ -265,11 +283,11 @@ int take_time_step( double t, arma::vec &y, double dt,
 	arma::vec KK = K;
 
 	// Use newton iteration to find the Ks for the next level:
-	auto stages_func = [&t, &y, &sc, &fun, &jac]( const arma::vec &K ){
-		return construct_F( t, y, K, sc, fun, jac );
+	auto stages_func = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
+		return construct_F( t, y, K, dt, sc, fun, jac );
 	};
-	auto stages_jac  = [&t, &y, &sc, &fun, &jac]( const arma::vec &K ){
-		return construct_J( t, y, K, sc, fun, jac );
+	auto stages_jac  = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
+		return construct_J( t, y, K, dt, sc, fun, jac );
 	};
 
 	newton::options opts;
@@ -277,7 +295,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 	opts.tol = 1e-8;
 	opts.time_internals = false;
-	opts.refresh_jac = false;
+	opts.refresh_jac = true;
 	opts.maxit = 10000;
 
 	switch( solver_opts.internal_solver ){
@@ -317,9 +335,9 @@ int take_time_step( double t, arma::vec &y, double dt,
 			auto y_err = yn - y_alt;
 			double err_est = arma::norm( y_err, "inf" );
 			err = err_est;
-			if( err > solver_opts.local_tol ){
+			if( err > solver_opts.rel_tol ){
 				return DT_TOO_LARGE;
-			}else if( err < solver_opts.local_tol * 0.2 ){
+			}else if( err < solver_opts.abs_tol * 0.25 ){
 				// Flag this but do update y anyway.
 				increase_dt = true;
 			}
@@ -328,15 +346,16 @@ int take_time_step( double t, arma::vec &y, double dt,
 		// If you get here, either adaptive_dt == false
 		// or everything is fine.
 		y = yn;
+		int ret_code = 0;
 
-		if( increase_dt ) return DT_TOO_SMALL;
-		else              return SUCCESS;
+		if( increase_dt ) ret_code |= DT_TOO_SMALL;
+		else              ret_code |= SUCCESS;
+		if( stats.iters < 10 ) ret_code |= INTERNAL_SOLVE_FEW_ITERS;
+		return ret_code;
 
 	}else{
-		std::cerr << "Internal solver did not converge to tol "
-		          << opts.tol << " in " << opts.maxit
-			  << " iterations! Final residual is "
-		          << stats.res << ", dt = " << dt << "!\n";
+		std::cerr << "Internal solver failed to converge! Final dt = "
+		          << dt << ", final res = " << stats.res << "\n";
 		return INTERNAL_SOLVE_FAILURE;
 	}
 
@@ -365,7 +384,8 @@ template <typename func_type, typename Jac_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
             const solver_options &solver_opts,
             const arma::vec &y0, const func_type &fun, const Jac_type &jac,
-            std::vector<double> &t_vals, std::vector<arma::vec> &y_vals )
+            std::vector<double> &t_vals, std::vector<arma::vec> &y_vals,
+            std::ostream *errout )
 {
 	double t = t0;
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
@@ -379,7 +399,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	double dt = sc.dt;
 	double err = 0.0;
-	double max_dt = 2 * sc.dt;
 	bool adaptive_dt = solver_opts.adaptive_step_size;
 	if( adaptive_dt ){
 		if( sc.b2.size() != sc.b.size() ){
@@ -403,10 +422,12 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	int status = 0;
 	int steps = 0;
 
-	std::cerr << "# step  t    dt   err\n";
-	auto print_integrator_stats = [&steps, &t, &dt, &err]{
-		std::cerr << steps << "  " << t << "  " << dt
-		<< " " << err << "\n"; };
+	if(errout) *errout << "# step  t    dt   err\n";
+
+	auto print_integrator_stats = [&steps, &t, &dt, &err, &errout]{
+		if( !errout ) return;
+		*errout << steps << "  " << t << "  " << dt
+		        << " " << err << "\n"; };
 	print_integrator_stats();
 
 	my_timer timer( std::cerr );
@@ -422,62 +443,75 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		K.subvec( i, i + Neq - 1 ) = y;
 	}
 
+	double max_dt = solver_opts.max_dt;
 
 	while( t < t1 ){
 		bool something_changed = false;
 
 		double old_dt = dt;
 		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
-		                         adaptive_dt, err, K );
+		                         adaptive_dt, err, K, errout );
 
-		switch( status ){
-			default:
-			case GENERAL_ERROR:
-				std::cerr << "Generic error in odeint!\n";
-				return GENERAL_ERROR;
+		if( status == GENERAL_ERROR ){
+			std::cerr << "Generic error in odeint!\n";
+			return GENERAL_ERROR;
+		}
+		if( status & INTERNAL_SOLVE_FAILURE ){
+			max_dt *= 0.5;
+			if( errout ){
+				*errout << "    Internal solver "
+				        << "did not converge to tol! "
+				        << "dt = " << dt << "!\n";
+			}
+			status |= DT_TOO_LARGE;
+		}
+		if( status & DT_TOO_LARGE ){
+			// Adapt the
+			if( adaptive_dt ){
+				dt = get_better_time_step( dt, err,
+				                           solver_opts,
+				                           sc, max_dt );
+			}else{
+				dt *= 0.3;
+			}
+			if( dt < 1e-10 ){
+				std::cerr << "dt is too small!\n";
+				return TIME_STEP_TOO_SMALL;
+			}
+			something_changed = true;
+		}
+		if( status & INTERNAL_SOLVE_FEW_ITERS ){
+			// This means you can probably increase max_dt:
+			max_dt *= 2;
+		}
+		if( status & DT_TOO_SMALL ){
+			if( adaptive_dt ){
+				dt = get_better_time_step( dt, err,
+				                           solver_opts,
+				                           sc, max_dt );
+			}else{
+				dt *= 1.8;
+				dt = std::min( dt, solver_opts.max_dt );
+			}
+			something_changed = true;
+		}
+		bool move_on = status == SUCCESS;
+		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
+			move_on = true;
+		}
+		if( !move_on ) continue;
 
-				break;
+		// OK.
+		t += old_dt;
+		++steps;
 
+		tt.push_back( t );
+		yy.push_back( y );
 
-			case INTERNAL_SOLVE_FAILURE:
-			case DT_TOO_LARGE:
-				if( adaptive_dt ){
-					dt = get_better_time_step( dt, err,
-					                           solver_opts );
-				}else{
-					dt *= 0.9*0.3;
-				}
-				if( dt < 1e-10 ){
-					std::cerr << "dt is too small!\n";
-					return TIME_STEP_TOO_SMALL;
-				}
-
-				something_changed = true;
-				break;
-
-			case DT_TOO_SMALL:
-				if( adaptive_dt ){
-					dt = get_better_time_step( dt, err,
-					                           solver_opts );
-				}else{
-					dt *= 1.2;
-				}
-				dt = std::min( dt, max_dt );
-				something_changed = true;
-			case SUCCESS:
-				// OK.
-				t += old_dt;
-				++steps;
-
-				tt.push_back( t );
-				yy.push_back( y );
-
-				break;
+		if( steps % 1000 == 0 ){
+			print_integrator_stats();
 		}
 
-		if( status != SUCCESS && status != DT_TOO_SMALL ){
-			continue;
-		}
 
 		// Do some preparation for the next time step here:
 		if( sc.FSAL ){
@@ -492,19 +526,22 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			K.subvec( i, i + Neq - 1 ) = y;
 		}
 
-		if( steps % 1000 == 0 || something_changed ){
-			dt = std::min( dt, max_dt );
+		if( steps % 100 == 0 || something_changed ){
 			print_integrator_stats();
 		}
 
 
 	}
 
+	std::string timer_msg = "Solving ODE with ";
+	timer_msg += sc.name;
+	timer_msg += " with internal solver ";
 	if( solver_opts.internal_solver == solver_options::NEWTON ){
-		timer.toc( "Integrating with Newton iteration" );
+		timer_msg += "newton";
 	}else if( solver_opts.internal_solver == solver_options::BROYDEN ){
-		timer.toc( "Integrating with Broyden iteration" );
+		timer_msg += "broyden";
 	}
+	timer.toc( timer_msg );
 
 	// If everything was fine, store the obtained results
 	t_vals = tt;

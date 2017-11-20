@@ -93,13 +93,15 @@ void test_newton_solvers()
    \returns 0 on success, non-zero otherwise.
 */
 int solve_test_ode( double dt, int method, double t0, double t1,
-                    std::vector<double> &times, std::vector<arma::vec> &ys )
+                    std::vector<double> &times, std::vector<arma::vec> &ys,
+                    std::ostream *errout )
 {
 	irk::solver_coeffs sc = irk::get_coefficients( method );
 	irk::solver_options s_opts = irk::default_solver_options();
 
 	sc.dt = dt;
-	s_opts.local_tol = 1e-6;
+	s_opts.rel_tol = 1e-6;
+	s_opts.abs_tol = 1e-5;
 	s_opts.internal_solver = irk::solver_options::NEWTON;
 	s_opts.adaptive_step_size = true;
 
@@ -119,9 +121,8 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 		          << "do not match! Aborting!\n";
 		return -1;
 	}
-
 	int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
-	                                 ode, ode_J, times, ys );
+	                                 ode, ode_J, times, ys, errout );
 	return odeint_status;
 }
 
@@ -182,7 +183,8 @@ int main( int argc, char **argv )
 
 	double t0 = 0.0;
 	double t1 = 100.0;
-
+	std::string ofname = "-";
+	bool quiet = true;
 	if( argc > 1 ){
 		int i = 1;
 		while( i < argc ){
@@ -199,6 +201,12 @@ int main( int argc, char **argv )
 			}else if( strcmp(arg, "-dt") == 0 ){
 				dt = std::atof( argv[i+1] );
 				i += 2;
+			}else if( strcmp(arg, "-o") == 0 ){
+				ofname = argv[i+1];
+				i += 2;
+			}else if( strcmp(arg, "-q") == 0 ){
+				quiet = std::atoi(argv[i+1]);
+				i += 2;
 			}else{
 				std::cerr << "Arg " << argv[i]
 				          << " not recognized!\n";
@@ -209,7 +217,12 @@ int main( int argc, char **argv )
 
 	std::vector<double> times;
 	std::vector<arma::vec> ys;
-	int odeint_status = solve_test_ode( dt, method, t0, t1, times, ys );
+	std::ostream *errout = nullptr;
+	if( !quiet ){
+		errout = &std::cerr;
+	}
+	int odeint_status = solve_test_ode( dt, method, t0, t1, times, ys,
+	                                    errout );
 
 	if( odeint_status ){
 		std::cerr << "Something went wrong solving the ODE!\n";
@@ -217,6 +230,12 @@ int main( int argc, char **argv )
 	}
 
 	bool output_interpolate = false;
+
+	std::ostream *out = &std::cout;
+	if( ofname != "-" ){
+		out = new std::ofstream( ofname );
+	}
+
 	if( output_interpolate ){
 		// Do not output all points but do interpolation on a mesh:
 		std::vector<double> t_grid = make_time_grid(t0, t1);
@@ -228,24 +247,26 @@ int main( int argc, char **argv )
 		std::cerr << "Size of interp. y: " << y_interp[0].size() << ".\n";
 
 		for( std::size_t i = 0; i < t_grid.size(); ++i ){
-			std::cout << t_grid[i];
+			*out << t_grid[i];
 			for( std::size_t j = 0; j < y_interp[i].size(); ++j ){
-				std::cout << " " << y_interp[i][j];
+				*out << " " << y_interp[i][j];
 			}
-			std::cout << "\n";
+			*out << "\n";
 		}
 	}else{
 		// Just output raw data:
 		for( std::size_t i = 0; i < times.size(); ++i ){
-			if( i % 100 != 0 ) continue;
-			std::cout << times[i];
+			if( i % 10 != 0 ) continue;
+			*out << times[i];
 			for( std::size_t j = 0; j < ys[i].size(); ++j ){
-				std::cout << " " << ys[i][j];
+				*out << " " << ys[i][j];
 			}
-			std::cout << "\n";
+			*out << "\n";
 		}
 	}
 
-
+	if( ofname != "-" ){
+		delete out;
+	}
 	return 0;
 }

@@ -18,26 +18,30 @@ enum rk_methods {
 	DORMAND_PRINCE_54   = 14,
 
 	IMPLICIT_EULER      = 20,
-	RADAU_IIA_32        = 21,
-	LOBATTO_IIIA_43     = 22,
-	GAUSS_LEGENDRE_43   = 23
+	IMPLICIT_MIDPOINT   = 21,
+	RADAU_IIA_32        = 22,
+	LOBATTO_IIIA_43     = 23,
+	GAUSS_LEGENDRE_43   = 24
 };
 
 /// \brief enumerates possible return codes.
 enum odeint_status_codes {
 	SUCCESS = 0, ///< Everything is A-OK.
 
-	/// The error estimate became too large, so attempt a smaller step size
-	DT_TOO_LARGE  =  1,
 	/// The error estimate is too small, so attempt a larger step
-	DT_TOO_SMALL  =  2,
+	DT_TOO_SMALL  =  1,
+	/// The internal solver used very few iterations
+	INTERNAL_SOLVE_FEW_ITERS = 2,
 
-	GENERAL_ERROR = -1, ///< A generic error
+	GENERAL_ERROR = 4, ///< A generic error
+
+	/// The error estimate became too large, so attempt a smaller step size
+	DT_TOO_LARGE  =  8,
 
 	/// Internal solver failed to calculate stages
-	INTERNAL_SOLVE_FAILURE = -3,
+	INTERNAL_SOLVE_FAILURE = 16,
 	/// Time step is unacceptably small, problem is likely stiff.
-	TIME_STEP_TOO_SMALL = -4
+	TIME_STEP_TOO_SMALL = 32
 };
 
 } // namespace irk

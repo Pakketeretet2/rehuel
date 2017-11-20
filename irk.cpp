@@ -24,6 +24,7 @@ solver_coeffs get_coefficients( int method )
 	double one_six = 1.0/6.0;
 	double sqrt3 = sqrt(3);
 	sc.FSAL = false;
+	sc.name = method_to_name( method );
 
 	switch(method){
 		default:
@@ -33,14 +34,24 @@ solver_coeffs get_coefficients( int method )
 			sc.A = { 0.0 };
 			sc.b = { 1.0 };
 			sc.c = { 0.0 };
+			sc.order = 1;
+			sc.order2 = 0;
 
 			break;
 		case IMPLICIT_EULER:
 			sc.A = { 1.0 };
 			sc.b = { 1.0 };
 			sc.c = { 1.0 };
-
+			sc.order = 1;
+			sc.order2 = 0;
 			break;
+
+		case IMPLICIT_MIDPOINT:
+			sc.A = { 0.5 };
+			sc.b = { 1.0 };
+			sc.c = { 0.5 };
+			sc.order  = 2;
+			sc.order2 = 0;
 
 		case RUNGE_KUTTA_4:
 			sc.A = { { 0.0, 0.0, 0.0, 0.0 },
@@ -49,7 +60,8 @@ solver_coeffs get_coefficients( int method )
 			         { 0.0, 0.0, 1.0, 0.0 } };
 			sc.b = { one_six, one_third, one_third, one_six };
 			sc.c = { 0.0, 0.5, 0.5, 1.0 };
-
+			sc.order = 4;
+			sc.order2 = 0;
 			break;
 		case GAUSS_LEGENDRE_43:
 			sc.A = { { 0.25, 0.25 - sqrt3/6.0 },
@@ -57,14 +69,16 @@ solver_coeffs get_coefficients( int method )
 			sc.c = { 0.5 - sqrt3/6.0, 0.5 + sqrt3/6.0 };
 			sc.b = { 0.5, 0.5 };
 			sc.b2= { 0.5 + 0.5*sqrt3, 0.5 - 0.5*sqrt3 };
-
+			sc.order = 4;
+			sc.order2 = 3;
 			break;
 		case RADAU_IIA_32:
 			sc.A = { { 5.0 / 12.0, -1.0 / 12.0 },
 			         { 3.0 / 4.0,   1.0 / 4.0 } };
 			sc.c = { 1.0/3.0, 1.0 };
 			sc.b = { 3.0/4.0, 1.0/4.0 };
-
+			sc.order = 3;
+			sc.order2 = 2;
 			break;
 		case LOBATTO_IIIA_43:
 			sc.A = { {      0.0,     0.0,       0.0 },
@@ -74,7 +88,8 @@ solver_coeffs get_coefficients( int method )
 			sc.c = { 0.0, 0.5, 1.0 };
 			sc.b = { 1.0/6.0, 2.0/3.0, 1.0/6.0 };
 			sc.b2 = { -0.5, 2.0, -0.5 };
-
+			sc.order = 4;
+			sc.order2 = 3;
 			sc.FSAL = true;
 
 			break;
@@ -92,7 +107,8 @@ solver_coeffs get_coefficients( int method )
 			sc.c  = { 0.0, 0.5, 0.75, 1.0 };
 
 			sc.FSAL = true;
-
+			sc.order = 2;
+			sc.order2 = 3;
 
 			break;
 		case CASH_KARP_54:
@@ -139,6 +155,8 @@ solver_coeffs get_coefficients( int method )
 			         1.0,
 			         7.0/8.0 };
 
+			sc.order = 5;
+			sc.order2 = 4;
 
 			break;
 		case DORMAND_PRINCE_54:
@@ -193,9 +211,26 @@ solver_coeffs get_coefficients( int method )
 			         -92097.0 / 339200.0,
 			         187.0/2100.0,
 			         1.0/40.0 };
+			sc.order = 5;
+			sc.order2 = 4;
 			sc.FSAL = false;
 			break;
 	}
+
+	// Some checks:
+	for( std::size_t i = 0; i < sc.c.size(); ++i ){
+		double ci = sc.c(i);
+		double si = 0.0;
+		for( std::size_t j = 0; j < sc.c.size(); ++j ){
+			si += sc.A(i,j);
+		}
+		if( std::fabs( si - ci ) > 1e-5 ){
+			std::cerr << "Warning! Mismatch between c and A(i,:) "
+			          << "for i = " << i << ", method = "
+			          << method_to_name( method ) << "!\n";
+		}
+	}
+
 	sc.dt = 0.05;
 	return sc;
 }
@@ -208,12 +243,20 @@ solver_options default_solver_options()
 }
 
 double get_better_time_step( double dt_old, double error_estimate,
-                             const solver_options &opts )
+                             const solver_options &opts,
+                             const solver_coeffs &sc, double max_dt )
 {
+	// |y1 - y2| ~= C1 * dt^(min( sc.order, sc.order2 )) := error_estimate
+	// We want this to be opts.rel_tol. So...
+	// C1 * dt_new^(min( sc.order1, sc.order2 )) := opts.rel_tol.
+	// After some algebra, that becomes this:
+	double power  = 1.0 / ( std::min( sc.order, sc.order2 ) + 1.0 );
+	double frac   = opts.rel_tol / error_estimate;
+	double factor = std::pow( frac, power );
+	double scale  = 0.9*std::min( 2.0, factor ); // Increase dt smoothly.
+	double dt_new = std::min( dt_old * scale, max_dt );
+	return dt_new;
 
-	double thing = opts.local_tol / error_estimate;
-	double factor = 0.9 * std::min( std::max( 0.3, thing ), 2.0 );
-	return dt_old * factor;
 }
 
 int name_to_method( const char *name )
@@ -228,11 +271,29 @@ int name_to_method( const char *name )
 	if( n == "dormand_prince_54" )   return DORMAND_PRINCE_54;
 
 	if( n == "implicit_euler" )      return IMPLICIT_EULER;
+	if( n == "implicit_midpoint" )   return IMPLICIT_MIDPOINT;
 	if( n == "radau_IIA_32" )        return RADAU_IIA_32;
 	if( n == "lobatto_IIIA_43" )     return LOBATTO_IIIA_43;
 	if( n == "gauss_legendre_43" )   return GAUSS_LEGENDRE_43;
 
 	return -1337;
+}
+
+const char *method_to_name( int method )
+{
+	if( method == EXPLICIT_EULER       ) return "explicit_euler";
+	if( method == RUNGE_KUTTA_4        ) return "runge_kutta_4";
+	if( method == BOGACKI_SHAMPINE_23  ) return "bogacki_shampine_23";
+	if( method == CASH_KARP_54         ) return "cash_karp_54";
+	if( method == DORMAND_PRINCE_54    ) return "dormand_prince_54";
+
+	if( method == IMPLICIT_EULER       ) return "implicit_euler";
+	if( method == IMPLICIT_MIDPOINT    ) return "implicit_midpoint";
+	if( method == RADAU_IIA_32         ) return "radau_IIA_32";
+	if( method == LOBATTO_IIIA_43      ) return "lobatto_IIIA_43";
+	if( method == GAUSS_LEGENDRE_43    ) return "gauss_legendre_43";
+
+	return "";
 }
 
 
