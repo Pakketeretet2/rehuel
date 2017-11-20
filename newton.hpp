@@ -201,15 +201,6 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
 
-	std::ofstream out( "broyden_iterate.dat" );
-	auto output_status = [&out, &x, &res2, &stats]() {
-		out << stats.iters << " " << res2;
-		for( std::size_t i = 0; i < x.size(); ++i ){
-			out << " " << x[i];
-		}
-		out << "\n"; };
-	output_status();
-
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 		double lambda = 1.0 / ( 1.0 + res2 );
 		arma::vec direction = -lambda*Jaci*f0;
@@ -235,7 +226,6 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 		res2 = arma::dot( fn, fn );
 
 		++stats.iters;
-		output_status();
 
 		f0 = fn;
 		x0 = x;
@@ -288,15 +278,6 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 		std::cerr << "Warning! Initial J is close to singular!\n";
 	}
 
-	std::ofstream out( "newton_iterate.dat" );
-	auto output_status = [&out, &x, &res2, &stats]() {
-		out << stats.iters << " " << res2;
-		for( std::size_t i = 0; i < x.size(); ++i ){
-			out << " " << x[i];
-		}
-		out << "\n"; };
-	output_status();
-
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 
 		double lambda = 1.0 / (1.0 + res2 );
@@ -313,8 +294,6 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 		++stats.iters;
 		r = F(x);
 		res2 = dot(r,r);
-
-		output_status();
 
 		if( opts.refresh_jac ){
 			arma::mat Jacn = J(x);

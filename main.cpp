@@ -100,9 +100,9 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 	irk::solver_options s_opts = irk::default_solver_options();
 
 	sc.dt = dt;
-	s_opts.rel_tol = 1e-6;
-	s_opts.abs_tol = 1e-5;
-	s_opts.internal_solver = irk::solver_options::NEWTON;
+	s_opts.rel_tol = 1e-7;
+	s_opts.abs_tol = 1e-8;
+	s_opts.internal_solver = irk::solver_options::BROYDEN;
 	s_opts.adaptive_step_size = true;
 
 	arma::vec y0 = { 1.0, 0.0 };
@@ -191,7 +191,6 @@ int main( int argc, char **argv )
 			const char *arg = argv[i];
 			if( strcmp(arg, "-m") == 0 ){
 				method = irk::name_to_method( argv[i+1] );
-				std::cerr << "Got method code " << method << "\n";
 				if( method < 0 ){
 					std::cerr << "Unrecognized integrator "
 					          << argv[i+1] << "!\n";
