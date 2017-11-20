@@ -146,7 +146,7 @@ solver_coeffs get_coefficients( int method )
 			sc.A.zeros( 7,7 );
 
 			sc.A(1,0) =  1.0/5.0;
-			sc.A(2,0) =  3.0/4.0;
+			sc.A(2,0) =  3.0/40.0;
 			sc.A(3,0) =  44.0/45.0;
 			sc.A(4,0) =  19372.0 / 6561.0;
 			sc.A(5,0) =  9017.0 / 3168.0;
@@ -193,7 +193,7 @@ solver_coeffs get_coefficients( int method )
 			         -92097.0 / 339200.0,
 			         187.0/2100.0,
 			         1.0/40.0 };
-			sc.FSAL = true;
+			sc.FSAL = false;
 			break;
 	}
 	sc.dt = 0.05;
