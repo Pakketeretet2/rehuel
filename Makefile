@@ -1,6 +1,7 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math \
-        -Werror=return-type -Werror=uninitialized -Wall
+FLAGS = -std=c++11 -pedantic -g -O2 -ffast-math  \
+        -Werror=return-type -Werror=uninitialized -Wall \
+	-DCHECK_NANS
 
 LNK = -L./ -larmadillo
 INC = -I./

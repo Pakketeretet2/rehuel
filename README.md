@@ -18,6 +18,8 @@ Broyden) and some interpolation routines.
 
 Its only dependency is a C++11-capable compiler and the Armadillo library.
 I have only tested g++ 7.2.0 but the code should be fairly portable.
+*NOTE*: I recommend compiling with O2 instead of O3 as O3 seems to give
+some issues with various Armadillo functionality...
 
 At some point I might add a C interface.
 

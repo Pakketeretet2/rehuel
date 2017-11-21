@@ -334,9 +334,9 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 		if( adaptive_dt ){
 			auto y_err = yn - y_alt;
-			// Without the volatile crazy shit happens.
-			volatile double err_est = arma::norm( y_err, "inf" );
+			double err_est = arma::norm( y_err, "inf" );
 			err = err_est;
+
 			if( err > solver_opts.rel_tol ){
 				return DT_TOO_LARGE;
 			}else if( err < solver_opts.abs_tol * 0.25 ){
