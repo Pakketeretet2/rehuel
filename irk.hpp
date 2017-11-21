@@ -31,6 +31,7 @@
 #define AMRA_USE_CXX11
 #include <armadillo>
 #include <cassert>
+#include <limits>
 
 #include "enums.hpp"
 #include "my_timer.hpp"
@@ -333,7 +334,8 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 		if( adaptive_dt ){
 			auto y_err = yn - y_alt;
-			double err_est = arma::norm( y_err, "inf" );
+			// Without the volatile crazy shit happens.
+			volatile double err_est = arma::norm( y_err, "inf" );
 			err = err_est;
 			if( err > solver_opts.rel_tol ){
 				return DT_TOO_LARGE;
@@ -500,6 +502,16 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			move_on = true;
 		}
 		if( !move_on ) continue;
+
+		// Check for NANs:
+#ifdef CHECK_NANS
+		for( std::size_t i = 0; i < y.size(); ++i ){
+			double yi = y(i);
+			assert( std::isfinite(yi) &&
+			        "Encountered NaN or Inf while solving!" );
+		}
+#endif // CHECK_NANS
+
 
 		// OK.
 		t += old_dt;
