@@ -70,7 +70,7 @@ solver_coeffs get_coefficients( int method )
 			sc.b = { 0.5, 0.5 };
 			sc.b2= { 0.5 + 0.5*sqrt3, 0.5 - 0.5*sqrt3 };
 			sc.order = 4;
-			sc.order2 = 3;
+			sc.order2 = 2;
 			break;
 		case RADAU_IIA_32:
 			sc.A = { { 5.0 / 12.0, -1.0 / 12.0 },
