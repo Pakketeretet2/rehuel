@@ -47,6 +47,7 @@ arma::vec analytic_solvable_func( double t, const arma::vec &yy,
 arma::mat analytic_solvable_func_J( double t, const arma::vec &yy,
                                     double a, double b, double w );
 
+arma::vec analytic_stiff_sol( double t );
 arma::vec analytic_stiff( double t, const arma::vec &yy );
 arma::mat analytic_stiff_J( double t, const arma::vec &yy );
 

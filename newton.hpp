@@ -202,7 +202,7 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 	else max_step2 = -1;
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
-		double lambda = 1.0 / ( 1.0 + res2 );
+		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2 ) );
 		arma::vec direction = -lambda*Jaci*f0;
 
 		if( max_step2 > 0 ){
@@ -277,11 +277,31 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 	if( arma::rcond(Jac) < opts.tol ){
 		std::cerr << "Warning! Initial J is close to singular!\n";
 	}
+	arma::mat J_U, J_L, J_P, Ji;
+	if( !opts.refresh_jac ){
+		// If you never update the Jacobi-matrix, you can save
+		// the LU decomposition to make solving much faster.
+		arma::lu( J_L, J_U, J_P, Jac );
+		Ji = Jac.i();
+	}
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 
-		double lambda = 1.0 / (1.0 + res2 );
-		arma::vec direction = -arma::solve(Jac,r);
+		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2 ) );
+		arma::vec direction;
+		if( opts.refresh_jac ){
+			direction = -arma::solve(Jac,r);
+		}else{
+			// Use the LUP-decomposed to solve.
+			// (P.t() * L * U) * direction = -r
+			// L*U*direction = -arma::solve(P.t(), r);
+			//arma::vec tmp1 = -arma::solve(J_P.t(), r);
+			// L*U*dir = tmp1
+			//arma::vec tmp2 = arma::solve(J_L, tmp1);
+			// U*dir = tmp2
+			//direction = arma::solve(J_U, tmp1);
+			direction = -Ji * r;
+		}
 		if( max_step2 > 0 ){
 			double norm2 = arma::dot( direction, direction );
 			if( lambda*lambda*norm2 > max_step2 ){
@@ -348,7 +368,11 @@ arma::vec solve( const func_rhs &F, arma::vec x,
 	arma::vec root = newton_iterate( F, x, opts, stats, J );
 	if( opts.time_internals ){
 		if(timer){
-			timer->toc("Newton iteration");
+			if( stats.conv_status == NOT_CONVERGED ){
+				timer->toc("Newton iteration (failed)");
+			}else{
+				timer->toc("Newton iteration (success)");
+			}
 			delete timer;
 		}
 	}

@@ -115,6 +115,18 @@ arma::mat analytic_solvable_func_J( double t, const arma::vec &yy,
 	return J;
 }
 
+
+arma::vec analytic_stiff_sol( double t )
+{
+	double emt  = exp(-t);
+	double emt2 = exp(-1000.0*t);
+	double f1 = 1000.0/999.0;
+	double f2 = 1.0/999.0;
+
+	arma::vec y = { f1*emt2 - f1*emt, f1*emt - f2*emt2 };
+	return y;
+}
+
 arma::vec analytic_stiff( double t, const arma::vec &yy )
 {
 	// Solution is ((1000.0/999)*exp(-t) - (1.0/999.0)*exp(-1000t)

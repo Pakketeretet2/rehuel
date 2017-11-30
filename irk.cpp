@@ -296,4 +296,14 @@ const char *method_to_name( int method )
 }
 
 
+
+bool verify_solver_options( solver_options &opts )
+{
+	if( opts.newton_opts ) return true;
+	std::cerr << "ERROR! solver_opts @" << &opts << " does not have "
+	          << "newton::options set!\n";
+	return false;
+}
+
+
 } // namespace irk

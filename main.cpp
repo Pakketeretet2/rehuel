@@ -103,7 +103,14 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 	s_opts.rel_tol = 1e-7;
 	s_opts.abs_tol = 1e-8;
 	s_opts.internal_solver = irk::solver_options::BROYDEN;
-	s_opts.adaptive_step_size = true;
+	s_opts.adaptive_step_size = false;
+
+	newton::options opts;
+	opts.tol = 1e-9;
+	opts.maxit = 10000;
+	opts.max_step = 10.0;
+
+	s_opts.newton_opts = &opts;
 
 	arma::vec y0 = { 1.0, 0.0 };
 
@@ -166,54 +173,88 @@ std::vector<double> make_time_grid( double t0, double t1 )
 }
 
 
-/**
-   \brief Main entry point. Performs some basic operations.
-
-   This function showcases some typical uses for the Rehuel-library.
-
-   \param argc   Number of command line arguments
-   \param argv   Command line arguments
-
-   \returns 0 on success, non-zero otherwise.
-*/
-int main( int argc, char **argv )
+void check_method_order( int method, double t0, double t1,
+                         const std::vector<double> &dts )
 {
-	double dt = 0.025;
-	int method = irk::LOBATTO_IIIA_43;
+	irk::solver_coeffs sc = irk::get_coefficients( method );
+	irk::solver_options s_opts = irk::default_solver_options();
 
+	s_opts.rel_tol = 1e-7;
+	s_opts.abs_tol = 1e-8;
+	s_opts.internal_solver = irk::solver_options::NEWTON;
+	s_opts.adaptive_step_size = false;
+	s_opts.out_int = 50000;
+
+	newton::options opts;
+	opts.maxit = 5000000;
+	opts.tol   = 1e-9;
+	opts.time_internals = false;
+	opts.max_step = 0.1;
+	opts.refresh_jac = false;
+
+	s_opts.newton_opts = &opts;
+
+	std::vector<arma::vec> max_errs;
+	std::ofstream sol_out( "sols.dat" );
+
+	for( double dt : dts ){
+		sc.dt = dt;
+		arma::vec y0 = odes::analytic_stiff_sol( t0 );
+
+		auto ode   = odes::analytic_stiff;
+		auto ode_J = odes::analytic_stiff_J;
+
+		auto ode_t0   = [t0]( arma::vec y ){
+			return odes::analytic_stiff( t0, y ); };
+		auto ode_J_t0 = [t0]( arma::vec y ){
+			return odes::analytic_stiff_J( t0, y ); };
+
+		// Check if the derivative is correct.
+		if( newton::verify_jacobi_matrix( y0, ode_t0, ode_J_t0 ) ){
+			std::cerr << "Jacobi seems fine...\n";
+		}else{
+			std::cerr << "Jacobi seems wrong...\n";
+		}
+
+		std::vector<double> times;
+		std::vector<arma::vec> ys;
+
+		int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
+		                                 ode, ode_J, times, ys,
+		                                 &std::cerr );
+		for( std::size_t nt = 0; nt < times.size(); ++nt ){
+			sol_out << dt << " " << times[nt];
+			for( std::size_t yi = 0; yi < ys[nt].size(); ++yi ){
+				sol_out << " " << ys[nt](yi);
+			}
+			sol_out << "\n";
+		}
+		sol_out << "\n";
+
+
+		double max_err_x = 0.0;
+		double max_err_y = 0.0;
+
+		for( std::size_t nt = 0; nt < times.size(); ++nt ){
+			double t = times[nt];
+			arma::vec y_exact = odes::analytic_stiff_sol( t );
+			arma::vec y_delta = y_exact - ys[nt];
+			double x_err = std::abs( y_delta[0] );
+			double y_err = std::abs( y_delta[1] );
+
+			if( max_err_x < x_err ) max_err_x = x_err;
+			if( max_err_y < y_err ) max_err_y = y_err;
+		}
+		std::cout << dt << " " << max_err_x << " " << max_err_y << "\n";
+		max_errs.push_back( { max_err_x, max_err_y } );
+	}
+}
+
+
+int solve_ode( int method, const std::string &ofname, bool quiet, double dt  )
+{
 	double t0 = 0.0;
 	double t1 = 100.0;
-	std::string ofname = "-";
-	bool quiet = true;
-	if( argc > 1 ){
-		int i = 1;
-		while( i < argc ){
-			const char *arg = argv[i];
-			if( strcmp(arg, "-m") == 0 ){
-				method = irk::name_to_method( argv[i+1] );
-				if( method < 0 ){
-					std::cerr << "Unrecognized integrator "
-					          << argv[i+1] << "!\n";
-					return -2;
-				}
-				i += 2;
-			}else if( strcmp(arg, "-dt") == 0 ){
-				dt = std::atof( argv[i+1] );
-				i += 2;
-			}else if( strcmp(arg, "-o") == 0 ){
-				ofname = argv[i+1];
-				i += 2;
-			}else if( strcmp(arg, "-q") == 0 ){
-				quiet = std::atoi(argv[i+1]);
-				i += 2;
-			}else{
-				std::cerr << "Arg " << argv[i]
-				          << " not recognized!\n";
-				return -1;
-			}
-		}
-	}
-
 	std::vector<double> times;
 	std::vector<arma::vec> ys;
 	std::ostream *errout = nullptr;
@@ -266,6 +307,69 @@ int main( int argc, char **argv )
 
 	if( ofname != "-" ){
 		delete out;
+	}
+	return 0;
+}
+
+/**
+   \brief Main entry point. Performs some basic operations.
+
+   This function showcases some typical uses for the Rehuel-library.
+
+   \param argc   Number of command line arguments
+   \param argv   Command line arguments
+
+   \returns 0 on success, non-zero otherwise.
+*/
+int main( int argc, char **argv )
+{
+	double dt = 0.025;
+	int method = irk::LOBATTO_IIIA_43;
+
+
+	std::string ofname = "-";
+	bool quiet = true;
+	int run_mode = 0;
+	if( argc > 1 ){
+		int i = 1;
+		while( i < argc ){
+			const char *arg = argv[i];
+			if( strcmp(arg, "-m") == 0 ){
+				method = irk::name_to_method( argv[i+1] );
+				if( method < 0 ){
+					std::cerr << "Unrecognized integrator "
+					          << argv[i+1] << "!\n";
+					return -2;
+				}
+				i += 2;
+			}else if( strcmp(arg, "-dt") == 0 ){
+				dt = std::atof( argv[i+1] );
+				i += 2;
+			}else if( strcmp(arg, "-o") == 0 ){
+				ofname = argv[i+1];
+				i += 2;
+			}else if( strcmp(arg, "-q") == 0 ){
+				quiet = std::atoi(argv[i+1]);
+				i += 2;
+			}else if( strcmp(arg, "-r") == 0 ){
+				run_mode = std::atoi(argv[i+1]);
+				i += 2;
+			}else{
+				std::cerr << "Arg " << argv[i]
+				          << " not recognized!\n";
+				return -1;
+			}
+		}
+	}
+
+	if( run_mode == 0 ){
+		int status = solve_ode( method, ofname, quiet, dt );
+		return status;
+	}else{
+		std::vector<double> dts = { 2e-7, 5e-7, 1e-6, 2e-6, 5e-6,
+		                            1e-5, 1e-4, 1e-3, 1e-2 };
+		std::cerr << "Checking method order...\n";
+		check_method_order( method, 0.0, 5.0, dts );
 	}
 	return 0;
 }
