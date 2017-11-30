@@ -7,6 +7,16 @@
    \brief some enums that should be exposed publicly.
 */
 
+namespace multistep {
+
+enum ms_methods {
+	ADAMS_BASHFORTH = 0,
+	ADAMS_MOULTON = 1,
+	BDF = 2
+};
+
+} // namespace mltistep
+
 namespace irk {
 
 /// \brief enumerates all implemented RK methods.
@@ -22,7 +32,10 @@ enum rk_methods {
 	RADAU_IIA_32        = 22,
 	LOBATTO_IIIA_43     = 23,
 	GAUSS_LEGENDRE_43   = 24
+
 };
+
+
 
 /// \brief enumerates possible return codes.
 enum odeint_status_codes {
