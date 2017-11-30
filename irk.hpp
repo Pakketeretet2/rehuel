@@ -76,7 +76,11 @@ struct solver_options {
 	/// \brief Constructor with default values.
 	solver_options()
 		: internal_solver(BROYDEN), adaptive_step_size(true),
-		  rel_tol(1e-5), abs_tol(10*rel_tol), max_dt( 0.5 ) {}
+		  rel_tol(1e-5), abs_tol(10*rel_tol), max_dt( 0.5 ),
+		  out_int( 1000 ), newton_opts( nullptr ) {}
+
+	~solver_options()
+	{ }
 
 	/// Internal non-linear solver used (see \ref internal_solvers)
 	/// Broyden typically gives good results in less time.
@@ -90,7 +94,22 @@ struct solver_options {
 	double abs_tol;
 	/// Maximum time step size
 	double max_dt;
+
+	/// Output interval;
+	int out_int;
+
+	/// Options for the internal solver.
+	const newton::options *newton_opts;
 };
+
+/**
+   \brief Checks if all options are set to sane values.
+
+   \returns true if all options checked out, false otherwise.
+
+*/
+bool verify_solver_options( const solver_options &opts );
+
 
 /**
    \brief Checks if the solver Butcher tableau is consistent.
@@ -283,6 +302,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 	arma::mat J( NN, NN );
 	arma::vec KK = K;
 
+
 	// Use newton iteration to find the Ks for the next level:
 	auto stages_func = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
 		return construct_F( t, y, K, dt, sc, fun, jac );
@@ -291,13 +311,8 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return construct_J( t, y, K, dt, sc, fun, jac );
 	};
 
-	newton::options opts;
 	newton::status stats;
-
-	opts.tol = 1e-8;
-	opts.time_internals = false;
-	opts.refresh_jac = true;
-	opts.maxit = 10000;
+	const newton::options &opts = *solver_opts.newton_opts;
 
 	switch( solver_opts.internal_solver ){
 		case solver_options::NEWTON:
@@ -353,6 +368,10 @@ int take_time_step( double t, arma::vec &y, double dt,
 		if( increase_dt ) ret_code |= DT_TOO_SMALL;
 		else              ret_code |= SUCCESS;
 		if( stats.iters < 10 ) ret_code |= INTERNAL_SOLVE_FEW_ITERS;
+
+
+
+		K = KK; // Store the new stages.
 		return ret_code;
 
 	}else{
@@ -361,7 +380,6 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return INTERNAL_SOLVE_FAILURE;
 	}
 
-	K = KK; // Store the new stages.
 	return SUCCESS;
 }
 
@@ -391,6 +409,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 {
 	double t = t0;
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+	assert( solver_opts.newton_opts && "Newton solver options not set!" );
 
 	if( !y_vals.empty() || !t_vals.empty() ){
 		std::cerr << "Vectors for storing are not empty! I will _not_ "
@@ -476,10 +495,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			}else{
 				dt *= 0.3;
 			}
-			if( dt < 1e-10 ){
-				std::cerr << "dt is too small!\n";
-				return TIME_STEP_TOO_SMALL;
-			}
 			something_changed = true;
 		}
 		if( status & INTERNAL_SOLVE_FEW_ITERS ){
@@ -520,11 +535,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		tt.push_back( t );
 		yy.push_back( y );
 
-		if( steps % 1000 == 0 ){
-			print_integrator_stats();
-		}
-
-
 		// Do some preparation for the next time step here:
 		if( sc.FSAL ){
 			std::size_t i0 = (Ns-1)*Neq;
@@ -538,7 +548,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			K.subvec( i, i + Neq - 1 ) = y;
 		}
 
-		if( steps % 100 == 0 || something_changed ){
+		if( steps % solver_opts.out_int == 0 || something_changed ){
 			print_integrator_stats();
 		}
 
