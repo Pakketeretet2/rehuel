@@ -133,5 +133,27 @@ which, in ``prettier'' notation, is
   \end{pmatrix} - \bvec{I}
 \end{equation*}
 
+\section{A test case}
+A simple way to test the integrators is to apply them to an ODE whose solution is known.
+We consider
+\begin{equation*}
+  \frac{\dd}{\dd t} \bvec{y} = \begin{pmatrix}
+    -\alpha & -\omega \\
+    \omega & -\alpha \end{pmatrix} \bvec{y}
+\end{equation*}
+The solution can be composed in terms of the eigenvalues $\lambda_\pm$ of the matrix as
+\begin{equation*}
+  \bvec{y} = \bvec{C}_1e^{\lambda_+t} + \bvec{C}_2e^{\lambda_-t}, \qquad \lambda_\pm = \left[-\alpha \pm i \omega\right].
+\end{equation*}
+In other words, we have $\bvec{y} = \left[ \bvec{A}_1\cos(\omega t) + \bvec{A}_2 \sin(\omega t) \right]e^{-\alpha t}.$
+To find $\bvec{A}_1$ and $\bvec{A}_2$, we apply the initial value $(x,y) = (1,0)^T$ and find
+\begin{equation*}
+  \bvec{y} = \left[ \begin{pmatrix} 1 \\ 0 \end{pmatrix} \cos(\omega t) +
+  \begin{pmatrix} 0 \\ 1 \end{pmatrix} \sin( \omega t ) \right]e^{-\alpha t}
+\end{equation*}
+
+\section{Adaptive time step control and embedding methods}
+
+Given a Runge-Kutta method, it is sometimes possible to find a second set of weights $\hat{\bvec{b}}$ in such a way that the approximation $\hat{\bvec{y}} = $
 
 \end{document}
