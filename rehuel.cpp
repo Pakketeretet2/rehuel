@@ -1,7 +1,7 @@
 #include "rehuel.h"
 
 // This C++ source file contains the C routines.
-
+/*
 
 rehuel_handle *rehuel_initialize()
 {
@@ -41,3 +41,4 @@ int rehuel_integrate_ode( rehuel_handle *rh, double t0, double t1, int size,
 
 	return odeint_status;
 }
+*/

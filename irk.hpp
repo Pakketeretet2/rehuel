@@ -77,7 +77,8 @@ struct solver_options {
 	solver_options()
 		: internal_solver(BROYDEN), adaptive_step_size(true),
 		  rel_tol(1e-5), abs_tol(10*rel_tol), max_dt( 0.5 ),
-		  out_int( 1000 ), newton_opts( nullptr ) {}
+		  out_int( 1000 ), newton_opts( nullptr ),
+		  store_in_vectors( true ) {}
 
 	~solver_options()
 	{ }
@@ -100,6 +101,8 @@ struct solver_options {
 
 	/// Options for the internal solver.
 	const newton::options *newton_opts;
+
+	bool store_in_vectors;
 };
 
 /**
@@ -205,7 +208,8 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 		}
 		arma::mat Ji = jac( ti, yi );
 		arma::vec ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
-		F.subvec( i*Neq, i*Neq + Neq - 1 ) = fun( ti, yi ) - ki;
+		arma::vec tmp = fun( ti, yi );
+		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
 	}
 	return F;
 }
@@ -362,6 +366,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 		// If you get here, either adaptive_dt == false
 		// or everything is fine.
+		// Store new y:
 		y = yn;
 		int ret_code = 0;
 
@@ -375,6 +380,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return ret_code;
 
 	}else{
+		// At this point, y has not changed. Neither has K. Only err.
 		std::cerr << "Internal solver failed to converge! Final dt = "
 		          << dt << ", final res = " << stats.res << "\n";
 		return INTERNAL_SOLVE_FAILURE;
@@ -405,7 +411,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
             const solver_options &solver_opts,
             const arma::vec &y0, const func_type &fun, const Jac_type &jac,
             std::vector<double> &t_vals, std::vector<arma::vec> &y_vals,
-            std::ostream *errout )
+            std::ostream *errout, std::ostream *sol_out )
 {
 	double t = t0;
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
@@ -435,8 +441,18 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	std::vector<double> tt;
 	std::vector<arma::vec> yy;
 
-	tt.push_back(t);
-	yy.push_back(y);
+	if( solver_opts.store_in_vectors ){
+		tt.push_back(t);
+		yy.push_back(y);
+	}
+
+	if( sol_out ){
+		*sol_out << t;
+		for( std::size_t i = 0; i < y.size(); ++i ){
+			*sol_out << " " << y[i];
+		}
+		*sol_out << "\n";
+	}
 
 
 	// Main integration loop:
@@ -459,19 +475,22 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	std::size_t Ns  = sc.b.size();
 	std::size_t NN = Ns * Neq;
 
-	arma::vec K( NN );
+	arma::vec K = arma::zeros( NN, 1 );
 	for( std::size_t i = 0; i < Ns; ++i ){
-		K.subvec( i, i + Neq - 1 ) = y;
+		std::size_t i0 = i*Neq;
+		std::size_t i1 = (i+1)*Neq - 1;
+		K.subvec( i0, i1 ) = fun( t, y );
 	}
+
 
 	double max_dt = solver_opts.max_dt;
 
 	while( t < t1 ){
 		bool something_changed = false;
-
 		double old_dt = dt;
 		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
 		                         adaptive_dt, err, K, errout );
+
 
 		if( status == GENERAL_ERROR ){
 			std::cerr << "Generic error in odeint!\n";
@@ -495,6 +514,9 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			}else{
 				dt *= 0.3;
 			}
+			if( dt > old_dt ){
+				dt = 0.5*old_dt;
+			}
 			something_changed = true;
 		}
 		if( status & INTERNAL_SOLVE_FEW_ITERS ){
@@ -512,7 +534,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			}
 			something_changed = true;
 		}
-		bool move_on = status == SUCCESS;
+		bool move_on = (status == SUCCESS);
 		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
 			move_on = true;
 		}
@@ -531,23 +553,33 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		// OK.
 		t += old_dt;
 		++steps;
+		if( solver_opts.store_in_vectors ){
+			tt.push_back( t );
+			yy.push_back( y );
+		}
+		if( sol_out && (steps % 500 == 0) ){
+			*sol_out << t;
+			for( std::size_t i = 0; i < y.size(); ++i ){
+				*sol_out << " " << y[i];
+			}
+			*sol_out << "\n";
+		}
 
-		tt.push_back( t );
-		yy.push_back( y );
 
 		// Do some preparation for the next time step here:
+		std::size_t i0 = (Ns-1)*Neq;
+		std::size_t i1 = Ns*Neq - 1;
 		if( sc.FSAL ){
-			std::size_t i0 = (Ns-1)*Neq;
-			std::size_t i1 = Ns*Neq - 1;
 			K.subvec( 0, Neq - 1 ) = K.subvec( i0, i1 );
 		}else{
-			K.subvec( 0, Neq - 1 ) = y;
+			K.subvec( 0, Neq - 1 ) = fun( t, y );
 		}
+
 		for( std::size_t i = 1; i < Ns; ++i ){
-
-			K.subvec( i, i + Neq - 1 ) = y;
+			i0 = i*Neq;
+			i1 = (i+1)*Neq - 1;
+			K.subvec( i0, i1 ) = fun( t, y );
 		}
-
 		if( steps % solver_opts.out_int == 0 || something_changed ){
 			print_integrator_stats();
 		}

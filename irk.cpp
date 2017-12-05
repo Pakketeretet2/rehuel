@@ -25,7 +25,7 @@ solver_coeffs get_coefficients( int method )
 	double sqrt3 = sqrt(3);
 	sc.FSAL = false;
 	sc.name = method_to_name( method );
-
+	std::cerr << "Setting coeffs for method " << sc.name << "...\n";
 	switch(method){
 		default:
 			std::cerr << "Method " << method << " not supported!\n";

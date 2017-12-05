@@ -4,7 +4,7 @@ FLAGS = -std=c++11 -pedantic -g -O2 -ffast-math  \
 	-DCHECK_NANS
 
 LNK = -L./ -larmadillo
-INC = -I./
+INC = -I./ -I./my_timer/
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
@@ -27,14 +27,17 @@ OBJ = $(SRC:%.$(EXT)=$(OBJ_DIR)$(S)%.o)
 OBJ_DIRS = $(dir $(OBJ))
 DEPS = $(OBJ:%.o=%.d)
 
-.PHONY: dirs all help clean install
+.PHONY: dirs all help clean install deps
 
-all : dirs $(EXE)
+all : dirs deps $(EXE)
 
 install : $(EXE)
 	cp $(EXE) /usr/local/bin
 
 dirs : $(OBJ_DIR)
+
+deps:
+	@zsh grab_dependencies.sh
 
 $(OBJ_DIR) :
 	$(call $(MAKE_DIR),$@)

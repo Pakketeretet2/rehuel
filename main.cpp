@@ -129,7 +129,7 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 		return -1;
 	}
 	int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
-	                                 ode, ode_J, times, ys, errout );
+	                                 ode, ode_J, times, ys, errout, nullptr );
 	return odeint_status;
 }
 
@@ -221,7 +221,7 @@ void check_method_order( int method, double t0, double t1,
 
 		int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
 		                                 ode, ode_J, times, ys,
-		                                 &std::cerr );
+		                                 &std::cerr, nullptr );
 		for( std::size_t nt = 0; nt < times.size(); ++nt ){
 			sol_out << dt << " " << times[nt];
 			for( std::size_t yi = 0; yi < ys[nt].size(); ++yi ){
@@ -368,6 +368,7 @@ int main( int argc, char **argv )
 	}else{
 		std::vector<double> dts = { 2e-7, 5e-7, 1e-6, 2e-6, 5e-6,
 		                            1e-5, 1e-4, 1e-3, 1e-2 };
+
 		std::cerr << "Checking method order...\n";
 		check_method_order( method, 0.0, 5.0, dts );
 	}

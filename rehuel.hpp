@@ -25,10 +25,6 @@ typedef arma::vec (*standard_ode_rhs)(double, const arma::vec&);
 /// The standard form of the Jacobi matrix of the RHS ODE.
 typedef arma::mat (*standard_ode_jac)(double, const arma::vec&);
 
-/// A struct containing coefficients for Runge-Kutta methods.
-typedef irk::solver_coeffs solver_coeffs;
-/// Options for the time integrators.
-typedef irk::solver_options solver_options;
 
 /// Enumerates all implemented Runge-Kutta methods.
 typedef irk::rk_methods rk_methods;
