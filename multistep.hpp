@@ -1,8 +1,10 @@
 #ifndef MULTISTEP_HPP
 #define MULTISTEP_HPP
 
+#include "cyclic_buffer.hpp"
 #include "enums.hpp"
 #include "newton.hpp"
+
 
 #include <armadillo>
 #include <vector>
@@ -15,7 +17,7 @@ namespace multistep {
 struct solver_options {
 	/// \brief Constructor with default values.
 	solver_options() : solver_type(ms_methods::BDF),
-	                   solver_order(3), out_int( 1000 ) {}
+	                   order(1), out_int( 1000 ) {}
 
 	~solver_options()
 	{ }
@@ -23,7 +25,7 @@ struct solver_options {
 
 	/// Solver type
 	int solver_type;
-	int solver_order;
+	int order;
 
 	/// Output interval;
 	int out_int;
@@ -39,9 +41,6 @@ int odeint_BDF( double t0, double t1, double dt,
 	double t = t0;
 	int step = 0;
 
-	int current_y = 1;
-	// Always store the last six:
-	std::vector<arma::vec> last_ys( 6 );
 	arma::vec y = y0;
 	y_vals.push_back(y);
 	t_vals.push_back(t);
@@ -55,11 +54,7 @@ int odeint_BDF( double t0, double t1, double dt,
 	                  { -360./147., 450./147., -400./147., 225./147., -72./147., 10./147.} };
 	arma::vec Bfs = { 1.0, 2.0/3.0, 6.0/11.0, 12.0/25.0, 60.0/137.0, 60.0/147.0 };
 
-	auto back_i = [&current_y]( int i ){
-		int delta = current_y - i;
-		if( delta < 0 ) delta += 6;
-		return delta;
-	};
+
 	std::size_t N = y0.size();
 	arma::mat I(N, N);
 	I.eye(N,N);
@@ -69,55 +64,42 @@ int odeint_BDF( double t0, double t1, double dt,
 	opts.maxit = 1000;
 	newton::status stats;
 
+	cyclic_buffer<arma::vec> previous_ys( solver_opts.order );
+	previous_ys.push_back( y );
+	arma::vec history( N );
+	history.zeros( N,1 );
 	while( t < t1 ){
-		arma::vec history(y.size());
-
-		// Start-up phase:
-		for( int substep = 0; substep < 6; ++substep ){
-			int coeff_idx = solver_opts.solver_order - 1;
-			if( coeff_idx > substep ) coeff_idx = substep;
-
-			for( int i = 0; i < 6; ++i ){
-				double ci = Cfs(i, coeff_idx);
-				history += ci * last_ys[ back_i(i) ];
-			}
-			double beta = Bfs(coeff_idx);
-
-			// Solve yn + history = f(t+dt, yn) -->
-			auto rhs_F = [&fun,&history, &t, &dt, &beta]( arma::vec yn )
-				{ return fun(t + dt, yn) - history - yn; };
-			auto rhs_J = [&jac, &history, &t, &dt, &I, &beta]( arma::vec yn )
-				{ return jac(t + dt, yn) - I; };
-
-			arma::vec yn = newton::solve( rhs_F, y, opts, stats, rhs_J );
-
-			last_ys[substep+1] = yn;
-
-			t += dt;
-			++step;
-			y = yn;
+		std::size_t coeff_idx = step;
+		if( coeff_idx >= previous_ys.size() ){
+			coeff_idx = previous_ys.size()-1;
 		}
 
-
-		int coeff_idx = solver_opts.solver_order - 1;
-
-		for( int i = 0; i < 6; ++i ){
-			double ci = Cfs(i, coeff_idx);
-			history += ci * last_ys[ back_i(i) ];
+		for( int i = 0; i < previous_ys.size(); ++i ){
+			double ci = Cfs(coeff_idx, i);
+			history += ci * previous_ys[ i ];
 		}
 		double beta = Bfs(coeff_idx);
 
 		// Solve yn + history = f(t+dt, yn) -->
 		auto rhs_F = [&fun,&history, &t, &dt, &beta]( arma::vec yn )
-			{ return fun(t + dt, yn) - history - yn; };
+			{ return beta*dt*fun(t + dt, yn) - history - yn; };
 		auto rhs_J = [&jac, &history, &t, &dt, &I, &beta]( arma::vec yn )
-			{ return jac(t + dt, yn) - I; };
+			{ return beta*dt*jac(t + dt, yn) - I; };
 
+		arma::vec yn = newton::solve( rhs_F, y, opts, stats );
 
+		previous_ys.push_back( yn );
 
 		t += dt;
 		++step;
+		if( step % 1000 == 0 ){
+			std::cerr << "At t = " << t << "\n";
+		}
+		t_vals.push_back(t);
+		y_vals.push_back(yn);
+		y = yn;
 	}
+
 	return 0;
 }
 
@@ -149,7 +131,7 @@ int odeint( double t0, double t1, double dt,
 		case BDF:
 		default:
 			return odeint_BDF( t0, t1, dt, solver_opts, y0, fun,
-			                   jac, t_vals, y_vals, errout );
+			                   jac, t_vals, y_vals );
 	}
 }
 
