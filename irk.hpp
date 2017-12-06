@@ -75,10 +75,18 @@ struct solver_options {
 
 	/// \brief Constructor with default values.
 	solver_options()
-		: internal_solver(BROYDEN), adaptive_step_size(true),
-		  rel_tol(1e-5), abs_tol(10*rel_tol), max_dt( 0.5 ),
-		  out_int( 1000 ), newton_opts( nullptr ),
-		  store_in_vectors( true ) {}
+		: internal_solver(BROYDEN),
+		  adaptive_step_size(true),
+		  rel_tol(1e-5),
+		  abs_tol(10*rel_tol),
+		  max_dt( 100.0 ),
+		  solution_out_interval( 1000 ),
+		  timestep_info_out_interval( 1000 ),
+		  newton_opts( nullptr ),
+		  store_in_vectors( true ),
+		  solution_out( nullptr ),
+		  timestep_out( nullptr )
+	{ }
 
 	~solver_options()
 	{ }
@@ -96,13 +104,23 @@ struct solver_options {
 	/// Maximum time step size
 	double max_dt;
 
-	/// Output interval;
-	int out_int;
+	/// Output interval for solution:
+	int solution_out_interval;
+
+	/// Output interval for time step size and error.
+	int timestep_info_out_interval;
 
 	/// Options for the internal solver.
 	const newton::options *newton_opts;
 
+	/// Store solution in vector or not?
 	bool store_in_vectors;
+
+	/// Write solution to this output stream.
+	std::ostream *solution_out;
+
+	/// Write time step info to this output stream.
+	std::ostream *timestep_out;
 };
 
 /**
