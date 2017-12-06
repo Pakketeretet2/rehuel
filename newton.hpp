@@ -181,20 +181,7 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 	arma::vec f0 = fn;
 
 	arma::mat Jaci( N, N );
-	double h = 1e-4;
-	arma::mat Jac_approx = approx_jacobi_matrix( x, F, h );
-
-	double rcond = arma::rcond(Jac_approx);
-
-	Jaci.zeros( N, N );
-	if( rcond > opts.tol ){
-		// Approximate the Jacobi matrix with the inverse diagonal:
-		for( std::size_t i = 0; i < N; ++i ){
-			Jaci(i,i) = 1.0 / Jac_approx(i,i);
-		}
-	}else{
-		Jaci.eye(N,N);
-	}
+	Jaci.eye(N,N);
 
 
 	double max_step2;
@@ -255,12 +242,6 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
                           const options &opts, status &stats,
                           const func_Jac &J )
 {
-	if( !verify_jacobi_matrix( x, F, J ) ){
-		std::cerr << "Jacobi matrix function seems incorrect! "
-		          << "Falling back on Broyden instead!\n";
-		return broyden_iterate( F, x, opts, stats );
-	}
-
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
 	arma::vec r = F(x);
@@ -292,14 +273,6 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 		if( opts.refresh_jac ){
 			direction = -arma::solve(Jac,r);
 		}else{
-			// Use the LUP-decomposed to solve.
-			// (P.t() * L * U) * direction = -r
-			// L*U*direction = -arma::solve(P.t(), r);
-			//arma::vec tmp1 = -arma::solve(J_P.t(), r);
-			// L*U*dir = tmp1
-			//arma::vec tmp2 = arma::solve(J_L, tmp1);
-			// U*dir = tmp2
-			//direction = arma::solve(J_U, tmp1);
 			direction = -Ji * r;
 		}
 		if( max_step2 > 0 ){
