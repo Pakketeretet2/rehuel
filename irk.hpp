@@ -83,9 +83,10 @@ struct solver_options {
 		  solution_out_interval( 1000 ),
 		  timestep_info_out_interval( 1000 ),
 		  newton_opts( nullptr ),
-		  store_in_vectors( true ),
+		  store_in_vector_every( 1 ),
 		  solution_out( nullptr ),
-		  timestep_out( nullptr )
+		  timestep_out( nullptr ),
+		  verbosity( 0 )
 	{ }
 
 	~solver_options()
@@ -113,14 +114,17 @@ struct solver_options {
 	/// Options for the internal solver.
 	const newton::options *newton_opts;
 
-	/// Store solution in vector or not?
-	bool store_in_vectors;
+	/// Store solution in vector every this many steps (0 to disable)
+	int store_in_vector_every;
 
 	/// Write solution to this output stream.
 	std::ostream *solution_out;
 
 	/// Write time step info to this output stream.
 	std::ostream *timestep_out;
+
+	/// if > 0, print some output.
+	int verbosity;
 };
 
 /**
@@ -314,8 +318,7 @@ int take_time_step( double t, arma::vec &y, double dt,
                     const irk::solver_coeffs &sc,
                     const irk::solver_options &solver_opts,
                     const func_type &fun, const Jac_type &jac,
-                    bool adaptive_dt, double &err,
-                    arma::vec &K, std::ostream *errout )
+                    bool adaptive_dt, double &err, arma::vec &K )
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
@@ -399,8 +402,11 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 	}else{
 		// At this point, y has not changed. Neither has K. Only err.
-		std::cerr << "Internal solver failed to converge! Final dt = "
-		          << dt << ", final res = " << stats.res << "\n";
+		if( solver_opts.verbosity ){
+			std::cerr << "Internal solver failed to converge! "
+			          << "Final dt = " << dt << ", final res = "
+			          << stats.res << "\n";
+		}
 		return INTERNAL_SOLVE_FAILURE;
 	}
 
@@ -428,14 +434,13 @@ template <typename func_type, typename Jac_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
             const solver_options &solver_opts,
             const arma::vec &y0, const func_type &fun, const Jac_type &jac,
-            std::vector<double> &t_vals, std::vector<arma::vec> &y_vals,
-            std::ostream *errout, std::ostream *sol_out )
+            std::vector<double> &t_vals, std::vector<arma::vec> &y_vals )
 {
 	double t = t0;
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
 	assert( solver_opts.newton_opts && "Newton solver options not set!" );
 
-	if( !y_vals.empty() || !t_vals.empty() ){
+	if( solver_opts.verbosity && (!y_vals.empty() || !t_vals.empty()) ){
 		std::cerr << "Vectors for storing are not empty! I will _not_ "
 		          << "clear them!\n";
 	}
@@ -447,48 +452,58 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	bool adaptive_dt = solver_opts.adaptive_step_size;
 	if( adaptive_dt ){
 		if( sc.b2.size() != sc.b.size() ){
-			std::cerr << "Adaptive time step requested but chosen "
-			          << "method has no embedded auxillary pair!\n";
+			if( solver_opts.verbosity ){
+				std::cerr << "Adaptive time step requested but "
+					"chosen method has no embedded pair!\n";
+			}
 			adaptive_dt = false;
 		}
-	}else{
+	}else if( solver_opts.verbosity ){
 		std::cerr << "Not using adaptive time step.\n";
 	}
 
 	arma::vec y = y0;
 	std::vector<double> tt;
 	std::vector<arma::vec> yy;
+	int steps = 0;
 
-	if( solver_opts.store_in_vectors ){
+	if( solver_opts.store_in_vector_every ){
 		tt.push_back(t);
 		yy.push_back(y);
 	}
 
-	if( sol_out ){
-		*sol_out << t;
+
+	auto print_solution_out = [&steps, &t, &y, &solver_opts]{
+		if( !solver_opts.solution_out ) return;
+		*solver_opts.solution_out << steps << "  " << t;
 		for( std::size_t i = 0; i < y.size(); ++i ){
-			*sol_out << " " << y[i];
+			*solver_opts.solution_out << " " << y[i];
 		}
-		*sol_out << "\n";
+		*solver_opts.solution_out << "\n"; };
+
+	auto print_timestep_stats = [&steps, &t, &dt, &err, &solver_opts]{
+		if( !solver_opts.timestep_out ) return;
+		*solver_opts.timestep_out << steps << "  " << t << "  " << dt
+		<< " " << err << "\n"; };
+
+	// Print headers:
+	if( solver_opts.solution_out ){
+		*solver_opts.solution_out << "# step   time   ys...\n";
+		print_solution_out();
+	}
+	if( solver_opts.timestep_out ){
+		*solver_opts.timestep_out << "# step  t    dt   err\n";
+		print_timestep_stats();
 	}
 
 
 	// Main integration loop:
 	int status = 0;
-	int steps = 0;
-
-	if(errout) *errout << "# step  t    dt   err\n";
-
-	auto print_integrator_stats = [&steps, &t, &dt, &err, &errout]{
-		if( !errout ) return;
-		*errout << steps << "  " << t << "  " << dt
-		        << " " << err << "\n"; };
-	print_integrator_stats();
 
 	my_timer timer( std::cerr );
 	timer.tic();
 
-
+	// Prepare stages:
 	std::size_t Neq = y.size();
 	std::size_t Ns  = sc.b.size();
 	std::size_t NN = Ns * Neq;
@@ -500,26 +515,27 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		K.subvec( i0, i1 ) = fun( t, y );
 	}
 
-
+	// Grab max_dt for convenience:
 	double max_dt = solver_opts.max_dt;
 
 	while( t < t1 ){
-		bool something_changed = false;
 		double old_dt = dt;
 		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
-		                         adaptive_dt, err, K, errout );
+		                         adaptive_dt, err, K );
 
 
 		if( status == GENERAL_ERROR ){
-			std::cerr << "Generic error in odeint!\n";
+			if( solver_opts.verbosity ){
+				std::cerr << "Generic error in odeint!\n";
+			}
 			return GENERAL_ERROR;
 		}
 		if( status & INTERNAL_SOLVE_FAILURE ){
 			max_dt *= 0.5;
-			if( errout ){
-				*errout << "    Internal solver "
-				        << "did not converge to tol! "
-				        << "dt = " << dt << "!\n";
+			if( solver_opts.verbosity ){
+				std::cerr << "    Internal solver "
+				          << "did not converge to tol! "
+				          << "dt = " << dt << "!\n";
 			}
 			status |= DT_TOO_LARGE;
 		}
@@ -535,7 +551,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			if( dt > old_dt ){
 				dt = 0.5*old_dt;
 			}
-			something_changed = true;
 		}
 		if( status & INTERNAL_SOLVE_FEW_ITERS ){
 			// This means you can probably increase max_dt:
@@ -550,7 +565,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				dt *= 1.8;
 				dt = std::min( dt, solver_opts.max_dt );
 			}
-			something_changed = true;
 		}
 		bool move_on = (status == SUCCESS);
 		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
@@ -571,16 +585,23 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		// OK.
 		t += old_dt;
 		++steps;
-		if( solver_opts.store_in_vectors ){
+
+		// Store new time point:
+		if( solver_opts.store_in_vector_every &&
+		    solver_opts.store_in_vector_every % steps == 0 ){
 			tt.push_back( t );
 			yy.push_back( y );
 		}
-		if( sol_out && (steps % 500 == 0) ){
-			*sol_out << t;
-			for( std::size_t i = 0; i < y.size(); ++i ){
-				*sol_out << " " << y[i];
-			}
-			*sol_out << "\n";
+
+		if( solver_opts.solution_out &&
+		    (steps % solver_opts.solution_out_interval == 0) ){
+			print_solution_out();
+		}
+
+
+		if( solver_opts.timestep_out &&
+		    steps % solver_opts.timestep_info_out_interval == 0 ){
+			print_timestep_stats();
 		}
 
 
@@ -598,11 +619,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			i1 = (i+1)*Neq - 1;
 			K.subvec( i0, i1 ) = fun( t, y );
 		}
-		if( steps % solver_opts.out_int == 0 || something_changed ){
-			print_integrator_stats();
-		}
-
-
 	}
 
 	std::string timer_msg = "Solving ODE with ";
