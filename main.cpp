@@ -254,7 +254,7 @@ void check_method_order( int method, double t0, double t1,
 int solve_ode( int method, const std::string &ofname, bool quiet, double dt  )
 {
 	double t0 = 0.0;
-	double t1 = 100.0;
+	double t1 = 1000.0;
 	std::vector<double> times;
 	std::vector<arma::vec> ys;
 	std::ostream *errout = nullptr;
