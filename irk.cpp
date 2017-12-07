@@ -243,20 +243,20 @@ solver_options default_solver_options()
 }
 
 double get_better_time_step( double dt_old, double error_estimate,
-                             const solver_options &opts,
+                             int newton_iters, const solver_options &opts,
                              const solver_coeffs &sc, double max_dt )
 {
 	// |y1 - y2| ~= C1 * dt^(min( sc.order, sc.order2 )) := error_estimate
 	// We want this to be opts.rel_tol. So...
 	// C1 * dt_new^(min( sc.order1, sc.order2 )) := opts.rel_tol.
 	// After some algebra, that becomes this:
-	double power  = 1.0 / ( std::min( sc.order, sc.order2 ) + 1.0 );
-	double frac   = opts.rel_tol / error_estimate;
-	double factor = std::pow( frac, power );
-	double scale  = 0.9*std::min( 2.0, factor ); // Increase dt smoothly.
-	double dt_new = std::min( dt_old * scale, max_dt );
+	double min_order = std::min( sc.order, sc.order2 );
+	double power     = 1.0 / ( min_order + 1.0 );
+	double newton_f  = std::sqrt( newton_iters );
+	double frac      = 0.9*opts.rel_tol / (newton_f * error_estimate);
+	double dt_new1   = std::pow( frac, power );
+	double dt_new    = std::min( dt_new1, max_dt );
 	return dt_new;
-
 }
 
 int name_to_method( const char *name )

@@ -167,7 +167,7 @@ solver_options default_solver_options();
    \return A time step size that is estimated to be more optimal.
 */
 double get_better_time_step( double dt_old, double error_estimate,
-                             const solver_options &opts,
+                             int newton_iters, const solver_options &opts,
                              const solver_coeffs &sc, double max_dt );
 
 /**
@@ -315,6 +315,7 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 */
 template <typename func_type, typename Jac_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
+                    newton::status &stats,
                     const irk::solver_coeffs &sc,
                     const irk::solver_options &solver_opts,
                     const func_type &fun, const Jac_type &jac,
@@ -336,7 +337,6 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return construct_J( t, y, K, dt, sc, fun, jac );
 	};
 
-	newton::status stats;
 	const newton::options &opts = *solver_opts.newton_opts;
 
 	switch( solver_opts.internal_solver ){
@@ -517,10 +517,12 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	// Grab max_dt for convenience:
 	double max_dt = solver_opts.max_dt;
+	newton::status newton_stats; // Use these for adaptive time step control.
 
 	while( t < t1 ){
 		double old_dt = dt;
-		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
+		status = take_time_step( t, y, dt, newton_stats, sc,
+		                         solver_opts, fun, jac,
 		                         adaptive_dt, err, K );
 
 
@@ -543,6 +545,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			// Adapt the
 			if( adaptive_dt ){
 				dt = get_better_time_step( dt, err,
+				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
 			}else{
@@ -559,6 +562,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( status & DT_TOO_SMALL ){
 			if( adaptive_dt ){
 				dt = get_better_time_step( dt, err,
+				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
 			}else{
