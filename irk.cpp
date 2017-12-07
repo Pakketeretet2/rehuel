@@ -242,7 +242,7 @@ solver_options default_solver_options()
 	return s;
 }
 
-double get_better_time_step( double dt_old, double error_estimate,
+double get_better_time_step( double dt_old, double err,
                              int newton_iters, const solver_options &opts,
                              const solver_coeffs &sc, double max_dt )
 {
@@ -253,9 +253,15 @@ double get_better_time_step( double dt_old, double error_estimate,
 	double min_order = std::min( sc.order, sc.order2 );
 	double power     = 1.0 / ( min_order + 1.0 );
 	double newton_f  = std::sqrt( newton_iters );
-	double frac      = 0.9*opts.rel_tol / (newton_f * error_estimate);
+	double frac      = 0.9*opts.rel_tol / (newton_f * err);
 	double dt_new1   = std::pow( frac, power );
-	double dt_new    = std::min( dt_new1, max_dt );
+	double dt_new    = std::min( std::min( dt_new1, 1.2*dt_old ), opts.max_dt );
+	if( opts.verbosity > 1 ){
+		std::cerr << "New dt = " << dt_new << ", err was " << err
+		          << ", tolerances are " << opts.rel_tol << ", "
+		          << opts.abs_tol << ", newton iters were "
+		          << newton_iters << ".\n";
+	}
 	return dt_new;
 }
 

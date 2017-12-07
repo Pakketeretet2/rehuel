@@ -160,13 +160,18 @@ solver_options default_solver_options();
 /**
    \brief Attempts to find a more optimal time step size based on error estimate
 
-   \param dt_old           Old time step size
-   \param error_estimate   Current error estimate
-   \param opts             Solver options
+   \param dt_old         Old time step size
+   \param abs_err        Absolute error estimate
+   \param rel_err        Current error estimate
+   \param newton_iters   Number of Newton iterations used.
+   \param opts           Solver options
+   \param sc             Solver coefficients.
+   \param max_dt         Largest accepted time step size.
+
 
    \return A time step size that is estimated to be more optimal.
 */
-double get_better_time_step( double dt_old, double error_estimate,
+double get_better_time_step( double dt_old, double abs_err,
                              int newton_iters, const solver_options &opts,
                              const solver_coeffs &sc, double max_dt );
 
@@ -374,10 +379,12 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 		if( adaptive_dt ){
 			auto y_err = yn - y_alt;
-			double err_est = arma::norm( y_err, "inf" );
-			err = err_est;
+			double abs_err = arma::norm( y_err, "inf" );
+			double rel_err = err / arma::norm( yn, "inf" );
+			err = std::max( abs_err, rel_err );
 
-			if( err > solver_opts.rel_tol ){
+			if( err > solver_opts.abs_tol ||
+			    rel_err > solver_opts.rel_tol ){
 				return DT_TOO_LARGE;
 			}else if( err < solver_opts.abs_tol * 0.25 ){
 				// Flag this but do update y anyway.
@@ -473,6 +480,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	}
 
 
+	newton::status newton_stats; // Use these for adaptive time step control.
+
 	auto print_solution_out = [&steps, &t, &y, &solver_opts]{
 		if( !solver_opts.solution_out ) return;
 		*solver_opts.solution_out << steps << "  " << t;
@@ -481,10 +490,13 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		*solver_opts.solution_out << "\n"; };
 
-	auto print_timestep_stats = [&steps, &t, &dt, &err, &solver_opts]{
+	auto print_timestep_stats = [&steps, &t, &dt, &err,
+	                             &solver_opts, &newton_stats]{
 		if( !solver_opts.timestep_out ) return;
-		*solver_opts.timestep_out << steps << "  " << t << "  " << dt
-		<< " " << err << "\n"; };
+		*solver_opts.timestep_out << steps << "       " << t << "      "
+		<< dt << "       " << err << "        " << newton_stats.iters
+		<< "\n"; };
+
 
 	// Print headers:
 	if( solver_opts.solution_out ){
@@ -492,7 +504,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		print_solution_out();
 	}
 	if( solver_opts.timestep_out ){
-		*solver_opts.timestep_out << "# step  t    dt   err\n";
+		*solver_opts.timestep_out << "# step  t      dt         "
+		                          << "err   (newton iters)\n";
 		print_timestep_stats();
 	}
 
@@ -517,7 +530,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	// Grab max_dt for convenience:
 	double max_dt = solver_opts.max_dt;
-	newton::status newton_stats; // Use these for adaptive time step control.
 
 	while( t < t1 ){
 		double old_dt = dt;
@@ -533,7 +545,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			return GENERAL_ERROR;
 		}
 		if( status & INTERNAL_SOLVE_FAILURE ){
-			max_dt *= 0.5;
+			dt *= 0.5;
 			if( solver_opts.verbosity ){
 				std::cerr << "    Internal solver "
 				          << "did not converge to tol! "
@@ -557,7 +569,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		if( status & INTERNAL_SOLVE_FEW_ITERS ){
 			// This means you can probably increase max_dt:
-			max_dt *= 2;
 		}
 		if( status & DT_TOO_SMALL ){
 			if( adaptive_dt ){
@@ -567,7 +578,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				                           sc, max_dt );
 			}else{
 				dt *= 1.8;
-				dt = std::min( dt, solver_opts.max_dt );
+				dt = std::min( dt, max_dt );
 			}
 		}
 		bool move_on = (status == SUCCESS);

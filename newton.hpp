@@ -174,7 +174,7 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 	double tol2 = opts.tol*opts.tol;
 	arma::vec fn = F(x);
 	double res2 = arma::dot( fn, fn );
-	stats.iters = 0;
+	stats.iters = 1;
 
 	std::size_t N = x.size();
 	arma::vec x0 = x;
@@ -247,7 +247,7 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 	arma::vec r = F(x);
 	double res2 = arma::dot( r, r );
 
-	stats.iters = 0;
+	stats.iters = 1;
 	bool low_rcond_warn = false;
 
 	double max_step2;
