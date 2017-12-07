@@ -94,7 +94,7 @@ void test_newton_solvers()
 */
 int solve_test_ode( double dt, int method, double t0, double t1,
                     std::vector<double> &times, std::vector<arma::vec> &ys,
-                    std::ostream *errout )
+                    std::ostream *sol_out, std::ostream *dt_out )
 {
 	irk::solver_coeffs sc = irk::get_coefficients( method );
 	irk::solver_options s_opts = irk::default_solver_options();
@@ -103,7 +103,12 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 	s_opts.rel_tol = 1e-7;
 	s_opts.abs_tol = 1e-8;
 	s_opts.internal_solver = irk::solver_options::BROYDEN;
-	s_opts.adaptive_step_size = false;
+	s_opts.adaptive_step_size = true;
+	s_opts.store_in_vector_every = 0;
+	s_opts.verbosity = 1;
+	s_opts.solution_out_interval = 10;
+	s_opts.solution_out = sol_out;
+	s_opts.timestep_out = dt_out;
 
 	newton::options opts;
 	opts.tol = 1e-9;
@@ -129,7 +134,7 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 		return -1;
 	}
 	int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
-	                                 ode, ode_J, times, ys, errout, nullptr );
+	                                 ode, ode_J, times, ys );
 	return odeint_status;
 }
 
@@ -183,7 +188,11 @@ void check_method_order( int method, double t0, double t1,
 	s_opts.abs_tol = 1e-8;
 	s_opts.internal_solver = irk::solver_options::NEWTON;
 	s_opts.adaptive_step_size = false;
-	s_opts.out_int = 50000;
+	s_opts.store_in_vector_every = 10;
+	s_opts.solution_out_interval = 50;
+	s_opts.solution_out = nullptr;
+	s_opts.timestep_out = &std::cerr;
+	s_opts.timestep_info_out_interval = 100;
 
 	newton::options opts;
 	opts.maxit = 5000000;
@@ -220,8 +229,7 @@ void check_method_order( int method, double t0, double t1,
 		std::vector<arma::vec> ys;
 
 		int odeint_status = irk::odeint( t0, t1, sc, s_opts, y0,
-		                                 ode, ode_J, times, ys,
-		                                 &std::cerr, nullptr );
+		                                 ode, ode_J, times, ys );
 		for( std::size_t nt = 0; nt < times.size(); ++nt ){
 			sol_out << dt << " " << times[nt];
 			for( std::size_t yi = 0; yi < ys[nt].size(); ++yi ){
@@ -257,57 +265,16 @@ int solve_ode( int method, const std::string &ofname, bool quiet, double dt  )
 	double t1 = 1000.0;
 	std::vector<double> times;
 	std::vector<arma::vec> ys;
-	std::ostream *errout = nullptr;
-	if( !quiet ){
-		errout = &std::cerr;
-	}
+	std::ostream *errout = &std::cerr;
+	std::ofstream out( ofname );
 	int odeint_status = solve_test_ode( dt, method, t0, t1, times, ys,
-	                                    errout );
+	                                    &out, errout );
 
 	if( odeint_status ){
 		std::cerr << "Something went wrong solving the ODE!\n";
 		return -2;
 	}
 
-	bool output_interpolate = false;
-
-	std::ostream *out = &std::cout;
-	if( ofname != "-" ){
-		out = new std::ofstream( ofname );
-	}
-
-	if( output_interpolate ){
-		// Do not output all points but do interpolation on a mesh:
-		std::vector<double> t_grid = make_time_grid(t0, t1);
-		std::vector<arma::vec> y_interp = interpolate::linear( times,
-		                                                       ys,
-		                                                       t_grid );
-
-		std::cerr << "Size of time grid: " << t_grid.size() << ".\n";
-		std::cerr << "Size of interp. y: " << y_interp[0].size() << ".\n";
-
-		for( std::size_t i = 0; i < t_grid.size(); ++i ){
-			*out << t_grid[i];
-			for( std::size_t j = 0; j < y_interp[i].size(); ++j ){
-				*out << " " << y_interp[i][j];
-			}
-			*out << "\n";
-		}
-	}else{
-		// Just output raw data:
-		for( std::size_t i = 0; i < times.size(); ++i ){
-			if( i % 10 != 0 ) continue;
-			*out << times[i];
-			for( std::size_t j = 0; j < ys[i].size(); ++j ){
-				*out << " " << ys[i][j];
-			}
-			*out << "\n";
-		}
-	}
-
-	if( ofname != "-" ){
-		delete out;
-	}
 	return 0;
 }
 
