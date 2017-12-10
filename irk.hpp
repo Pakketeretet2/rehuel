@@ -292,6 +292,7 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 			Jc += Ji * a_part;
 		}
 	}
+
 	return J;
 }
 
@@ -332,9 +333,17 @@ int take_time_step( double t, arma::vec &y, double dt,
 	auto stages_func = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
 		return construct_F( t, y, K, dt, sc, fun, jac );
 	};
-	auto stages_jac  = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
+
+	auto stages_jac = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
 		return construct_J( t, y, K, dt, sc, fun, jac );
 	};
+
+
+	// Approximate the Jacobi matrix as constant...
+	//J = construct_J( t, y, K, dt, sc, fun, jac );
+	//auto stages_jac  = [&J]( const arma::vec &K ){
+	//	return J;
+	//};
 
 	newton::status stats;
 	const newton::options &opts = *solver_opts.newton_opts;
