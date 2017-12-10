@@ -7,22 +7,43 @@
    \brief some enums that should be exposed publicly.
 */
 
+// Some macro magic for enum to string and back.
+#define FOREACH_RK_METHOD(METHOD)         \
+	METHOD(EXPLICIT_EULER, 100)       \
+	METHOD(RUNGE_KUTTA_4,101)         \
+	METHOD(BOGACKI_SHAMPINE_32,102)	  \
+	METHOD(CASH_KARP_54,103)          \
+	METHOD(DORMAND_PRINCE_54,104)     \
+	METHOD(FEHLBERG_54,105)           \
+	                                  \
+	METHOD(IMPLICIT_EULER,200)        \
+	METHOD(IMPLICIT_MIDPOINT,201)     \
+	                                  \
+	METHOD(RADAU_IA_32,202)           \
+	METHOD(RADAU_IIA_32,203)	  \
+	METHOD(LOBATTO_IIIA_21,204)	  \
+	METHOD(LOBATTO_IIIC_21,205)	  \
+					  \
+	METHOD(LOBATTO_IIIA_43,206)	  \
+	METHOD(LOBATTO_IIIC_43,207)	  \
+					  \
+	METHOD(GAUSS_LEGENDRE_42,208)	  \
+	METHOD(RADAU_IA_54,209)		  \
+	METHOD(RADAU_IIA_54,210)
+
+#define GENERATE_ENUM(ENUM, VAL) ENUM = VAL,
+#define GENERATE_STRING(STRING, VAL) {VAL,#STRING},
+#define GENERATE_MAP(STRING, VAL) {#STRING, VAL},
+
+
 namespace irk {
+
 
 /// \brief enumerates all implemented RK methods.
 enum rk_methods {
-	EXPLICIT_EULER      = 10,
-        RUNGE_KUTTA_4       = 11,
-	BOGACKI_SHAMPINE_23 = 12,
-	CASH_KARP_54        = 13,
-	DORMAND_PRINCE_54   = 14,
-
-	IMPLICIT_EULER      = 20,
-	IMPLICIT_MIDPOINT   = 21,
-	RADAU_IIA_32        = 22,
-	LOBATTO_IIIA_43     = 23,
-	GAUSS_LEGENDRE_43   = 24
+	FOREACH_RK_METHOD(GENERATE_ENUM)
 };
+
 
 /// \brief enumerates possible return codes.
 enum odeint_status_codes {

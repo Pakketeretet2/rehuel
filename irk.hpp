@@ -127,6 +127,17 @@ struct solver_options {
 	int verbosity;
 };
 
+static std::map<int,std::string> rk_method_to_string = {
+	FOREACH_RK_METHOD(GENERATE_STRING)
+};
+
+static std::map<std::string,int> rk_string_to_method = {
+	FOREACH_RK_METHOD(GENERATE_MAP)
+};
+
+
+
+
 /**
    \brief Checks if all options are set to sane values.
 
@@ -182,7 +193,7 @@ double get_better_time_step( double dt_old, double abs_err,
 
    \returns the enum corresponding to given method. See \ref rk_methods
 */
-int name_to_method( const char *name );
+int name_to_method( const std::string &name );
 
 
 /**
@@ -603,7 +614,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 		// Store new time point:
 		if( solver_opts.store_in_vector_every &&
-		    solver_opts.store_in_vector_every % steps == 0 ){
+		    steps % solver_opts.store_in_vector_every == 0 ){
 			tt.push_back( t );
 			yy.push_back( y );
 		}
