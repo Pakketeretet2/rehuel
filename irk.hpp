@@ -355,7 +355,6 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return construct_J( t, y, K, dt, sc, fun, jac );
 	};
 
-
 	// Approximate the Jacobi matrix as constant...
 	//J = construct_J( t, y, K, dt, sc, fun, jac );
 	//auto stages_jac  = [&J]( const arma::vec &K ){
