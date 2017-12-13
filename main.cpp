@@ -100,16 +100,16 @@ int solve_test_ode( double dt, int method, double t0, double t1,
 	irk::solver_options s_opts = irk::default_solver_options();
 
 	sc.dt = dt;
-	s_opts.rel_tol = 1e-4;
-	s_opts.abs_tol = 1e-5;
-	s_opts.internal_solver = irk::solver_options::BROYDEN;
+	s_opts.rel_tol = 1e-3;
+	s_opts.abs_tol = 1e-4;
+	s_opts.internal_solver = irk::solver_options::NEWTON;
 	s_opts.adaptive_step_size = true;
 	s_opts.store_in_vector_every = 0;
 	s_opts.verbosity = 1;
 	s_opts.solution_out_interval = 10;
 	s_opts.solution_out = sol_out;
 	s_opts.timestep_out = dt_out;
-
+	s_opts.timestep_info_out_interval = 1;
 	newton::options opts;
 	opts.tol = s_opts.abs_tol/10.0;
 	opts.maxit = 10000;

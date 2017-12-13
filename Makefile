@@ -1,5 +1,5 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O2 -ffast-math  \
+FLAGS = -std=c++11 -pedantic -g -O2 -ffast-math -march=native \
         -Werror=return-type -Werror=uninitialized -Wall \
 	-DCHECK_NANS
 

@@ -127,6 +127,17 @@ struct solver_options {
 	int verbosity;
 };
 
+static std::map<int,std::string> rk_method_to_string = {
+	FOREACH_RK_METHOD(GENERATE_STRING)
+};
+
+static std::map<std::string,int> rk_string_to_method = {
+	FOREACH_RK_METHOD(GENERATE_MAP)
+};
+
+
+
+
 /**
    \brief Checks if all options are set to sane values.
 
@@ -160,14 +171,19 @@ solver_options default_solver_options();
 /**
    \brief Attempts to find a more optimal time step size based on error estimate
 
-   \param dt_old           Old time step size
-   \param error_estimate   Current error estimate
-   \param opts             Solver options
+   \param dt_old         Old time step size
+   \param abs_err        Absolute error estimate
+   \param rel_err        Current error estimate
+   \param newton_iters   Number of Newton iterations used.
+   \param opts           Solver options
+   \param sc             Solver coefficients.
+   \param max_dt         Largest accepted time step size.
+
 
    \return A time step size that is estimated to be more optimal.
 */
-double get_better_time_step( double dt_old, double error_estimate,
-                             const solver_options &opts,
+double get_better_time_step( double dt_old, double abs_err,
+                             int newton_iters, const solver_options &opts,
                              const solver_coeffs &sc, double max_dt );
 
 /**
@@ -177,7 +193,7 @@ double get_better_time_step( double dt_old, double error_estimate,
 
    \returns the enum corresponding to given method. See \ref rk_methods
 */
-int name_to_method( const char *name );
+int name_to_method( const std::string &name );
 
 
 /**
@@ -316,6 +332,7 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 */
 template <typename func_type, typename Jac_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
+                    newton::status &stats,
                     const irk::solver_coeffs &sc,
                     const irk::solver_options &solver_opts,
                     const func_type &fun, const Jac_type &jac,
@@ -345,8 +362,8 @@ int take_time_step( double t, arma::vec &y, double dt,
 	//	return J;
 	//};
 
-	newton::status stats;
 	const newton::options &opts = *solver_opts.newton_opts;
+	my_timer timer_step( std::cerr );
 
 	switch( solver_opts.internal_solver ){
 		case solver_options::NEWTON:
@@ -357,7 +374,6 @@ int take_time_step( double t, arma::vec &y, double dt,
 			KK = newton::solve( stages_func, K, opts, stats );
 			break;
 	}
-
 	bool increase_dt = false;
 
 	if( stats.conv_status == newton::SUCCESS ){
@@ -383,14 +399,27 @@ int take_time_step( double t, arma::vec &y, double dt,
 
 		if( adaptive_dt ){
 			auto y_err = yn - y_alt;
-			double err_est = arma::norm( y_err, "inf" );
-			err = err_est;
+			double abs_err = arma::norm( y_err, "inf" );
+			double y_norm  = arma::norm( yn, "inf" );
+			double ya_norm = arma::norm( y_alt, "inf" );
 
-			if( err > solver_opts.rel_tol ){
-				return DT_TOO_LARGE;
-			}else if( err < solver_opts.abs_tol * 0.25 ){
-				// Flag this but do update y anyway.
-				increase_dt = true;
+			double min_y = std::min( y_norm, ya_norm );
+			double rel_err = abs_err / min_y;
+
+			if( min_y > solver_opts.abs_tol ){
+				// Use relative tolerance:
+				if( rel_err > solver_opts.rel_tol ){
+					return DT_TOO_LARGE;
+				}else if( rel_err < 0.1*solver_opts.rel_tol ){
+					increase_dt = true;
+				}
+			}else{
+				// Use absolute tolerance:
+				if( abs_err > solver_opts.abs_tol ){
+					return DT_TOO_LARGE;
+				}else if( abs_err < 0.1*solver_opts.abs_tol ){
+					increase_dt = true;
+				}
 			}
 		}
 
@@ -482,6 +511,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	}
 
 
+	newton::status newton_stats; // Use these for adaptive time step control.
+
 	auto print_solution_out = [&steps, &t, &y, &solver_opts]{
 		if( !solver_opts.solution_out ) return;
 		*solver_opts.solution_out << steps << "  " << t;
@@ -490,10 +521,13 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		*solver_opts.solution_out << "\n"; };
 
-	auto print_timestep_stats = [&steps, &t, &dt, &err, &solver_opts]{
+	auto print_timestep_stats = [&steps, &t, &dt, &err,
+	                             &solver_opts, &newton_stats]{
 		if( !solver_opts.timestep_out ) return;
-		*solver_opts.timestep_out << steps << "  " << t << "  " << dt
-		<< " " << err << "\n"; };
+		*solver_opts.timestep_out << steps << "       " << t << "      "
+		<< dt << "       " << err << "        " << newton_stats.iters
+		<< "\n"; };
+
 
 	// Print headers:
 	if( solver_opts.solution_out ){
@@ -501,7 +535,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		print_solution_out();
 	}
 	if( solver_opts.timestep_out ){
-		*solver_opts.timestep_out << "# step  t    dt   err\n";
+		*solver_opts.timestep_out << "# step  t      dt         "
+		                          << "err   (newton iters)\n";
 		print_timestep_stats();
 	}
 
@@ -529,9 +564,9 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	while( t < t1 ){
 		double old_dt = dt;
-		status = take_time_step( t, y, dt, sc, solver_opts, fun, jac,
+		status = take_time_step( t, y, dt, newton_stats, sc,
+		                         solver_opts, fun, jac,
 		                         adaptive_dt, err, K );
-
 
 		if( status == GENERAL_ERROR ){
 			if( solver_opts.verbosity ){
@@ -540,7 +575,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			return GENERAL_ERROR;
 		}
 		if( status & INTERNAL_SOLVE_FAILURE ){
-			max_dt *= 0.5;
+			dt *= 0.5;
 			if( solver_opts.verbosity ){
 				std::cerr << "    Internal solver "
 				          << "did not converge to tol! "
@@ -552,6 +587,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			// Adapt the
 			if( adaptive_dt ){
 				dt = get_better_time_step( dt, err,
+				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
 			}else{
@@ -562,25 +598,27 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			}
 		}
 		if( status & INTERNAL_SOLVE_FEW_ITERS ){
-			// This means you can probably increase max_dt:
-			max_dt *= 2;
+			// This means you can probably increase max_dt and dt:
+			status |= DT_TOO_SMALL;
 		}
 		if( status & DT_TOO_SMALL ){
 			if( adaptive_dt ){
 				dt = get_better_time_step( dt, err,
+				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
 			}else{
 				dt *= 1.8;
-				dt = std::min( dt, solver_opts.max_dt );
+				dt = std::min( dt, max_dt );
 			}
 		}
 		bool move_on = (status == SUCCESS);
 		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
 			move_on = true;
 		}
-		if( !move_on ) continue;
-
+		if( !move_on ){
+			continue;
+		}
 		// Check for NANs:
 #ifdef CHECK_NANS
 		for( std::size_t i = 0; i < y.size(); ++i ){
@@ -597,7 +635,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 		// Store new time point:
 		if( solver_opts.store_in_vector_every &&
-		    solver_opts.store_in_vector_every % steps == 0 ){
+		    steps % solver_opts.store_in_vector_every == 0 ){
 			tt.push_back( t );
 			yy.push_back( y );
 		}
