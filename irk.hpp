@@ -86,7 +86,8 @@ struct solver_options {
 		  store_in_vector_every( 1 ),
 		  solution_out( nullptr ),
 		  timestep_out( nullptr ),
-		  verbosity( 0 )
+		  verbosity( 0 ),
+		  constant_jac_approx( false )
 	{ }
 
 	~solver_options()
@@ -125,6 +126,9 @@ struct solver_options {
 
 	/// if > 0, print some output.
 	int verbosity;
+
+	/// If true, use a constant Jacobi matrix approximation
+	bool constant_jac_approx;
 };
 
 static std::map<int,std::string> rk_method_to_string = {
@@ -342,8 +346,8 @@ int take_time_step( double t, arma::vec &y, double dt,
 	auto Neq = y.size();
 	auto NN = Ns*Neq;
 
-	arma::mat J( NN, NN );
 	arma::vec KK = K;
+	arma::mat J = construct_J( t, y, KK, dt, sc, fun, jac );
 
 
 	// Use newton iteration to find the Ks for the next level:
@@ -355,18 +359,23 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return construct_J( t, y, K, dt, sc, fun, jac );
 	};
 
+
 	// Approximate the Jacobi matrix as constant...
-	//J = construct_J( t, y, K, dt, sc, fun, jac );
-	//auto stages_jac  = [&J]( const arma::vec &K ){
-	//	return J;
-	//};
+	auto stages_jac_const = [&J]( const arma::vec &K ){ return J; };
+
 
 	const newton::options &opts = *solver_opts.newton_opts;
 	my_timer timer_step( std::cerr );
 
 	switch( solver_opts.internal_solver ){
 		case solver_options::NEWTON:
-			KK = newton::solve( stages_func, K, opts, stats, stages_jac );
+			if( solver_opts.constant_jac_approx ){
+				KK = newton::solve( stages_func, K, opts,
+				                    stats, stages_jac_const );
+			}else{
+				KK = newton::solve( stages_func, K, opts,
+				                    stats, stages_jac );
+			}
 			break;
 		default:
 		case solver_options::BROYDEN:

@@ -50,7 +50,7 @@ enum newton_solve_ret_codes {
 */
 struct options {
 	options() : tol(1e-4), maxit(500), time_internals(false),
-	            max_step(-1), refresh_jac(true){}
+	            max_step(-1), refresh_jac(true), precondition(true){}
 
 	double tol;           ///< Desired tolerance.
 	int maxit;            ///< Maximum number of iterations
@@ -60,6 +60,9 @@ struct options {
 	/// When Using Newton's method, if this is false, the Jacobi matrix
 	/// is constructed only once at the beginning and never updated.
 	bool refresh_jac;
+
+	/// If true, precondition the Jacobi matrix.
+	bool precondition;
 };
 
 /**
@@ -226,6 +229,37 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 	return x;
 }
 
+
+/**
+   \brief Performs Gauss-Seide to solve system F(x) = 0.
+
+   \param F     The non-linear system whose root to find.
+   \param x     Initial guess for root.
+   \param opts  Options for solver (see \p options)
+   \param stats Will contain solver statistics (see \p status)
+
+   \returns the root of F(x).
+*/
+template <typename func_rhs> inline
+arma::vec gauss_seidel( const func_rhs &F, arma::vec x,
+                        const options &opts, status &stats )
+{
+
+	arma::vec yn = F(x);
+	double res2 = arma::norm( yn, 2 );
+	double tol2 = opts.tol * opts.tol;
+	std::cerr << "Starting Gauss-Seidel at " << stats.iters
+	          << " iters, res = " << std::sqrt(res2) << "\n";
+	while( res2 > tol2 && stats.iters < opts.maxit ){
+		x = yn;
+		yn = F(x);
+		++stats.iters;
+		res2 = arma::norm( yn, 2 );
+	}
+
+	return x;
+}
+
 /**
    \brief Performs Newton's method to solve non-linear system F(x) = 0.
 
@@ -255,26 +289,29 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 	else max_step2 = -1;
 
 	arma::mat Jac = J(x);
-	if( arma::rcond(Jac) < opts.tol ){
-		std::cerr << "Warning! Initial J is close to singular!\n";
-	}
-	arma::mat J_U, J_L, J_P, Ji;
-	if( !opts.refresh_jac ){
-		// If you never update the Jacobi-matrix, you can save
-		// the LU decomposition to make solving much faster.
-		arma::lu( J_L, J_U, J_P, Jac );
-		Ji = Jac.i();
+	arma::mat P, Pi;
+	std::size_t N = x.size();
+	P.eye( N, N );
+	Pi.eye( N, N );
+	if( opts.precondition ){
+		// We solve direction = -Jac^{-1} r
+		// So A*direction = -A*direction*Jac^{-1} r
+		for( std::size_t i = 0; i < N; ++i ){
+			P(i,i) = 1.0 / Jac(i,i);
+			Pi(i,i) = Jac(i,i);
+		}
 	}
 
+
+	bool no_jac = false;
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 
 		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2 ) );
 		arma::vec direction;
-		if( opts.refresh_jac ){
-			direction = -arma::solve(Jac,r);
-		}else{
-			direction = -Ji * r;
-		}
+		// P*direction = -arma::solve(P*jac,r)
+		// direction = -Pi*(arma::solve(P*jac,r));
+		direction = -Pi*arma::solve(P*Jac,r);
+
 		if( max_step2 > 0 ){
 			double norm2 = arma::dot( direction, direction );
 			if( lambda*lambda*norm2 > max_step2 ){
@@ -288,17 +325,25 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 		r = F(x);
 		res2 = dot(r,r);
 
-		if( opts.refresh_jac ){
-			arma::mat Jacn = J(x);
-			if( arma::rcond(Jacn) < opts.tol ){
-				if( !low_rcond_warn ){
-					std::cerr << "Warning! J close to "
-					          << "singular! Falling back "
-					          << "on old value!\n";
-					low_rcond_warn = true;
+		if( no_jac ) continue;
+
+		arma::mat Jacn = J(x);
+		if( arma::rcond(Jacn) < opts.tol ){
+			if( !low_rcond_warn ){
+				std::cerr << "Warning! J close to "
+				          << "singular! Falling back "
+				          << "on old value!\n";
+				low_rcond_warn = true;
+			}
+		}else{
+			Jac = Jacn;
+			if( opts.precondition ){
+				// We solve direction = -Jac^{-1} r
+				// So A*direction = -A*direction*Jac^{-1} r
+				for( std::size_t i = 0; i < N; ++i ){
+					P(i,i) = 1.0 / Jac(i,i);
+					Pi(i,i) = Jac(i,i);
 				}
-			}else{
-				Jac = Jacn;
 			}
 		}
 	}
