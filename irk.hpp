@@ -185,8 +185,9 @@ solver_options default_solver_options();
 
    \return A time step size that is estimated to be more optimal.
 */
-double get_better_time_step( double dt_old, double abs_err,
-                             int newton_iters, const solver_options &opts,
+double get_better_time_step( double dt_old, double err, double old_err,
+                             double tol, int newton_iters,
+                             const solver_options &opts,
                              const solver_coeffs &sc, double max_dt );
 
 /**
@@ -430,28 +431,40 @@ int take_time_step( double t, arma::vec &y, double dt,
 		}
 
 		if( adaptive_dt ){
-			auto y_err = yn - y_alt;
+			arma::vec y_err = yn - y_alt;
+			double ynorm = arma::norm( yn, "inf" );
+
+			// Use absolute error:
 			double abs_err = arma::norm( y_err, "inf" );
-			double y_norm  = arma::norm( yn, "inf" );
-			double ya_norm = arma::norm( y_alt, "inf" );
+			// Use relative error:
+			arma::vec rel_y_err = y_err;
+			for( std::size_t i = 0; i < y_err.size(); ++i ){
+				double y_min = std::min( yn[i], y_alt[i] );
+				rel_y_err[i] /= y_min;
 
-			double min_y = std::min( y_norm, ya_norm );
-			double rel_err = abs_err / min_y;
+			}
 
-			if( min_y > solver_opts.abs_tol ){
-				// Use relative tolerance:
-				if( rel_err > solver_opts.rel_tol ){
-					return DT_TOO_LARGE;
-				}else if( rel_err < 0.1*solver_opts.rel_tol ){
-					increase_dt = true;
-				}
+			bool use_rel_tol = false;
+			double rel_err = arma::norm( rel_y_err, "inf" );
+			double tol = solver_opts.abs_tol;
+			if( ynorm < solver_opts.abs_tol ){
+				err = abs_err;
 			}else{
-				// Use absolute tolerance:
-				if( abs_err > solver_opts.abs_tol ){
-					return DT_TOO_LARGE;
-				}else if( abs_err < 0.1*solver_opts.abs_tol ){
-					increase_dt = true;
-				}
+				use_rel_tol = true;
+				err = rel_err;
+				tol = solver_opts.rel_tol;
+			}
+
+			if( err < 0.1*tol ){
+				increase_dt = true;
+			}else if( err > tol ){
+				// Returning here prevents y from being updated.
+				int retcode = DT_TOO_LARGE;
+				if( use_rel_tol )
+					retcode |= ERROR_LARGER_THAN_RELTOL;
+				else
+					retcode |= ERROR_LARGER_THAN_ABSTOL;
+				return retcode;
 			}
 		}
 
@@ -521,6 +534,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	double dt = sc.dt;
 	double err = 0.0;
+	double old_err = err;
 	bool adaptive_dt = solver_opts.adaptive_step_size;
 	if( adaptive_dt ){
 		if( sc.b2.size() != sc.b.size() ){
@@ -598,6 +612,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 	while( t < t1 ){
 		double old_dt = dt;
+		old_err = err;
 		status = take_time_step( t, y, dt, newton_stats, sc,
 		                         solver_opts, func,
 		                         adaptive_dt, err, K );
@@ -619,15 +634,21 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		if( status & DT_TOO_LARGE ){
 			if( adaptive_dt ){
-				dt = get_better_time_step( dt, err,
+				double ynorm = arma::norm( y, "inf" );
+				double tol = solver_opts.abs_tol;
+				if( ynorm > solver_opts.abs_tol ){
+					tol = solver_opts.rel_tol;
+				}
+				dt = get_better_time_step( dt, err, old_err,
+				                           tol,
 				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
+				if( dt > old_dt ){
+					dt = 0.5*old_dt;
+				}
 			}else{
 				dt *= 0.3;
-			}
-			if( dt > old_dt ){
-				dt = 0.5*old_dt;
 			}
 		}
 		if( status & INTERNAL_SOLVE_FEW_ITERS ){
@@ -636,13 +657,16 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		if( status & DT_TOO_SMALL ){
 			if( adaptive_dt ){
-				dt = get_better_time_step( dt, err,
+				double ynorm = arma::norm( y, "inf" );
+				double tol = solver_opts.abs_tol;
+				if( ynorm > solver_opts.abs_tol ){
+					tol = solver_opts.rel_tol;
+				}
+				dt = get_better_time_step( dt, err, old_err,
+				                           tol,
 				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
-			}else{
-				dt *= 1.8;
-				dt = std::min( dt, max_dt );
 			}
 		}
 		bool move_on = (status == SUCCESS);
@@ -650,19 +674,13 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			move_on = true;
 		}
 		if( !move_on ){
+			// Restore err to the old error:
+			err = old_err;
 			continue;
 		}
-		// Check for NANs:
-#ifdef CHECK_NANS
-		for( std::size_t i = 0; i < y.size(); ++i ){
-			double yi = y(i);
-			assert( std::isfinite(yi) &&
-			        "Encountered NaN or Inf while solving!" );
-		}
-#endif // CHECK_NANS
 
 
-		// OK.
+		// OK, advance time:
 		t += old_dt;
 		++steps;
 
@@ -685,7 +703,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 
 
-		// Do some preparation for the next time step here:
+		// Some FSAL preparation here:
 		std::size_t i0 = (Ns-1)*Neq;
 		std::size_t i1 = Ns*Neq - 1;
 		if( sc.FSAL ){

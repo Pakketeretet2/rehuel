@@ -357,28 +357,22 @@ solver_options default_solver_options()
 	return s;
 }
 
-double get_better_time_step( double dt_old, double err,
-                             int newton_iters, const solver_options &opts,
+double get_better_time_step( double dt_old, double err, double old_err,
+                             double tol, int newton_iters,
+                             const solver_options &opts,
                              const solver_coeffs &sc, double max_dt )
 {
-	// |y1 - y2| ~= C1 * dt^(min( sc.order, sc.order2 )) := error_estimate
-	// We want this to be opts.rel_tol. So...
-	// C1 * dt_new^(min( sc.order1, sc.order2 )) := opts.rel_tol.
-	// After some algebra, that becomes this:
+	// Formula 2.43c from Hairer and Wanner, Solving ODEs II.
+	double alpha = sc.order + sc.order2;
 	double min_order = std::min( sc.order, sc.order2 );
-	double power     = 1.0 / ( min_order + 1.0 );
-	double newton_f  = std::pow( newton_iters, 0.5 );
-	double frac      = 0.9*opts.rel_tol / (newton_f * err);
-	double dt_new1   = std::pow( frac, power );
-	double dt_new    = std::min( std::min( dt_new1, 1.2*dt_old ), opts.max_dt );
+	double beta = min_order;
 
-	if( opts.verbosity > 1 ){
-		std::cerr << "New dt = " << dt_new << ", err was " << err
-		          << ", tolerances are " << opts.rel_tol << ", "
-		          << opts.abs_tol << ", newton iters were "
-		          << newton_iters << ".\n";
-	}
-	return dt_new;
+	double frac1 = tol / err;
+	double frac2 = old_err / tol;
+
+	double dt_new = dt_old * pow( frac1, alpha ) * pow( frac2, beta );
+
+	return std::min( dt_new, max_dt );
 }
 
 
