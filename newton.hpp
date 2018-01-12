@@ -50,7 +50,7 @@ enum newton_solve_ret_codes {
 */
 struct options {
 	options() : tol(1e-4), maxit(500), time_internals(false),
-	            max_step(-1), refresh_jac(true), precondition(true){}
+	            max_step(-1), refresh_jac(true), precondition(false){}
 
 	double tol;           ///< Desired tolerance.
 	int maxit;            ///< Maximum number of iterations
@@ -79,9 +79,8 @@ struct status {
 
 	bool store_final_F;  ///< If true, the final value of F(x) is stored
 	bool store_final_J;  ///< If true, the final value of J(x) is stored
-	arma::vec final_F;   ///< if(store_final_F), contains F(x) at found root
-	arma::mat final_J;   ///< if(store_final_J), contains J(x) at found root
 };
+
 
 
 /**
@@ -91,14 +90,14 @@ struct status {
     \param fun  Function to determine Jacobi matrix for
     \param h    Finite difference step size.
 */
-template <typename func_type> inline
-arma::mat approx_jacobi_matrix( const arma::vec &y,
-                                const func_type &fun, double h )
+template <typename functor_type> inline
+arma::mat approx_jacobi_matrix( const arma::vec &y, functor_type &func,
+                                double h )
 {
 	std::size_t N = y.size();
 	arma::mat J_approx(N,N);
 	J_approx.zeros(N,N);
-	arma::vec f0 = fun(y);
+	arma::vec f0 = func.fun(y);
 	arma::vec new_yp = y;
 	arma::vec new_ym = y;
 
@@ -107,8 +106,8 @@ arma::mat approx_jacobi_matrix( const arma::vec &y,
 
 		new_yp(j) += h;
 		new_ym(j) -= h;
-		arma::vec fp = fun( new_yp );
-		arma::vec fm = fun( new_ym );
+		arma::vec fp = func.fun( new_yp );
+		arma::vec fm = func.fun( new_ym );
 
 		arma::vec delta = fp - fm;
 		delta /= (2.0*h);
@@ -134,12 +133,11 @@ arma::mat approx_jacobi_matrix( const arma::vec &y,
 
     \returns true if jac is accurate, false otherwise.
 */
-template <typename func_type, typename Jac_type> inline
-bool verify_jacobi_matrix( const arma::vec &y, const func_type &fun,
-                           const Jac_type &J )
+template <typename functor_type> inline
+bool verify_jacobi_matrix( const arma::vec &y, functor_type &func )
 {
-	arma::mat J_approx = approx_jacobi_matrix( y, fun, 1e-4 );
-	arma::mat J_fun = J( y );
+	arma::mat J_approx = approx_jacobi_matrix( y, func, 1e-4 );
+	arma::mat J_fun = func.jac( y );
 	std::size_t N = y.size();
 	double max_diff2 = 0;
 	for( std::size_t i = 0; i < N; ++i ){
@@ -169,13 +167,13 @@ bool verify_jacobi_matrix( const arma::vec &y, const func_type &fun,
 
    \returns the root of F(x).
 */
-template <typename func_rhs>
-arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
+template <typename functor_type>
+arma::vec broyden_iterate( functor_type &func, arma::vec x,
                            const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
-	arma::vec fn = F(x);
+	arma::vec fn = func.fun(x);
 	double res2 = arma::dot( fn, fn );
 	stats.iters = 1;
 
@@ -204,7 +202,7 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 
 
 		x = x0 + direction;
-		fn = F(x);
+		fn = func.fun(x);
 		arma::vec dx = x - x0;
 		arma::vec df = fn - f0;
 
@@ -240,19 +238,18 @@ arma::vec broyden_iterate( const func_rhs &F, arma::vec x,
 
    \returns the root of F(x).
 */
-template <typename func_rhs> inline
-arma::vec gauss_seidel( const func_rhs &F, arma::vec x,
+template <typename functor_type> inline
+arma::vec gauss_seidel( functor_type &func, arma::vec x,
                         const options &opts, status &stats )
 {
-
-	arma::vec yn = F(x);
+	arma::vec yn = func.fun(x);
 	double res2 = arma::norm( yn, 2 );
 	double tol2 = opts.tol * opts.tol;
 	std::cerr << "Starting Gauss-Seidel at " << stats.iters
 	          << " iters, res = " << std::sqrt(res2) << "\n";
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 		x = yn;
-		yn = F(x);
+		yn = func.fun(x);
 		++stats.iters;
 		res2 = arma::norm( yn, 2 );
 	}
@@ -263,54 +260,40 @@ arma::vec gauss_seidel( const func_rhs &F, arma::vec x,
 /**
    \brief Performs Newton's method to solve non-linear system F(x) = 0.
 
-   \param F     The non-linear system whose root to find.
+   \param func  The functor for which the root of func.fun is to be found.
    \param x     Initial guess for root.
    \param opts  Options for solver (see \p options)
    \param stats Will contain solver statistics (see \p status)
-   \param J     The Jacobi-matrix of F(x).
 
    \returns the root of F(x).
 */
-template <typename func_rhs, typename func_Jac > inline
-arma::vec newton_iterate( const func_rhs &F, arma::vec x,
-                          const options &opts, status &stats,
-                          const func_Jac &J )
+template <typename functor_type> inline
+arma::vec newton_iterate( functor_type &func, arma::vec x,
+                          const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
-	arma::vec r = F(x);
-	double res2 = arma::dot( r, r );
-
+	arma::vec fn = func.fun(x);
+	double res2 = arma::dot( fn, fn );
 	stats.iters = 1;
-	bool low_rcond_warn = false;
+
+	std::size_t N = x.size();
+	arma::vec x0 = x;
+	arma::vec f0 = fn;
+
+	arma::mat Jaci( N, N );
+	Jaci.eye(N,N);
+
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
+	arma::vec r = func.fun(x);
+	auto J = func.jac(x);
 
-	arma::mat Jac = J(x);
-	arma::mat P, Pi;
-	std::size_t N = x.size();
-	P.eye( N, N );
-	Pi.eye( N, N );
-	if( opts.precondition ){
-		// We solve direction = -Jac^{-1} r
-		// So A*direction = -A*direction*Jac^{-1} r
-		for( std::size_t i = 0; i < N; ++i ){
-			P(i,i) = 1.0 / Jac(i,i);
-			Pi(i,i) = Jac(i,i);
-		}
-	}
-
-
-	bool no_jac = false;
 	while( res2 > tol2 && stats.iters < opts.maxit ){
-
-		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2 ) );
-		arma::vec direction;
-		// P*direction = -arma::solve(P*jac,r)
-		// direction = -Pi*(arma::solve(P*jac,r));
-		direction = -Pi*arma::solve(P*Jac,r);
+		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2) );
+		arma::vec direction = -arma::solve(J, r);
 
 		if( max_step2 > 0 ){
 			double norm2 = arma::dot( direction, direction );
@@ -319,33 +302,18 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 			}
 		}
 
-		x += lambda*direction;
+
+		x = x0 + direction;
+
+		auto Jn = func.jac(x);
+		if( arma::rcond(Jn) >= opts.tol ) J = Jn;
+		r = func.fun(x);
+		res2 = arma::dot( fn, fn );
 
 		++stats.iters;
-		r = F(x);
-		res2 = dot(r,r);
 
-		if( no_jac ) continue;
-
-		arma::mat Jacn = J(x);
-		if( arma::rcond(Jacn) < opts.tol ){
-			if( !low_rcond_warn ){
-				std::cerr << "Warning! J close to "
-				          << "singular! Falling back "
-				          << "on old value!\n";
-				low_rcond_warn = true;
-			}
-		}else{
-			Jac = Jacn;
-			if( opts.precondition ){
-				// We solve direction = -Jac^{-1} r
-				// So A*direction = -A*direction*Jac^{-1} r
-				for( std::size_t i = 0; i < N; ++i ){
-					P(i,i) = 1.0 / Jac(i,i);
-					Pi(i,i) = Jac(i,i);
-				}
-			}
-		}
+		f0 = fn;
+		x0 = x;
 	}
 	if( stats.iters == opts.maxit && res2 > tol2 ){
 		stats.conv_status = NOT_CONVERGED;
@@ -357,82 +325,24 @@ arma::vec newton_iterate( const func_rhs &F, arma::vec x,
 }
 
 
-/**
-   \brief Solves F(x) = 0 with x0 as initial guess.
-
-   This function attempts to find a root to the nonlinear
-   system of equations F(x) = 0. If the Jacobi matrix is
-   given it uses full Newton iteration. If not, it uses
-   Broyden's "good" method.
-
-   \param F     Function to find root of
-   \param x     Initial guess, will contain the solution.
-   \param opts  Solver options struct.
-   \param stats Solver status struct.
-   \param J     Jacobi matrix of function (optional)
-
-   \returns the root.
-*/
-template <typename func_rhs, typename func_Jac >
-arma::vec solve( const func_rhs &F, arma::vec x,
-                 const options &opts, status &stats,
-                 const func_Jac &J  )
-{
-	my_timer *timer = nullptr;
-	if( opts.time_internals ){
-		timer = new my_timer( std::cerr );
-		if(timer) timer->tic();
-	}
-	arma::vec root = newton_iterate( F, x, opts, stats, J );
-	if( opts.time_internals ){
-		if(timer){
-			if( stats.conv_status == NOT_CONVERGED ){
-				timer->toc("Newton iteration (failed)");
-			}else{
-				timer->toc("Newton iteration (success)");
-			}
-			delete timer;
-		}
-	}
-	return root;
-}
-
-/**
-    \brief Solves F(x) = 0 with x0 as initial guess.
-
-    This uses Broyden's method.
-
-    \overload solve.
-*/
-template <typename func_rhs>
-arma::vec solve( const func_rhs &F, arma::vec x,
-                 const options &opts, status &stats )
-{
-	my_timer *timer = nullptr;
-	if( opts.time_internals ){
-		timer = new my_timer( std::cerr );
-		if(timer) timer->tic();
-	}
-	arma::vec root = broyden_iterate( F, x, opts, stats );
-	if( opts.time_internals ){
-		if(timer){
-			timer->toc("Broyden iteration");
-			delete timer;
-		}
-	}
-	return root;
-}
-
 
 /// \brief A namespace with some functions to test the solvers on.
 namespace test_functions {
 
-/// \brief Rosenbrock's function
-double rosenbrock_f( const arma::vec &x, double a, double b );
-/// \brief Gradient of Rosenbrock's function
-arma::vec rosenbrock_F( const arma::vec &x, double a, double b );
-/// \brief Hessian of Rosenbrock's function
-arma::mat rosenbrock_J( const arma::vec &x, double a, double b );
+/// \brief Rosenbrock's function functor
+struct rosenbrock_func
+{
+	rosenbrock_func(double a, double b) : a(a), b(b){}
+	/// \brief Function itself
+	double f( const arma::vec &x );
+
+	/// \brief Gradient of Rosenbrock's function
+	virtual arma::vec fun( const arma::vec &x );
+	/// \brief Hessian of Rosenbrock's function
+	virtual arma::mat jac( const arma::vec &x );
+
+	double a, b;
+};
 
 } // namespace test_functions
 

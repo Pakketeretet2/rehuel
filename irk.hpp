@@ -131,6 +131,7 @@ struct solver_options {
 	bool constant_jac_approx;
 };
 
+
 static std::map<int,std::string> rk_method_to_string = {
 	FOREACH_RK_METHOD(GENERATE_STRING)
 };
@@ -138,8 +139,6 @@ static std::map<int,std::string> rk_method_to_string = {
 static std::map<std::string,int> rk_string_to_method = {
 	FOREACH_RK_METHOD(GENERATE_MAP)
 };
-
-
 
 
 /**
@@ -212,6 +211,10 @@ int name_to_method( const std::string &name );
 */
 const char *method_to_name( int method );
 
+
+
+
+
 /**
    \brief Constructs a non-linear system the stages have to satisfy.
 
@@ -224,10 +227,10 @@ const char *method_to_name( int method );
 
    \returns the value for the non-linear system whose root is the new stages.
 */
-template <typename func_type, typename Jac_type> inline
+template <typename functor_type> inline
 arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
                        double dt, const irk::solver_coeffs &sc,
-                       const func_type &fun, const Jac_type &jac )
+                       functor_type &func )
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
@@ -248,9 +251,8 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 			unsigned int offset = j*Neq;
 			yi += dt * A(i,j) * K.subvec( offset, offset + Neq - 1 );
 		}
-		arma::mat Ji = jac( ti, yi );
 		arma::vec ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
-		arma::vec tmp = fun( ti, yi );
+		arma::vec tmp = func.fun( ti, yi );
 		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
 	}
 	return F;
@@ -268,10 +270,12 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 
    \returns the Jacobi matrix of the non-linear system for the new stages.
 */
-template <typename func_type, typename Jac_type> inline
-arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
-                       double dt, const irk::solver_coeffs &sc,
-                       const func_type &fun, const Jac_type &jac )
+template <typename functor_type> inline
+typename functor_type::jac_type construct_J( double t, const arma::vec &y,
+                                             const arma::vec &K,
+                                             double dt,
+                                             const irk::solver_coeffs &sc,
+                                             functor_type &func )
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
@@ -285,7 +289,7 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 	const arma::vec &c = sc.c;
 	const arma::mat &A = sc.A;
 
-	arma::mat J( NN, NN );
+	typename functor_type::jac_type J( NN, NN );
 	J.eye( NN, NN );
 	J *= -1.0;
 
@@ -298,7 +302,7 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 			unsigned int offset = j*Neq;
 			yi += dt * A(i,j) * K.subvec( offset, offset + Neq - 1 );
 		}
-		arma::mat Ji = jac( ti, yi );
+		auto Ji = func.jac( ti, yi );
 
 		// j is row.
 		for( unsigned int j = 0; j < Ns; ++j ){
@@ -315,6 +319,28 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 
 	return J;
 }
+
+
+
+template <typename f_func, typename J_func, typename jac_type>
+struct newton_wrapper
+{
+	newton_wrapper( f_func &f, J_func &J ) : f(f), J(J) {}
+
+	arma::vec fun( const arma::vec &K )
+	{
+		return f(K);
+	}
+
+	jac_type jac( const arma::vec &K )
+	{
+		return J(K);
+	}
+
+	f_func &f;
+	J_func &J;
+};
+
 
 /**
    \brief Performs one time step from (t,y) to (t+dt, y+dy)
@@ -334,12 +360,12 @@ arma::mat construct_J( double t, const arma::vec &y, const arma::vec &K,
 
    \returns a status code (see \ref odeint_status_codes)
 */
-template <typename func_type, typename Jac_type> inline
+template <typename functor_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
                     newton::status &stats,
                     const irk::solver_coeffs &sc,
                     const irk::solver_options &solver_opts,
-                    const func_type &fun, const Jac_type &jac,
+                    functor_type &func,
                     bool adaptive_dt, double &err, arma::vec &K )
 {
 	auto Ns  = sc.b.size();
@@ -347,39 +373,37 @@ int take_time_step( double t, arma::vec &y, double dt,
 	auto NN = Ns*Neq;
 
 	arma::vec KK = K;
-	arma::mat J = construct_J( t, y, KK, dt, sc, fun, jac );
+	auto J = construct_J( t, y, KK, dt, sc, func );
 
 
 	// Use newton iteration to find the Ks for the next level:
-	auto stages_func = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
-		return construct_F( t, y, K, dt, sc, fun, jac );
+	auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+		return construct_F( t, y, K, dt, sc, func );
 	};
 
-	auto stages_jac = [&t, &y, &dt, &sc, &fun, &jac]( const arma::vec &K ){
-		return construct_J( t, y, K, dt, sc, fun, jac );
+	auto stages_jac = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+		return construct_J( t, y, K, dt, sc, func );
 	};
 
 
 	// Approximate the Jacobi matrix as constant...
-	auto stages_jac_const = [&J]( const arma::vec &K ){ return J; };
+	// auto stages_jac_const = [&J]( double t, const arma::vec &K ){ return J; };
 
+	newton_wrapper<decltype(stages_func), decltype(stages_jac),
+	               typename functor_type::jac_type>
+		nw( stages_func, stages_jac );
 
 	const newton::options &opts = *solver_opts.newton_opts;
 	my_timer timer_step( std::cerr );
 
 	switch( solver_opts.internal_solver ){
 		case solver_options::NEWTON:
-			if( solver_opts.constant_jac_approx ){
-				KK = newton::solve( stages_func, K, opts,
-				                    stats, stages_jac_const );
-			}else{
-				KK = newton::solve( stages_func, K, opts,
-				                    stats, stages_jac );
-			}
-			break;
+			KK = newton::newton_iterate( nw, K,
+			                             opts, stats );
 		default:
 		case solver_options::BROYDEN:
-			KK = newton::solve( stages_func, K, opts, stats );
+			KK = newton::broyden_iterate( nw, K,
+			                              opts, stats );
 			break;
 	}
 	bool increase_dt = false;
@@ -476,10 +500,10 @@ int take_time_step( double t, arma::vec &y, double dt,
 
    \returns a status code (see \ref odeint_status_codes)
 */
-template <typename func_type, typename Jac_type> inline
+template <typename functor_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
             const solver_options &solver_opts,
-            const arma::vec &y0, const func_type &fun, const Jac_type &jac,
+            const arma::vec &y0, functor_type &func,
             std::vector<double> &t_vals, std::vector<arma::vec> &y_vals )
 {
 	double t = t0;
@@ -492,6 +516,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	}
 
 	assert( sc.dt > 0 && "Cannot use time step size of 0!" );
+
+
 
 	double dt = sc.dt;
 	double err = 0.0;
@@ -564,7 +590,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	for( std::size_t i = 0; i < Ns; ++i ){
 		std::size_t i0 = i*Neq;
 		std::size_t i1 = (i+1)*Neq - 1;
-		K.subvec( i0, i1 ) = fun( t, y );
+		K.subvec( i0, i1 ) = func.fun( t, y );
 	}
 
 	// Grab max_dt for convenience:
@@ -573,7 +599,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	while( t < t1 ){
 		double old_dt = dt;
 		status = take_time_step( t, y, dt, newton_stats, sc,
-		                         solver_opts, fun, jac,
+		                         solver_opts, func,
 		                         adaptive_dt, err, K );
 
 		if( status == GENERAL_ERROR ){
@@ -592,7 +618,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			status |= DT_TOO_LARGE;
 		}
 		if( status & DT_TOO_LARGE ){
-			// Adapt the
 			if( adaptive_dt ){
 				dt = get_better_time_step( dt, err,
 				                           newton_stats.iters,
@@ -666,13 +691,13 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( sc.FSAL ){
 			K.subvec( 0, Neq - 1 ) = K.subvec( i0, i1 );
 		}else{
-			K.subvec( 0, Neq - 1 ) = fun( t, y );
+			K.subvec( 0, Neq - 1 ) = func.fun( t, y );
 		}
 
 		for( std::size_t i = 1; i < Ns; ++i ){
 			i0 = i*Neq;
 			i1 = (i+1)*Neq - 1;
-			K.subvec( i0, i1 ) = fun( t, y );
+			K.subvec( i0, i1 ) = func.fun( t, y );
 		}
 	}
 
