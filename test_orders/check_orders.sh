@@ -4,23 +4,8 @@
 #
 
 mi=1
-for M in EXPLICIT_EULER       \
-	IMPLICIT_EULER        \
-	IMPLICIT_MIDPOINT     \
-	RUNGE_KUTTA_4         \
-	BOGACKI_SHAMPINE_32   \
-	CASH_KARP_54          \
-	DORMAND_PRINCE_54     \
-	FEHLBERG_54           \
-	RADAU_IA_32           \
-	RADAU_IIA_32	      \
-	LOBATTO_IIIA_21	      \
-	LOBATTO_IIIC_21	      \
-	LOBATTO_IIIA_43	      \
-	LOBATTO_IIIC_43	      \
-	GAUSS_LEGENDRE_42     \
-	RADAU_IA_54           \
-	RADAU_IIA_54
+for M in LOBATTO_IIIA_65 \
+	LOBATTO_IIIC_65
 do
 	FILE="err_"$M".dat"
 	if [ -f $FILE ]; then
