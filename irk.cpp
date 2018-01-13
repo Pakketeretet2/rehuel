@@ -22,8 +22,11 @@ solver_coeffs get_coefficients( int method )
 	solver_coeffs sc;
 	double one_third = 1.0/3.0;
 	double one_six = 1.0/6.0;
-	double sqrt3 = sqrt(3);
-	double sqrt6 = sqrt(6);
+
+	double sqrt3 = sqrt(3.0);
+	double sqrt5 = sqrt(5.0);
+	double sqrt6 = sqrt(6.0);
+	double sqrt15 = sqrt(15.0);
 
 
 	sc.FSAL = false;
@@ -294,6 +297,7 @@ solver_coeffs get_coefficients( int method )
 			sc.order2 = 3;
 
 			break;
+
 		case GAUSS_LEGENDRE_42:
 
 			sc.A = { { 0.25, 0.25 - sqrt3/6.0 },
@@ -308,10 +312,10 @@ solver_coeffs get_coefficients( int method )
 
 		case RADAU_IA_54:
 
-			sc.A = { { 1.0/9.0, (-1 + sqrt6)/18.0, (-1 + sqrt6)/18.0},
+			sc.A = { { 1.0/9.0, (-1 - sqrt6)/18.0, (-1 + sqrt6)/18.0},
 			         { 1.0/9.0, (88.0 + 7*sqrt6)/360.0, (88 - 43*sqrt6)/360.0 },
 			         { 1.0/9.0, (88 + 43*sqrt6)/360.0, (88.0 - 7*sqrt6)/360.0 } };
-			sc.c  = { 0.0, 0.6 - sqrt6/10.0, 0.6 + sqrt6/10.0 };
+			sc.c  = { 0.0, (6.0 - sqrt6)/10.0, (6.0 + sqrt6)/10.0 };
 			sc.b  = { 1.0/9.0, (16.0 + sqrt6)/36.0, (16.0 - sqrt6)/36.0 };
 			sc.order = 5;
 			sc.order2 = 0;
@@ -322,14 +326,59 @@ solver_coeffs get_coefficients( int method )
 			sc.A = { { (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
 			         { (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
 			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
-			sc.c  = { (16 - sqrt6)/10.0, (16 + sqrt6)/10.0, 1.0 / 9.0 };
-			sc.b  = { (16 - sqrt6)/10.0, (16 + sqrt6)/10.0, 1.0 / 9.0 };
+			sc.c  = {  (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
+			sc.b  = {  (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
+			// sc.b2  = { (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
 			sc.order = 5;
 			sc.order2 = 0;
 
 			break;
 
+		case GAUSS_LEGENDRE_63:
+			sc.A = { { 5.0/36.0, 2.0/9.0 - sqrt15 / 15.0, 5.0/36.0 - sqrt15 / 30.0 },
+			         { 5.0/36.0 + sqrt15 / 24.0, 2.0/9.0, 5.0/36.0 - sqrt15 / 24.0 },
+			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0 } };
+			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0 };
+			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0 };
+			sc.order = 6;
+			sc.order2 = 0;
 
+			break;
+
+		case LOBATTO_IIIA_65: {
+			double a1 = 11.0/120.0;
+			double a2 = 25.0/120.0;
+			double a3 = sqrt5 / 120.0;
+			double a4 = 1.0 / 120.0;
+
+			sc.A = { { 0.0, 0.0, 0.0, 0.0 },
+			         { a1 + a3, a2 - a3, a2 - 13*a3, -a4 + a3 },
+			         { a1 - a3, a2 + 13*a3, a2 + a3, -a4 - a3 },
+			         { 1.0/12.0, 5.0/12.0, 5.0/12.0, 1.0/12.0 } };
+			sc.b = { 1.0/12.0, 5.0/12.0, 5.0/12.0, 1.0/12.0 };
+			sc.c = { 0.0, 0.5 - sqrt5/10.0, 0.5 + sqrt5/10.0, 1.0 };
+			sc.order = 6;
+			sc.order2 = 0;
+
+			break;
+		}
+		case LOBATTO_IIIC_65:{
+			double a1 = 1.0 / 12.0;
+			double a2 = sqrt5/12.0;
+			double a3 = 0.25;
+			double a4 = 1.0/6.0;
+			double a5 = sqrt5/60.0;
+			sc.A = { { a1, -a2, a2, -a1 },
+			         { a1, a3, a4 - 7*a5, a5 },
+			         { a1, a4 + 7*a5, a3, -a5 },
+			         { a1, 5*a1, 5*a1, a1 } };
+			sc.b = { a1, 5*a1, 5*a1, a1 };
+			sc.c = { 0.0, 0.5 - sqrt5/10.0, 0.5 + sqrt5/10.0, 1.0 };
+			sc.order = 6;
+			sc.order2 = 0;
+
+			break;
+		}
 	}
 
 	// Some checks:
