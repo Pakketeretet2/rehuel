@@ -328,7 +328,6 @@ solver_coeffs get_coefficients( int method )
 			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
 			sc.c  = {  (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
 			sc.b  = {  (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
-			// sc.b2  = { (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
 			sc.order = 5;
 			sc.order2 = 0;
 
@@ -340,8 +339,9 @@ solver_coeffs get_coefficients( int method )
 			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0 } };
 			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0 };
 			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0 };
+			sc.b2 = { -5.0/6.0, 8.0/3.0, -5.0/6.0 };
 			sc.order = 6;
-			sc.order2 = 0;
+			sc.order2 = 3;
 
 			break;
 
