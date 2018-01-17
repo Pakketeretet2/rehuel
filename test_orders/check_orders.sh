@@ -4,8 +4,8 @@
 #
 
 mi=1
-for M in LOBATTO_IIIA_65 \
-	LOBATTO_IIIC_65
+# for M in $( ../rehuel --print-all-methods )
+for M in FEHLBERG_54 CASH_KARP_54
 do
 	FILE="err_"$M".dat"
 	if [ -f $FILE ]; then
@@ -14,7 +14,7 @@ do
 	fi
 	for dt in 2e-5 5e-5 1e-4 2e-4 5e-4 1e-3 2e-3 5e-3 1e-2 2e-2 5e-2 1e-1 2e-1 5e-1 1 2;
 	do
-		../rehuel --t0 0.0 --t1 10.0 --dt $dt --method $M >> $FILE
+		../rehuel --t0 0.0 --t1 10.0 --dt $dt --method $M --test-exponential >> $FILE
 	done
 	
 	mi=$(( mi + 1 ))

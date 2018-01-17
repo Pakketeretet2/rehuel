@@ -150,8 +150,12 @@ bool verify_jacobi_matrix( const arma::vec &y, functor_type &func )
 
 	double max_diff = sqrt( max_diff2 );
 	if( max_diff > 1e-12 ){
+		std::cerr << "Jacobi matrix seems iffy with max diff of "
+		          << max_diff << "\n";
 		return false;
 	}else{
+		std::cerr << "Jacobi matrix seems fine with max diff of "
+		          << max_diff << "\n";
 		return true;
 	}
 }
@@ -173,13 +177,13 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
-	arma::vec fn = func.fun(x);
-	double res2 = arma::dot( fn, fn );
+	arma::vec r = func.fun(x);
+	double res2 = arma::dot( r, r );
 	stats.iters = 1;
 
 	std::size_t N = x.size();
 	arma::vec x0 = x;
-	arma::vec f0 = fn;
+	arma::vec f0 = r;
 
 	arma::mat Jaci( N, N );
 	Jaci.eye(N,N);
@@ -202,20 +206,20 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 
 
 		x = x0 + direction;
-		fn = func.fun(x);
+		r = func.fun(x);
 		arma::vec dx = x - x0;
-		arma::vec df = fn - f0;
+		arma::vec df = r - f0;
 
 		arma::vec normm = (dx.t() * Jaci) * df;
 		double norm = normm(0);
 		arma::vec left_part = ( dx - Jaci*df );
 		arma::rowvec right_part = dx.t() * Jaci;
 		Jaci += left_part * right_part / norm;
-		res2 = arma::dot( fn, fn );
+		res2 = arma::dot( r, r );
 
 		++stats.iters;
 
-		f0 = fn;
+		f0 = r;
 		x0 = x;
 	}
 	if( stats.iters == opts.maxit && res2 > tol2 ){
@@ -273,13 +277,13 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
-	arma::vec fn = func.fun(x);
-	double res2 = arma::dot( fn, fn );
+	arma::vec r = func.fun(x);
+	double res2 = arma::dot( r, r );
 	stats.iters = 1;
 
 	std::size_t N = x.size();
 	arma::vec x0 = x;
-	arma::vec f0 = fn;
+	arma::vec f0 = r;
 
 	arma::mat Jaci( N, N );
 	Jaci.eye(N,N);
@@ -288,8 +292,18 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
-	arma::vec r = func.fun(x);
+
+
 	auto J = func.jac(x);
+
+	auto print_stuff = [&stats, &x, &res2](){
+		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
+		for( std::size_t i = 0; i < x.size(); ++i ){
+			std::cerr << " " << x[i];
+		}
+		std::cerr << "\n";};
+
+	// print_stuff();
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2) );
@@ -308,11 +322,12 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 		auto Jn = func.jac(x);
 		if( arma::rcond(Jn) >= opts.tol ) J = Jn;
 		r = func.fun(x);
-		res2 = arma::dot( fn, fn );
+
+		res2 = arma::dot( r, r );
 
 		++stats.iters;
-
-		f0 = fn;
+		// print_stuff();
+		f0 = r;
 		x0 = x;
 	}
 	if( stats.iters == opts.maxit && res2 > tol2 ){
