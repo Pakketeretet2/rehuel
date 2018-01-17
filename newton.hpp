@@ -188,13 +188,21 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 	arma::mat Jaci( N, N );
 	Jaci.eye(N,N);
 
+	auto print_stuff = [&stats, &x, &res2](){
+		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
+		for( std::size_t i = 0; i < x.size(); ++i ){
+			std::cerr << " " << x[i];
+		}
+		std::cerr << "\n";};
+
+	print_stuff();
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
-		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2 ) );
+		double lambda = 1.0 / (1.0 + res2 );
 		arma::vec direction = -lambda*Jaci*f0;
 
 		if( max_step2 > 0 ){
@@ -218,6 +226,8 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		res2 = arma::dot( r, r );
 
 		++stats.iters;
+
+		print_stuff();
 
 		f0 = r;
 		x0 = x;
@@ -306,7 +316,7 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 	// print_stuff();
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
-		double lambda = std::max( 1e-10, 1.0 / (1.0 + res2) );
+		double lambda = 1.0 / (1.0 + res2);
 		arma::vec direction = -arma::solve(J, r);
 
 		if( max_step2 > 0 ){
