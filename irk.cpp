@@ -17,6 +17,7 @@ bool verify_solver_coeffs( const solver_coeffs &sc )
 	return true;
 }
 
+
 solver_coeffs get_coefficients( int method )
 {
 	solver_coeffs sc;
@@ -74,7 +75,6 @@ solver_coeffs get_coefficients( int method )
 
 			break;
 		case CASH_KARP_54:
-			sc.A = arma::mat( 6,6 );
 			sc.A.zeros( 6,6 );
 
 			sc.A(1,0) =  1.0/5.0;
@@ -180,25 +180,32 @@ solver_coeffs get_coefficients( int method )
 
 		case FEHLBERG_54:
 			sc.A.zeros( 6,6 );
-			sc.A(0,1) = 1.0/4.0;
-			sc.A(0,2) = 3.0/32.0;
-			sc.A(0,3) = 1932.0/2197.0;
-			sc.A(0,4) = 439.0/126.0;
-			sc.A(0,5) = -8.0/27.0;
+			sc.A(1,0) =  1.0/4.0;
+			sc.A(2,0) =  3.0/32.0;
+			sc.A(3,0) =  1932.0/2197.0;
+			sc.A(4,0) =  439.0/216.0;
+			sc.A(5,0) = -8.0/27.0;
 
-			sc.A(1,2) = 9.0/32.0;
-			sc.A(1,3) = -7200.0/2197.0;
-			sc.A(1,4) = -8.0;
-			sc.A(1,5) = 2.0;
+			sc.A(2,1) =  9.0/32.0;
+			sc.A(3,1) = -7200.0/2197.0;
+			sc.A(4,1) = -8.0;
+			sc.A(5,1) =  2.0;
 
-			sc.A(2,3) = 7296.0/2197.0;
-			sc.A(2,4) = 3680.0/513.0;
-			sc.A(2,5) = -3544.0/2565.0;
+			sc.A(3,2) =  7296.0/2197.0;
+			sc.A(4,2) =  3680.0/513.0;
+			sc.A(5,2) = -3544.0/2565.0;
 
-			sc.A(3,4) = -845.0/4104.0;
-			sc.A(3,5) = 1859.0/4104.0;
+			sc.A(4,3) = -845.0/4104.0;
+			sc.A(5,3) =  1859.0/4104.0;
 
-			sc.A(4,5) = -11.0/40.0;
+			sc.A(5,4) = -11.0/40.0;
+
+			sc.c = { 0.0,
+			         0.25,
+			         0.375,
+			         12.0/13.0,
+			         1.0,
+			         0.5 };
 
 			sc.b  = { 16.0/135.0, 0.0, 6656.0/12825.0,
 			          28561.0 / 56430.0, -9.0/50.0, 2.0/55.0 };
@@ -328,7 +335,6 @@ solver_coeffs get_coefficients( int method )
 			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
 			sc.c  = {  (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
 			sc.b  = {  (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
-			// sc.b2  = { (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
 			sc.order = 5;
 			sc.order2 = 0;
 
@@ -340,8 +346,9 @@ solver_coeffs get_coefficients( int method )
 			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0 } };
 			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0 };
 			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0 };
+			sc.b2 = { -5.0/6.0, 8.0/3.0, -5.0/6.0 };
 			sc.order = 6;
-			sc.order2 = 0;
+			sc.order2 = 3;
 
 			break;
 
@@ -406,6 +413,7 @@ solver_options default_solver_options()
 	return s;
 }
 
+
 double get_better_time_step( double dt_old, double err, double old_err,
                              double tol, int newton_iters,
                              const solver_options &opts,
@@ -416,14 +424,22 @@ double get_better_time_step( double dt_old, double err, double old_err,
 	double min_order = std::min( sc.order, sc.order2 );
 	double beta = min_order;
 
+	if( old_err < tol ) return dt_old;
+
 	double frac1 = tol / err;
 	double frac2 = old_err / tol;
 
+	std::cerr << "frac1 = " << frac1 << ", frac2 = " << frac2
+	          << ", alpha = " << alpha << ", beta = " << beta << "\n";
+
 	double dt_new = dt_old * pow( frac1, alpha ) * pow( frac2, beta );
+	if( opts.verbosity ){
+		std::cerr << "Old dt = " << dt_old << ", new dt = "
+		          << dt_new << "\n";
+	}
 
 	return std::min( dt_new, max_dt );
 }
-
 
 
 bool verify_solver_options( solver_options &opts )
@@ -435,16 +451,36 @@ bool verify_solver_options( solver_options &opts )
 }
 
 
-
 const char *method_to_name( int method )
 {
 	return irk::rk_method_to_string[method].c_str();
 }
+
 
 int name_to_method( const std::string &name )
 {
 	return irk::rk_string_to_method[name];
 }
 
+
+std::vector<std::string> all_method_names()
+{
+	std::vector<std::string> methods;
+	for( auto pair : rk_string_to_method ){
+		methods.push_back( pair.first );
+	}
+	return methods;
+}
+
+
+bool is_method_explicit( const solver_coeffs &sc )
+{
+	for( std::size_t i = 0; i < sc.b.size(); ++i ){
+		if( sc.A(i,i) != 0.0 ){
+			return false;
+		}
+	}
+	return true;
+}
 
 } // namespace irk

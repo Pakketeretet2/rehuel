@@ -141,6 +141,13 @@ static std::map<std::string,int> rk_string_to_method = {
 };
 
 
+
+/**
+   \brief Returns a vector with all method names.
+*/
+std::vector<std::string> all_method_names();
+
+
 /**
    \brief Checks if all options are set to sane values.
 
@@ -163,6 +170,13 @@ bool verify_solver_coeffs( const solver_coeffs &sc );
    \returns solver coefficients for given method.
 */
 solver_coeffs get_coefficients( int method );
+
+
+/**
+   \brief Checks if the given method is explicit.
+*/
+bool is_method_explicit( const solver_coeffs &sc );
+
 
 /**
    \brief Returns default solver options.
@@ -322,7 +336,10 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 }
 
 
+/**
+   \brief A wrapper struct to make Newton iteration easier.
 
+*/
 template <typename f_func, typename J_func, typename jac_type>
 struct newton_wrapper
 {
@@ -341,6 +358,78 @@ struct newton_wrapper
 	f_func &f;
 	J_func &J;
 };
+
+/**
+   \brief Calculates the RK stages.
+
+*/
+template <typename functor_type> inline
+arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
+                         const solver_coeffs &sc,
+                         const solver_options &solver_opts,
+                         functor_type &func, newton::status &stats,
+                         const arma::vec &K, bool &success )
+{
+	arma::vec KK = K;
+	auto J = construct_J( t, y, KK, dt, sc, func );
+
+
+	// Use newton iteration to find the Ks for the next level:
+	auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+		return construct_F( t, y, K, dt, sc, func );
+	};
+
+	auto stages_jac = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+		return construct_J( t, y, K, dt, sc, func );
+	};
+
+
+	// Approximate the Jacobi matrix as constant...
+	// auto stages_jac_const = [&J]( double t, const arma::vec &K ){ return J; };
+
+	newton_wrapper<decltype(stages_func), decltype(stages_jac),
+	               typename functor_type::jac_type>
+		nw( stages_func, stages_jac );
+
+	const newton::options &opts = *solver_opts.newton_opts;
+	my_timer timer_step( std::cerr );
+
+	std::size_t Neq = y.size();
+	std::size_t Ns  = sc.b.size();
+
+	// Check if the method is explicit or implicit:
+	bool is_explicit = irk::is_method_explicit(sc);
+	if( is_explicit ){
+		// No need to solve with Newton:
+		for( std::size_t i = 0; i < Ns; ++i ){
+			std::size_t offset = i*Neq;
+			arma::vec yi = y;
+			for( std::size_t j = 0; j < Ns; ++j ){
+				std::size_t delta = j*Neq;
+				auto Ki = KK.subvec( delta, delta + Neq - 1 );
+				yi += dt * sc.A(i,j) * Ki;
+			}
+			KK.subvec( offset, offset + Neq - 1 )
+				= func.fun( t + sc.c[i]*dt, yi );
+		}
+		success = true;
+	}else{
+		switch( solver_opts.internal_solver ){
+			case solver_options::NEWTON:
+				KK = newton::newton_iterate( nw, K,
+				                             opts, stats );
+		default:
+			case solver_options::BROYDEN:
+				KK = newton::broyden_iterate( nw, K,
+				                              opts, stats );
+				break;
+		}
+		success = stats.conv_status == newton::SUCCESS;
+	}
+
+
+	return KK;
+}
 
 
 /**
@@ -369,47 +458,18 @@ int take_time_step( double t, arma::vec &y, double dt,
                     functor_type &func,
                     bool adaptive_dt, double &err, arma::vec &K )
 {
-	auto Ns  = sc.b.size();
-	auto Neq = y.size();
-	auto NN = Ns*Neq;
+	std::size_t Neq = y.size();
+	std::size_t Ns  = sc.b.size();
 
-	arma::vec KK = K;
-	auto J = construct_J( t, y, KK, dt, sc, func );
-
-
-	// Use newton iteration to find the Ks for the next level:
-	auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
-		return construct_F( t, y, K, dt, sc, func );
-	};
-
-	auto stages_jac = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
-		return construct_J( t, y, K, dt, sc, func );
-	};
+	bool success = false;
+	arma::vec KK = get_rk_stages( t, y, dt, sc, solver_opts,
+	                              func, stats, K, success );
 
 
-	// Approximate the Jacobi matrix as constant...
-	// auto stages_jac_const = [&J]( double t, const arma::vec &K ){ return J; };
-
-	newton_wrapper<decltype(stages_func), decltype(stages_jac),
-	               typename functor_type::jac_type>
-		nw( stages_func, stages_jac );
-
-	const newton::options &opts = *solver_opts.newton_opts;
-	my_timer timer_step( std::cerr );
-
-	switch( solver_opts.internal_solver ){
-		case solver_options::NEWTON:
-			KK = newton::newton_iterate( nw, K,
-			                             opts, stats );
-		default:
-		case solver_options::BROYDEN:
-			KK = newton::broyden_iterate( nw, K,
-			                              opts, stats );
-			break;
-	}
 	bool increase_dt = false;
 
-	if( stats.conv_status == newton::SUCCESS ){
+
+	if( success ){
 		arma::vec y_alt;
 		// First, do adaptive time step:
 		if( adaptive_dt ){
@@ -662,11 +722,14 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				if( ynorm > solver_opts.abs_tol ){
 					tol = solver_opts.rel_tol;
 				}
+
 				dt = get_better_time_step( dt, err, old_err,
 				                           tol,
 				                           newton_stats.iters,
 				                           solver_opts,
 				                           sc, max_dt );
+
+				dt *= 1.05;
 			}
 		}
 		bool move_on = (status == SUCCESS);
