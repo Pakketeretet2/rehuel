@@ -63,6 +63,9 @@ struct options {
 
 	/// If true, precondition the Jacobi matrix.
 	bool precondition;
+
+	/// If true, tries to limit the step to two extremes.
+	bool limit_step;
 };
 
 /**
@@ -195,14 +198,14 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		}
 		std::cerr << "\n";};
 
-	print_stuff();
+	// print_stuff();
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
-		double lambda = 1.0 / (1.0 + res2 );
+		double lambda = 1.0 / sqrt(1.0 + res2 );
 		arma::vec direction = -lambda*Jaci*f0;
 
 		if( max_step2 > 0 ){
@@ -227,7 +230,7 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 
 		++stats.iters;
 
-		print_stuff();
+		// print_stuff();
 
 		f0 = r;
 		x0 = x;
@@ -271,8 +274,10 @@ arma::vec gauss_seidel( functor_type &func, arma::vec x,
 	return x;
 }
 
+
+
 /**
-   \brief Performs Newton's method to solve non-linear system F(x) = 0.
+   \brief Templated implementation of Newton's method.
 
    \param func  The functor for which the root of func.fun is to be found.
    \param x     Initial guess for root.
@@ -281,9 +286,10 @@ arma::vec gauss_seidel( functor_type &func, arma::vec x,
 
    \returns the root of F(x).
 */
-template <typename functor_type> inline
-arma::vec newton_iterate( functor_type &func, arma::vec x,
-                          const options &opts, status &stats )
+template <typename functor_type, bool refresh_jac, bool precondition,
+          bool time_internals, bool limit_step> inline
+arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
+                               const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
@@ -295,16 +301,24 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 	arma::vec x0 = x;
 	arma::vec f0 = r;
 
-	arma::mat Jaci( N, N );
-	Jaci.eye(N,N);
+	arma::vec direction;
+
+	typename functor_type::jac_type L(N, N), U(N,N);
 
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
 
-
 	auto J = func.jac(x);
+	if( !refresh_jac ){
+		// Then you might as well LU decompose the system here:
+		arma::lu( L, U, J );
+	}
+
+	typename functor_type::jac_type P;
+	P.eye(N,N);
+
 
 	auto print_stuff = [&stats, &x, &res2](){
 		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
@@ -316,8 +330,26 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 	// print_stuff();
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
-		double lambda = 1.0 / (1.0 + res2);
-		arma::vec direction = -arma::solve(J, r);
+		double lambda = 1.0;
+		if( limit_step ){
+			lambda = (1.0 + opts.tol*res2)  / (1.0 + res2);
+		}
+
+		if( precondition ){
+
+			for( std::size_t i = 0; i < N; ++i ){
+				P(i,i) = 1.0 / J(i,i);
+			}
+			direction = -arma::solve(P*J, P*r);
+
+		}else if( !refresh_jac ){
+
+			arma::vec tmp = arma::solve( arma::trimatl(L), r );
+			direction = -arma::solve(arma::trimatu(U), tmp);
+
+		}else{
+			direction = -arma::solve(J, r);
+		}
 
 		if( max_step2 > 0 ){
 			double norm2 = arma::dot( direction, direction );
@@ -328,11 +360,12 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 
 
 		x = x0 + direction;
+		if( refresh_jac ){
+			auto Jn = func.jac(x);
+			if( arma::rcond(Jn) >= opts.tol ) J = Jn;
+		}
 
-		auto Jn = func.jac(x);
-		if( arma::rcond(Jn) >= opts.tol ) J = Jn;
 		r = func.fun(x);
-
 		res2 = arma::dot( r, r );
 
 		++stats.iters;
@@ -350,6 +383,82 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 }
 
 
+/**
+   \brief Performs Newton's method to solve non-linear system F(x) = 0.
+
+   \param func  The functor for which the root of func.fun is to be found.
+   \param x     Initial guess for root.
+   \param opts  Options for solver (see \p options)
+   \param stats Will contain solver statistics (see \p status)
+
+   \returns the root of F(x).
+*/
+template <typename functor_type> inline
+arma::vec newton_iterate( functor_type &func, arma::vec x,
+                          const options &opts, status &stats )
+{
+	int option_bits = 0;
+	option_bits += 1 * ( opts.refresh_jac == true );
+	option_bits += 2 * ( opts.precondition == true );
+	option_bits += 4 * ( opts.time_internals == true );
+	option_bits += 8 * ( opts.limit_step == true );
+
+	//std::cerr << "Option combo is " << option_bits << ".\n";
+
+	switch(option_bits){
+		default:
+		case 0:
+			return newton_iterate_impl<functor_type, 0, 0, 0, 0>(
+				func, x, opts, stats );
+		case 1:
+			return newton_iterate_impl<functor_type, 1, 0, 0, 0>(
+				func, x, opts, stats );
+		case 2:
+			return newton_iterate_impl<functor_type, 0, 1, 0, 0>(
+				func, x, opts, stats );
+		case 3:
+			return newton_iterate_impl<functor_type, 1, 1, 0, 0>(
+				func, x, opts, stats );
+		case 4:
+			return newton_iterate_impl<functor_type, 0, 0, 1, 0>(
+				func, x, opts, stats );
+		case 5:
+			return newton_iterate_impl<functor_type, 1, 0, 1, 0>(
+				func, x, opts, stats );
+		case 6:
+			return newton_iterate_impl<functor_type, 0, 1, 1, 0>(
+				func, x, opts, stats );
+		case 7:
+			return newton_iterate_impl<functor_type, 1, 1, 1, 0>(
+				func, x, opts, stats );
+		case 8:
+			return newton_iterate_impl<functor_type, 0, 0, 0, 1>(
+				func, x, opts, stats );
+		case 9:
+			return newton_iterate_impl<functor_type, 1, 0, 0, 1>(
+				func, x, opts, stats );
+		case 10:
+			return newton_iterate_impl<functor_type, 0, 1, 0, 1>(
+				func, x, opts, stats );
+		case 11:
+			return newton_iterate_impl<functor_type, 1, 1, 0, 1>(
+				func, x, opts, stats );
+		case 12:
+			return newton_iterate_impl<functor_type, 0, 0, 1, 1>(
+				func, x, opts, stats );
+		case 13:
+			return newton_iterate_impl<functor_type, 1, 0, 1, 1>(
+				func, x, opts, stats );
+		case 14:
+			return newton_iterate_impl<functor_type, 0, 1, 1, 1>(
+				func, x, opts, stats );
+		case 15:
+			return newton_iterate_impl<functor_type, 1, 1, 1, 1>(
+				func, x, opts, stats );
+	}
+}
+
+
 
 /// \brief A namespace with some functions to test the solvers on.
 namespace test_functions {
@@ -357,6 +466,8 @@ namespace test_functions {
 /// \brief Rosenbrock's function functor
 struct rosenbrock_func
 {
+	typedef arma::mat jac_type;
+
 	rosenbrock_func(double a, double b) : a(a), b(b){}
 	/// \brief Function itself
 	double f( const arma::vec &x );

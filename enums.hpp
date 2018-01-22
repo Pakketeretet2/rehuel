@@ -66,14 +66,12 @@ enum odeint_status_codes {
 
 	/// Internal solver failed to calculate stages
 	INTERNAL_SOLVE_FAILURE = 16,
-	/// Time step is unacceptably small, problem is likely stiff.
-	TIME_STEP_TOO_SMALL = 32,
 
 	/// The error exceeded the relative tolerance
-	ERROR_LARGER_THAN_RELTOL = 64,
+	ERROR_LARGER_THAN_RELTOL = 32,
 
 	/// The error exceeded the absolute tolerance
-	ERROR_LARGER_THAN_ABSTOL = 128
+	ERROR_LARGER_THAN_ABSTOL = 64
 
 
 };

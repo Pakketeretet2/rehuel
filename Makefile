@@ -1,10 +1,9 @@
 CC = g++
 FLAGS = -std=c++11 -pedantic -g -O2 -ffast-math -march=native \
-        -Werror=return-type -Werror=uninitialized -Wall \
-	-DCHECK_NANS
+        -Werror=return-type -Werror=uninitialized -Wall
 
 LNK = -L./ -larmadillo
-INC = -I./ -I./my_timer/
+INC = -I./ -I./my_timer/ -I../cpparser/
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
