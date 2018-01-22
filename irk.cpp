@@ -414,31 +414,59 @@ solver_options default_solver_options()
 }
 
 
+
 double get_better_time_step( double dt_old, double err, double old_err,
-                             double tol, int newton_iters,
+                             double tol, int newton_iters, int n_rejected,
                              const solver_options &opts,
                              const solver_coeffs &sc, double max_dt )
 {
-	// Formula 2.43c from Hairer and Wanner, Solving ODEs II.
-	double alpha = sc.order + sc.order2;
+	// From Wanner & Hairer's book, "A PI Step Size Control"
 	double min_order = std::min( sc.order, sc.order2 );
-	double beta = min_order;
+	double alpha = 1.0 / min_order;
+	double beta  = 0.08; // 0.4 / min_order;
 
-	if( old_err < tol ) return dt_old;
+	// err = | y - y2 | = C * dt^min_order + O( dt^(min_order+1 ) )
+	// so C = err / dt^min_order. We want
+	// C*dtn^min_order = tol so we get
+	// dtn = dt * (tol / err)^(1 / min_order);
+	err = std::max( err, 2e-16 );
+	old_err = std::max( old_err, 2e-16 );
 
+	double fac = 1.0/sqrt(1+n_rejected);
+
+	// double dt_new = fac * dt_old * std::pow(tol / err, power);
 	double frac1 = tol / err;
 	double frac2 = old_err / tol;
 
-	std::cerr << "frac1 = " << frac1 << ", frac2 = " << frac2
-	          << ", alpha = " << alpha << ", beta = " << beta << "\n";
-
-	double dt_new = dt_old * pow( frac1, alpha ) * pow( frac2, beta );
-	if( opts.verbosity ){
-		std::cerr << "Old dt = " << dt_old << ", new dt = "
-		          << dt_new << "\n";
+	double fact1 = std::pow( frac1, alpha );
+	double fact2 = std::pow( frac2, beta );
+	double factor = fact1 * fact2;
+	if( opts.use_newton_iters_adaptive_step ){
+		factor /= sqrt( newton_iters );
 	}
 
-	return std::min( dt_new, max_dt );
+	if( factor >= 1e10 ){
+		// Fix a factor of inf.
+		std::cerr << "Factor was way too large because "
+		          << "tol = " << tol << ", err = " << err
+		          << " and old_err = " << old_err << " so frac1 = "
+		          << frac1 << " and frac2 = " << frac2
+		          << " because fact1 = " << fact1 << " and fact2 = "
+		          << fact2 << " and newton_iters = "
+		          << newton_iters << "\n";
+		std::terminate();
+	}
+
+	double dt_new = dt_old * factor * fac;
+
+	if( opts.verbosity ){
+		std::cerr << "Factor is " << factor << ", old_err is " << old_err
+		          << " and new err is " << err << ". ";
+		std::cerr << "New dt = min( " << dt_new << ", "
+		          << max_dt << " ).\n";
+	}
+
+	return ( dt_new > max_dt ) ? max_dt : dt_new;
 }
 
 

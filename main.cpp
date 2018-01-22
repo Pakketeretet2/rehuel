@@ -277,6 +277,8 @@ struct three_body
 template <typename functor>
 struct newton_dummy
 {
+	typedef typename functor::jac_type jac_type;
+
 	newton_dummy( functor &f, double t ) : func(f), t(t) {}
 
 	arma::vec fun( const arma::vec x )
@@ -372,18 +374,28 @@ void test_three_body( int method, double t0, double t1, double dt,
 	irk::solver_coeffs  sc = irk::get_coefficients( method );
 	irk::solver_options so = irk::default_solver_options();
 	newton::options no;
+
 	so.internal_solver = irk::solver_options::NEWTON;
 	so.adaptive_step_size = adapt_dt;
-	so.rel_tol = 1e-7;
-	so.abs_tol = 1e-6;
-	so.verbosity = 1;
+	so.rel_tol = 1e-4;
+	so.abs_tol = 1e-3;
 
-	so.timestep_info_out_interval = 100000;
-	so.store_in_vector_every = 100000;
+	so.verbosity = 0;
+	so.timestep_info_out_interval = 500;
+	so.store_in_vector_every = 1;
 	so.timestep_out = &std::cerr;
+	so.use_newton_iters_adaptive_step = true;
+	so.max_dt = 5.0;
+
+	no.maxit = 10;
+	no.precondition = true;
+	no.tol = 1e-2*so.rel_tol;
+	no.limit_step = true;
+	no.refresh_jac = true;
+
 	sc.dt = dt;
 
-	no.tol = 0.1*so.rel_tol;
+
 	so.newton_opts = &no;
 
 	if( !newton::verify_jacobi_matrix( y0, dummy_3b ) ){
@@ -494,7 +506,7 @@ int main( int argc, char **argv )
 	parser_status |= parser.option_by_long( "m3", m3 );
 
 	parser_status |= parser.option_by_long( "use-newton", use_newton );
-
+	std::cerr << "Method is " << method_str << "!\n";
 	int method = irk::name_to_method( method_str );
 
 	if( parser_status ){
