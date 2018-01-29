@@ -329,28 +329,31 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 	so.adaptive_step_size = false;
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
-	so.timestep_info_out_interval = 100000;
+	so.timestep_info_out_interval = 1;
 	so.store_in_vector_every = 1;
 	so.timestep_out = &timestep_file;
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
-	newton_opts.max_step = 1.0;
+	newton_opts.max_step = 0.0;
 	newton_opts.refresh_jac = false;
 	newton_opts.maxit = 100000;
 
 	exponential func( 1.0 );
-	arma::vec y0 = { 1.0 };
+	arma::vec y0 = func.sol( t0 );
 	int status = irk::odeint( t0, t1, sc, so, y0, func, times, ys );
 
 	// Find largest error:
 	double m_abs_err = 0.0;
 	double m_rel_err = 0.0;
+
 	for( std::size_t i = 0; i < times.size(); ++i ){
+
 		double t = times[i];
 		double yn = ys[i][0];
 		double ye = func.sol(t)[0];
 		double abs_err = std::fabs( yn - ye );
-		double rel_err = abs_err / std::min( yn, ye );
+		double rel_err = abs_err == 0 ? 0.0 :
+			abs_err / std::min( yn, ye );
 
 		if( abs_err > m_abs_err ) m_abs_err = abs_err;
 		if( rel_err > m_rel_err ) m_rel_err = rel_err;
@@ -369,7 +372,7 @@ void test_ode_multistep( int method, int order,
 	std::vector<double> t_vals;
 	std::vector<arma::vec> y_vals;
 
-	newton_opts.tol = 1e-8;
+	newton_opts.tol = 1e-14;
 	newton_opts.max_step = 1.0;
 	newton_opts.refresh_jac = false;
 	newton_opts.maxit = 100000;

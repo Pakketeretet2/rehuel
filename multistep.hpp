@@ -8,6 +8,7 @@
 
 #include "cyclic_buffer.hpp"
 #include "enums.hpp"
+#include "irk.hpp"
 #include "newton.hpp"
 #include "options.hpp"
 
@@ -188,6 +189,7 @@ int take_time_step_bdf( double t, arma::vec &ynp,
 
 	const auto &cs = sc.cs_bdf.row(current_order-1);
 	double bb = sc.b(current_order-1);
+	double inv_bb = 1.0 / bb;
 
 	bool print_formula = false;
 
@@ -196,7 +198,7 @@ int take_time_step_bdf( double t, arma::vec &ynp,
 		std::cerr << "Formula: y(n+1) ";
 	}
 	for( std::size_t i = 0; i < last_ys.size(); ++i ){
-		history += cs[i] * last_ys[i].second;
+		history += (cs[i]*inv_bb) * last_ys[i].second;
 
 		if( print_formula ) {
 			if( i == 0 ){
@@ -219,11 +221,11 @@ int take_time_step_bdf( double t, arma::vec &ynp,
 
 	// Now, for BDF we solve y_n+1 + history = dt*f(t_(n+1), y_{n+1}) or
 	// bb*dt*f(t_{n+1}, y_{n+1}) - y_{n+1} - history = 0.
-	auto system_fun = [&t, &dt, &bb, &history, &func]( const arma::vec &y ) {
-		return bb*dt * func.fun( t + dt, y ) - history - y; };
+	auto system_fun = [&t, &dt, &inv_bb, &history, &func]( const arma::vec &y ) {
+		return dt * func.fun( t + dt, y ) - history - y*inv_bb; };
 
-	auto system_jac = [&t, &dt, &bb, &history, &func, &I]( const arma::vec &y ) {
-		return bb*dt * func.jac( t + dt, y ) - I; };
+	auto system_jac = [&t, &dt, &inv_bb, &history, &func, &I]( const arma::vec &y ) {
+		return dt * func.jac( t + dt, y ) - I*inv_bb; };
 
 	newton_wrapper<decltype(system_fun), decltype(system_jac),
 	               typename functor_type::jac_type>
@@ -241,6 +243,75 @@ int take_time_step_bdf( double t, arma::vec &ynp,
 		return -1;
 	}
 }
+
+
+
+/**
+   \brief This function fills last_ys with accurate solutions
+   from an implicit RK method.
+*/
+template <typename functor_type> inline
+int bootstrap_init( double t, const arma::vec &y0,
+                    cyclic_buffer<historic_vec> &last_ys, double dt,
+                    newton::status &stats, const multistep::solver_coeffs &sc,
+                    const multistep::solver_options &solver_opts,
+                    functor_type &func )
+{
+	// To obtain the first N values, use an RK method that is stable and of
+	// at least the desired order.
+
+	int target_order = sc.order;
+	int method = irk::RADAU_IIA_32;
+	if( target_order > 3 ){
+		method = irk::RADAU_IIA_54;
+	}
+	if( target_order > 5 ){
+		method = irk::LOBATTO_IIIC_65;
+	}
+
+	irk::solver_options opts = irk::default_solver_options();
+	irk::solver_coeffs irk_sc = irk::get_coefficients( method );
+
+	// Copy over all shared parts from solver_opts:
+
+	opts.internal_solver     = solver_opts.internal_solver;
+	opts.rel_tol             = 5e-2*solver_opts.rel_tol;
+	opts.abs_tol		 = 5e-2*solver_opts.abs_tol;
+	opts.max_dt		 = solver_opts.max_dt;
+	opts.newton_opts	 = solver_opts.newton_opts;
+	opts.constant_jac_approx = solver_opts.constant_jac_approx;
+	opts.adaptive_step_size  = true;
+	opts.use_newton_iters_adaptive_step = true;
+
+	std::vector<double> ts;
+	std::vector<arma::vec> ys;
+
+	arma::vec yn = y0;
+	// If target_order = 6, then we have 6 ys to store,
+	// but the first is already known, so only find target_order-1 more.
+	int irk_status = 0;
+	while( last_ys.size() < target_order ){
+		irk_status = irk::odeint( t, t + dt, irk_sc, opts,
+		                          yn, func, ts, ys );
+		if( irk_status ) return irk_status;
+
+		// The last value in ys is the new value for last_ys.
+		yn = ys.back();
+		t += dt;
+		double y_real = func.sol(t)[0];
+		std::cerr << "Got y = " << yn[0] << " for step "
+		          << last_ys.size() << ", real value should be "
+		          << y_real << " (delta = " << yn[0] - y_real << ").\n";
+
+		last_ys.push_back( std::make_pair( t, yn ) );
+		// last_fs.push_back( std::make_pair( t, func.fun( t, yn ) ) );
+
+	}
+
+	return irk_status;
+}
+
+
 
 
 template <typename functor_type> inline
@@ -281,11 +352,39 @@ int odeint( double t0, double t1,
 	last_ys.push_back( std::make_pair( t, y ) );
 	last_fs.push_back( std::make_pair( t, func.fun( t, y ) ) );
 
-	// If your method is a multistep one then you want a high-accuracy
-	// approx to the first order - 1 stages. We use recursion here:
 
-	// TODO: Approximate initial last_ys and last_ts!
-	//       Add option of passing them in somehow!
+
+	// Bootstrap the methods:
+	int order = 0;
+	int bootstrap_status = bootstrap_init( t, y, last_ys, dt, stats, sc,
+	                                       solver_opts, func );
+	std::cerr << "Bootstrapped values for order " << sc.order << ":\n";
+	for( std::size_t i = 0; i < last_ys.size(); ++i ){
+		std::cerr << last_ys[i].first;
+		for( std::size_t j = 0; j < last_ys[i].second.size(); ++j ){
+			std::cerr << " " << last_ys[i].second(j);
+		}
+		std::cerr << "\n";
+	}
+
+	t = last_ys[0].first;
+	y = last_ys[0].second;
+
+	for( std::size_t i = 0; i < last_ys.size(); ++i ){
+		double ti = last_ys[i].first;
+		arma::vec yi = last_ys[i].second;
+
+		last_fs.push_back( std::make_pair( ti, func.fun( ti, yi ) ) );
+	}
+
+	std::cerr << "\n\nAfter bootstrapping we have " << last_ys.size()
+	          << " values and t = " << t << ".\n";
+
+
+	if( bootstrap_status ){
+		std::cerr << "Error while bootstrapping method!\n";
+		return bootstrap_status;
+	}
 
 	while( t < t1 ){
 		arma::vec yn(y);
@@ -330,6 +429,8 @@ int odeint( double t0, double t1,
 
 	return 0;
 }
+
+
 
 
 } // namespace multistep

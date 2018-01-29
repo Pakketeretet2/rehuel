@@ -37,7 +37,8 @@ struct common_solver_options
 		  solution_out( nullptr ),
 		  timestep_out( nullptr ),
 		  verbosity( 0 ),
-		  constant_jac_approx( false )
+		  constant_jac_approx( false ),
+		  abort_on_solver_fail( false )
 	{ }
 
 	~common_solver_options()
@@ -78,6 +79,8 @@ struct common_solver_options
 	/// If true, use a constant Jacobi matrix approximation
 	bool constant_jac_approx;
 
+	/// If true, abort if the internal solver failed.
+	bool abort_on_solver_fail;
 
 };
 

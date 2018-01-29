@@ -428,7 +428,10 @@ int take_time_step( double t, arma::vec &y, double dt,
 	                                                         solver_opts,
 	                                                         func, stats, K,
 	                                                         success );
-
+	if( solver_opts.abort_on_solver_fail && !success ){
+		std::cerr << "Internal solver failed! Aborting!\n";
+		return GENERAL_ERROR;
+	}
 	bool increase_dt = false;
 
 
@@ -646,12 +649,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 		// Check if you need to lower dt to exactly hit
 		if( t + dt > t1 ){
-			std::cerr << "dt is too large to hit t1! " << t << " + "
-			          << dt << " = " << t + dt << " > "
-			          << t1 << "! ";
 			dt = t1 - t;
 			old_dt = dt;
-			std::cerr << "Switching to dt = " << dt << ".\n";
 		}
 
 		if( explicit_method ){
@@ -715,11 +714,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		if( status & DT_TOO_SMALL ){
 			change_dt = adaptive_dt;
-
-			if( !change_dt ){
-				dt *= 1.2;
-				dt = std::min( dt, max_dt );
-			}
 		}
 
 

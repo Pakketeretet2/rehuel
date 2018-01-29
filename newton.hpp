@@ -191,14 +191,6 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 	arma::mat Jaci( N, N );
 	Jaci.eye(N,N);
 
-	auto print_stuff = [&stats, &x, &res2](){
-		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
-		for( std::size_t i = 0; i < x.size(); ++i ){
-			std::cerr << " " << x[i];
-		}
-		std::cerr << "\n";};
-
-	// print_stuff();
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
@@ -229,8 +221,6 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		res2 = arma::dot( r, r );
 
 		++stats.iters;
-
-		// print_stuff();
 
 		f0 = r;
 		x0 = x;
@@ -320,14 +310,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	P.eye(N,N);
 
 
-	auto print_stuff = [&stats, &x, &res2](){
-		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
-		for( std::size_t i = 0; i < x.size(); ++i ){
-			std::cerr << " " << x[i];
-		}
-		std::cerr << "\n";};
-
-	// print_stuff();
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 		double lambda = 1.0;
@@ -369,7 +351,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		res2 = arma::dot( r, r );
 
 		++stats.iters;
-		// print_stuff();
 		f0 = r;
 		x0 = x;
 	}
