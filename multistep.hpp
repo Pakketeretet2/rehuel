@@ -298,14 +298,7 @@ int bootstrap_init( double t, const arma::vec &y0,
 		// The last value in ys is the new value for last_ys.
 		yn = ys.back();
 		t += dt;
-		double y_real = func.sol(t)[0];
-		std::cerr << "Got y = " << yn[0] << " for step "
-		          << last_ys.size() << ", real value should be "
-		          << y_real << " (delta = " << yn[0] - y_real << ").\n";
-
 		last_ys.push_back( std::make_pair( t, yn ) );
-		// last_fs.push_back( std::make_pair( t, func.fun( t, yn ) ) );
-
 	}
 
 	return irk_status;
