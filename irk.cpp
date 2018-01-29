@@ -32,7 +32,7 @@ solver_coeffs get_coefficients( int method )
 
 	sc.FSAL = false;
 	sc.name = method_to_name( method );
-	std::cerr << "Setting coeffs for method " << sc.name << "...\n";
+
 	switch(method){
 		default:
 			std::cerr << "Method " << method << " not supported!\n";

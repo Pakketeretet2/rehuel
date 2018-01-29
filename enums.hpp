@@ -7,6 +7,13 @@
    \brief some enums that should be exposed publicly.
 */
 
+
+#define FOREACH_MULTISTEP_METHOD(METHOD) \
+	METHOD(ADAMS_BASHFORTH, 0) \
+	METHOD(ADAMS_MOULTON,1)    \
+	METHOD(BDF, 2)             \
+
+
 // Some macro magic for enum to string and back.
 #define FOREACH_RK_METHOD(METHOD)         \
 	METHOD(EXPLICIT_EULER, 100)       \
@@ -41,13 +48,27 @@
 #define GENERATE_MAP(STRING, VAL) {#STRING, VAL},
 
 
+namespace multistep {
+
+/// \brief enumerates all implemented multistep methods.
+enum ms_methods {
+	FOREACH_MULTISTEP_METHOD(GENERATE_ENUM)
+};
+
+
+} // namespace multistep
+
+
 namespace irk {
 
 
 /// \brief enumerates all implemented RK methods.
 enum rk_methods {
 	FOREACH_RK_METHOD(GENERATE_ENUM)
+
 };
+
+
 
 
 /// \brief enumerates possible return codes.
@@ -72,8 +93,6 @@ enum odeint_status_codes {
 
 	/// The error exceeded the absolute tolerance
 	ERROR_LARGER_THAN_ABSTOL = 64
-
-
 };
 
 } // namespace irk

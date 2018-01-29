@@ -307,7 +307,7 @@ void test_newton()
 }
 
 
-void test_ode( int method, double t0, double t1, double dt )
+void test_ode_rk( int method, double t0, double t1, double dt )
 {
 	// Solve exponential ODE, check error:
 	newton::options newton_opts;
@@ -329,25 +329,79 @@ void test_ode( int method, double t0, double t1, double dt )
 	so.adaptive_step_size = false;
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
-	so.timestep_info_out_interval = 100000;
-	so.store_in_vector_every = 100000;
+	so.timestep_info_out_interval = 1;
+	so.store_in_vector_every = 1;
 	so.timestep_out = &timestep_file;
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
+	newton_opts.max_step = 0.0;
+	newton_opts.refresh_jac = false;
+	newton_opts.maxit = 100000;
+
+	exponential func( 1.0 );
+	arma::vec y0 = func.sol( t0 );
+	int status = irk::odeint( t0, t1, sc, so, y0, func, times, ys );
+
+	// Find largest error:
+	double m_abs_err = 0.0;
+	double m_rel_err = 0.0;
+
+	for( std::size_t i = 0; i < times.size(); ++i ){
+
+		double t = times[i];
+		double yn = ys[i][0];
+		double ye = func.sol(t)[0];
+		double abs_err = std::fabs( yn - ye );
+		double rel_err = abs_err == 0 ? 0.0 :
+			abs_err / std::min( yn, ye );
+
+		if( abs_err > m_abs_err ) m_abs_err = abs_err;
+		if( rel_err > m_rel_err ) m_rel_err = rel_err;
+	}
+
+	std::cout << dt << " " << m_abs_err << " " << m_rel_err << "\n";
+}
+
+
+void test_ode_multistep( int method, int order,
+                         double t0, double t1, double dt )
+{
+	// Solve exponential ODE, check error:
+	newton::options newton_opts;
+
+	std::vector<double> t_vals;
+	std::vector<arma::vec> y_vals;
+
+	newton_opts.tol = 1e-14;
 	newton_opts.max_step = 1.0;
 	newton_opts.refresh_jac = false;
 	newton_opts.maxit = 100000;
 
 	exponential func( 1.0 );
 	arma::vec y0 = { 1.0 };
-	int status = irk::odeint( t0, t1, sc, so, y0, func, times, ys );
+
+	// Integrate with multistep method.
+	multistep::solver_coeffs sc =
+		multistep::get_coefficients( method, order );
+	multistep::solver_options solver_opts
+		= multistep::default_solver_options();
+
+	solver_opts.newton_opts = &newton_opts;
+
+	sc.dt = dt;
+
+	int status = multistep::odeint( t0, t1, sc, solver_opts,
+	                                y0, func, t_vals, y_vals );
+	if( status ){
+		std::cerr << "Error " << status << " while solving ODE.\n";
+	}
 
 	// Find largest error:
 	double m_abs_err = 0.0;
 	double m_rel_err = 0.0;
-	for( std::size_t i = 0; i < times.size(); ++i ){
-		double t = times[i];
-		double yn = ys[i][0];
+	for( std::size_t i = 0; i < t_vals.size(); ++i ){
+		double t = t_vals[i];
+		double yn = y_vals[i][0];
 		double ye = func.sol( t )[0];
 		double abs_err = std::fabs( yn - ye );
 		double rel_err = abs_err / std::min( yn, ye );
@@ -356,8 +410,12 @@ void test_ode( int method, double t0, double t1, double dt )
 		if( rel_err > m_rel_err ) m_rel_err = rel_err;
 	}
 
-	std::cout << dt << " " << m_abs_err << " " << m_rel_err << "\n";
+	std::cerr << "Largest error for order " << order << ": "
+	          << m_abs_err << " " << m_rel_err << "\n";
+	std::cout << dt << " " << m_rel_err << " " << m_abs_err << "\n";
+
 }
+
 
 void test_three_body( int method, double t0, double t1, double dt,
                       double m1, double m2, double m3,
@@ -381,13 +439,13 @@ void test_three_body( int method, double t0, double t1, double dt,
 	so.abs_tol = 1e-3;
 
 	so.verbosity = 0;
-	so.timestep_info_out_interval = 500;
+	so.timestep_info_out_interval = 25;
 	so.store_in_vector_every = 1;
 	so.timestep_out = &std::cerr;
 	so.use_newton_iters_adaptive_step = true;
 	so.max_dt = 5.0;
 
-	no.maxit = 10;
+	no.maxit = 25;
 	no.precondition = true;
 	no.tol = 1e-2*so.rel_tol;
 	no.limit_step = true;
@@ -426,7 +484,20 @@ void test_three_body( int method, double t0, double t1, double dt,
 		}
 		std::cout << "\n";
 	}
+}
 
+
+void test_cyclic_buffer()
+{
+	cyclic_buffer<double> cb(5);
+	for( double t = 0; t < 12.0; t += 1.0 ) {
+		cb.push_back(t);
+		std::cerr << "Values:";
+		for( std::size_t i = 0; i < cb.size(); ++i ){
+			std::cerr << " (" << i << ", " << cb[i] << ")";
+		}
+		std::cerr << "\n";
+	}
 }
 
 
@@ -443,6 +514,7 @@ int main( int argc, char **argv )
 {
 
 	std::string method_str = irk::method_to_name( irk::IMPLICIT_EULER );
+
 	double dt = 1e-4;
 	double t0 = 0.0;
 	double t1 = 10.0;
@@ -451,11 +523,18 @@ int main( int argc, char **argv )
 	bool test_newt = false;
 	bool show_all_methods = false;
 	bool test_three_bod = false;
-	bool adaptive_step = false;
-	bool use_newton = false;
+
 	double m1 = 1.0;
 	double m2 = 1.0;
 	double m3 = 1.0;
+
+	bool adaptive_step = false;
+	bool use_newton = false;
+	bool test_mstep = false;
+	bool test_cyc_buff = false;
+
+	int multistep_order = 2;
+
 
 	cpparser parser( "rehuel", "A driver for the Rehuel library" );
 	parser.add_switch( "", "test-exponential", false,
@@ -464,6 +543,8 @@ int main( int argc, char **argv )
 	                   "Test Newton library on Rosenbrock's function." );
 	parser.add_switch( "", "print-all-methods", false,
 	                   "Prints all methods available in Rehuel." );
+	parser.add_switch( "", "test-multistep", false,
+	                   "Test multistep methods on exponential function." );
 
 	parser.add_option( "m", "method", true,
 	                   method_str, "ODE method to use." );
@@ -486,7 +567,11 @@ int main( int argc, char **argv )
 	                   "Mass of second body in three body problem." );
 	parser.add_option( "", "m3", true, m3,
 	                   "Mass of third body in three body problem." );
+	parser.add_switch( "", "test-cyclic-buffer", false,
+	                   "Tests the cyclic buffer class." );
 
+	parser.add_option( "", "multistep-order", true, multistep_order,
+	                   "Sets the order of the multistep method." );
 
 	parser.parse_cmd_line( argc, argv );
 
@@ -506,29 +591,49 @@ int main( int argc, char **argv )
 	parser_status |= parser.option_by_long( "m3", m3 );
 
 	parser_status |= parser.option_by_long( "use-newton", use_newton );
-	std::cerr << "Method is " << method_str << "!\n";
-	int method = irk::name_to_method( method_str );
+	parser_status |= parser.option_by_long( "test-multistep", test_mstep );
+
+	parser_status |= parser.option_by_long( "test-cyclic-buffer", test_cyc_buff );
+	parser_status |= parser.option_by_long( "multistep-order", multistep_order );
+
 
 	if( parser_status ){
 		std::cerr << "Something went wrong parsing args!\n";
 		return -1;
 	}
 
+	if( test_cyc_buff ) test_cyclic_buffer();
+
 	if( adaptive_step ){
 		std::cerr << "Using adaptive step!\n";
 	}else{
 		std::cerr << "Not using adaptive step!\n";
 	}
-	std::cerr << "Method is " << irk::method_to_name( method ) << ".\n";
 
 	if( test_newt ) test_newton();
 
-	if( test_exp )  test_ode( method, t0, t1, dt );
+	if( test_exp ){
+		int method = irk::name_to_method( method_str );
+		std::cerr << "Method is " << method_str << ".\n";
+		test_ode_rk( method, t0, t1, dt );
+	}
 
 	if( show_all_methods ) print_all_methods();
 
-	if( test_three_bod ) test_three_body( method, t0, t1, dt,
-	                                      m1, m2, m3, adaptive_step, use_newton );
+	if( test_three_bod ){
+		int method = irk::name_to_method( method_str );
+		test_three_body( method, t0, t1, dt,
+		                 m1, m2, m3, adaptive_step, use_newton );
+	}
+
+	if( test_mstep ){
+		std::cerr << "Testing multistep with method "
+		          << method_str << "\n";
+		int method = multistep::name_to_method( method_str );
+		std::cerr << "Method is "
+		          << multistep::method_to_name(method) << ".\n";
+		test_ode_multistep( method, multistep_order, t0, t1, dt );
+	}
 
 	return 0;
 }

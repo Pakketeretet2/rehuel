@@ -36,6 +36,7 @@
 #include "enums.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
+#include "options.hpp"
 
 /**
    \brief Namespace containing functions related to Runge-Kutta methods.
@@ -63,10 +64,11 @@ struct solver_coeffs
 	bool FSAL;
 };
 
+
 /**
    \brief options for the time integrator.
  */
-struct solver_options {
+struct solver_options : common_solver_options {
 	/// \brief Enumerates the possible internal non-linear solvers
 	enum internal_solvers {
 		BROYDEN = 0, ///< Broyden's method
@@ -74,62 +76,16 @@ struct solver_options {
 	};
 
 	/// \brief Constructor with default values.
-	solver_options()
-		: internal_solver(BROYDEN),
-		  adaptive_step_size(true),
-		  rel_tol(1e-5),
-		  abs_tol(10*rel_tol),
-		  max_dt( 100.0 ),
-		  solution_out_interval( 1000 ),
-		  timestep_info_out_interval( 1000 ),
-		  newton_opts( nullptr ),
-		  store_in_vector_every( 1 ),
-		  solution_out( nullptr ),
-		  timestep_out( nullptr ),
-		  verbosity( 0 ),
-		  constant_jac_approx( false ),
-		  use_newton_iters_adaptive_step( false )
+	solver_options() : adaptive_step_size(true),
+	                   use_newton_iters_adaptive_step( false )
 	{ }
 
 	~solver_options()
 	{ }
 
-	/// Internal non-linear solver used (see \ref internal_solvers)
-	/// Broyden typically gives good results in less time.
-	int internal_solver;
 	/// If true, attempt to perform adaptive time stepping using
 	/// an embedded pair.
 	bool adaptive_step_size;
-	/// Relative tolerance to satisfy when adaptive time stepping
-	double rel_tol;
-	/// Absolute tolerance to satisfy when adaptive time stepping
-	double abs_tol;
-	/// Maximum time step size
-	double max_dt;
-
-	/// Output interval for solution:
-	int solution_out_interval;
-
-	/// Output interval for time step size and error.
-	int timestep_info_out_interval;
-
-	/// Options for the internal solver.
-	const newton::options *newton_opts;
-
-	/// Store solution in vector every this many steps (0 to disable)
-	int store_in_vector_every;
-
-	/// Write solution to this output stream.
-	std::ostream *solution_out;
-
-	/// Write time step info to this output stream.
-	std::ostream *timestep_out;
-
-	/// if > 0, print some output.
-	int verbosity;
-
-	/// If true, use a constant Jacobi matrix approximation
-	bool constant_jac_approx;
 
 	/// If true, use newton iteration info in determining adaptive step size
 	bool use_newton_iters_adaptive_step;
@@ -472,7 +428,10 @@ int take_time_step( double t, arma::vec &y, double dt,
 	                                                         solver_opts,
 	                                                         func, stats, K,
 	                                                         success );
-
+	if( solver_opts.abort_on_solver_fail && !success ){
+		std::cerr << "Internal solver failed! Aborting!\n";
+		return GENERAL_ERROR;
+	}
 	bool increase_dt = false;
 
 
@@ -690,12 +649,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 		// Check if you need to lower dt to exactly hit
 		if( t + dt > t1 ){
-			std::cerr << "dt is too large to hit t1! " << t << " + "
-			          << dt << " = " << t + dt << " > "
-			          << t1 << "! ";
 			dt = t1 - t;
 			old_dt = dt;
-			std::cerr << "Switching to dt = " << dt << ".\n";
 		}
 
 		if( explicit_method ){
@@ -759,11 +714,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 		if( status & DT_TOO_SMALL ){
 			change_dt = adaptive_dt;
-
-			if( !change_dt ){
-				dt *= 1.2;
-				dt = std::min( dt, max_dt );
-			}
 		}
 
 
