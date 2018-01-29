@@ -1,0 +1,52 @@
+
+set grid
+set log xy
+set format x "10^{%T}"
+set format y "10^{%T}"
+set xrange[1e-5:1]
+set yrange[1e-16:1]
+set key bottom right
+
+set label 1 'x^1, EE, IE' at 4e-5, 0.02
+set arrow 1 from 5.6e-5, 0.01 to 7e-5, 1.4e-5
+
+set label 2 'x^2, IM, LA_{21}, LC_{21}' at 0.0002, 3.2e-6
+set arrow 2 from 0.0003, 7.97e-7 to 0.000317379, 3.328e-9
+
+set label 3 'x^3, BS_{32}, R1_{32}, R2_{32}' at 0.000526, 8.093e-10
+set arrow 3 from 0.00062311, 3.06174e-10 to 0.0008077, 1.16e-11
+
+set label 4 'x^4, GL_{42}, LA_{43}, LC_{43}' at 0.003419, 8.885e-11
+set arrow 4 from 0.00551, 3.076e-11 to 0.007142, 1.0709e-12
+
+set label 5 'x^5, R1_{54}, R2_{54}, CK_{54}, DP_{54}, F_{54}' at 0.077728, 2.6303e-15
+set arrow 5 from 0.1306, 9.0637e-15 to 0.030542, 2.8308e-12
+
+set label 6 'x^6, GL_{63}, LA_{65}, LC_{65}' at 0.177815, 2.17156e-12
+set arrow 6 from 0.35466, 5.7403e-12 to 0.328097, 5.1770e-9
+
+plot 'err_EXPLICIT_EULER.dat'      u 1:2 w p pt  7 ps 1.5 lw 2 ti '' \
+   , 'err_IMPLICIT_EULER.dat'      u 1:2 w p pt  7 ps 1.5 lw 2 ti '' \
+   , 'err_IMPLICIT_MIDPOINT.dat'   u 1:2 w p pt  3 ps 1.5 lw 2 ti '' \
+   , 'err_BOGACKI_SHAMPINE_32.dat' u 1:2 w p pt  5 ps 1.5 lw 2 ti '' \
+   , 'err_CASH_KARP_54.dat'        u 1:2 w p pt  1 ps 1.5 lw 2 ti '' \
+   , 'err_DORMAND_PRINCE_54.dat'   u 1:2 w p pt  2 ps 1.5 lw 2 ti '' \
+   , 'err_FEHLBERG_54.dat'         u 1:2 w p pt  4 ps 1.5 lw 2 ti '' \
+   , 'err_LOBATTO_IIIA_21.dat'     u 1:2 w p pt  6 ps 1.5 lw 2 ti '' \
+   , 'err_LOBATTO_IIIA_43.dat'     u 1:2 w p pt  8 ps 1.5 lw 2 ti '' \
+   , 'err_LOBATTO_IIIC_21.dat'     u 1:2 w p pt  9 ps 1.5 lw 2 ti '' \
+   , 'err_LOBATTO_IIIC_43.dat'     u 1:2 w p pt 10 ps 1.5 lw 2 ti '' \
+   , 'err_RADAU_IA_32.dat'         u 1:2 w p pt 11 ps 1.5 lw 2 ti '' \
+   , 'err_RADAU_IA_54.dat'         u 1:2 w p pt 12 ps 1.5 lw 2 ti '' \
+   , 'err_RADAU_IIA_32.dat'        u 1:2 w p pt 13 ps 1.5 lw 2 ti '' \
+   , 'err_RADAU_IIA_54.dat'        u 1:2 w p pt 14 ps 1.5 lw 2 ti '' \
+   , 'err_GAUSS_LEGENDRE_42.dat'   u 1:2 w p pt 15 ps 1.5 lw 2 ti '' \
+   , 'err_GAUSS_LEGENDRE_63.dat'   u 1:2 w p pt 16 ps 1.5 lw 2 ti '' \
+   , 'err_LOBATTO_IIIA_65.dat'     u 1:2 w p pt 17 ps 1.5 lw 2 ti '' \
+   , 'err_LOBATTO_IIIC_65.dat'     u 1:2 w p pt 18 ps 1.5 lw 2 ti '' \
+   , 0.2*x**1 w l lw 2 dt 2 lc rgb "#CC0000" ti '' \
+   , 0.03*x**2 w l lw 2 dt 2 lc rgb "#000000" ti '' \
+   , 0.02*x**3 w l lw 2 dt 2 lc rgb "#00CC00" ti '' \
+   , 0.0004*x**4 w l lw 2 dt 2 lc rgb "#CC00CC" ti '' \
+   , 0.0001*x**5 w l lw 2 dt 2 lc rgb "#444444" ti '' \
+   , 0.000004*x**6 w l lw 2 dt 2 lc rgb "#CCCC00" ti ''

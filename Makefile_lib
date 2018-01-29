@@ -3,7 +3,7 @@ FLAGS = -std=c++11 -pedantic -g -O2 -shared -ffast-math -fPIC \
         -Werror=return-type -Werror=uninitialized -Wall -Werror
 
 LNK = -L./ -larmadillo
-INC = -I./
+INC = -I./ -I./my_timer
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
