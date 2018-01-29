@@ -330,7 +330,7 @@ void test_ode( int method, double t0, double t1, double dt )
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
 	so.timestep_info_out_interval = 100000;
-	so.store_in_vector_every = 100000;
+	so.store_in_vector_every = 1;
 	so.timestep_out = &timestep_file;
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
