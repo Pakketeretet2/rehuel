@@ -50,7 +50,8 @@ enum newton_solve_ret_codes {
 */
 struct options {
 	options() : tol(1e-4), maxit(500), time_internals(false),
-	            max_step(-1), refresh_jac(true), precondition(false){}
+	            max_step(-1), refresh_jac(true), precondition(false),
+	            limit_step(false) {}
 
 	double tol;           ///< Desired tolerance.
 	int maxit;            ///< Maximum number of iterations
