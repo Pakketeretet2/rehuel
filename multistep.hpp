@@ -261,13 +261,7 @@ int bootstrap_init( double t, const arma::vec &y0,
 	// at least the desired order.
 
 	int target_order = sc.order;
-	int method = irk::RADAU_IIA_32;
-	if( target_order > 3 ){
-		method = irk::RADAU_IIA_54;
-	}
-	if( target_order > 5 ){
-		method = irk::LOBATTO_IIIC_65;
-	}
+	int method = irk::LOBATTO_IIIC_65;
 
 	irk::solver_options opts = irk::default_solver_options();
 	irk::solver_coeffs irk_sc = irk::get_coefficients( method );
@@ -282,6 +276,8 @@ int bootstrap_init( double t, const arma::vec &y0,
 	opts.constant_jac_approx = solver_opts.constant_jac_approx;
 	opts.adaptive_step_size  = true;
 	opts.use_newton_iters_adaptive_step = true;
+
+	irk_sc.dt = 0.001 * dt;
 
 	std::vector<double> ts;
 	std::vector<arma::vec> ys;
@@ -345,20 +341,28 @@ int odeint( double t0, double t1,
 	last_ys.push_back( std::make_pair( t, y ) );
 	last_fs.push_back( std::make_pair( t, func.fun( t, y ) ) );
 
+	// Lambda for printing the solution to file:
+	auto print_solution_out = [&step, &t, &y, &solver_opts]{
+		if( !solver_opts.solution_out ) return;
+		*solver_opts.solution_out << step << "  " << t;
+		for( std::size_t i = 0; i < y.size(); ++i ){
+			*solver_opts.solution_out << " " << y[i];
+		}
+		*solver_opts.solution_out << "\n"; };
+
+	if( solver_opts.solution_out ){
+		*solver_opts.solution_out << "# step   time   ys...\n";
+		print_solution_out();
+	}
+
 
 
 	// Bootstrap the methods:
 	int order = 0;
 	int bootstrap_status = bootstrap_init( t, y, last_ys, dt, stats, sc,
 	                                       solver_opts, func );
-	std::cerr << "Bootstrapped values for order " << sc.order << ":\n";
-	for( std::size_t i = 0; i < last_ys.size(); ++i ){
-		std::cerr << last_ys[i].first;
-		for( std::size_t j = 0; j < last_ys[i].second.size(); ++j ){
-			std::cerr << " " << last_ys[i].second(j);
-		}
-		std::cerr << "\n";
-	}
+	std::cerr << "Done bootstrapping, status = "
+	          << bootstrap_status << ".\n";
 
 	t = last_ys[0].first;
 	y = last_ys[0].second;
@@ -370,14 +374,14 @@ int odeint( double t0, double t1,
 		last_fs.push_back( std::make_pair( ti, func.fun( ti, yi ) ) );
 	}
 
-	std::cerr << "\n\nAfter bootstrapping we have " << last_ys.size()
-	          << " values and t = " << t << ".\n";
-
-
 	if( bootstrap_status ){
 		std::cerr << "Error while bootstrapping method!\n";
 		return bootstrap_status;
 	}
+
+
+
+
 
 	while( t < t1 ){
 		arma::vec yn(y);
@@ -413,10 +417,17 @@ int odeint( double t0, double t1,
 			last_fs.push_back( std::make_pair(t, func.fun(t, y)) );
 
 
-			if( step % solver_opts.store_in_vector_every == 0 ){
+			if( solver_opts.store_in_vector_every &&
+			    (step % solver_opts.store_in_vector_every == 0) ){
 				y_vals.push_back(y);
 				t_vals.push_back(t);
 			}
+
+			if( solver_opts.solution_out &&
+			    (step % solver_opts.solution_out_interval == 0) ){
+				print_solution_out();
+			}
+
 		}
 	}
 

@@ -557,17 +557,16 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	assert( sc.dt > 0 && "Cannot use time step size of 0!" );
 
 
-
 	double dt = sc.dt;
 	double err = 0.0;
 	double old_err = err;
 	bool adaptive_dt = solver_opts.adaptive_step_size;
+
 	if( adaptive_dt ){
 		if( sc.b2.size() != sc.b.size() ){
-			if( solver_opts.verbosity ){
-				std::cerr << "Adaptive time step requested but "
-					"chosen method has no embedded pair!\n";
-			}
+			std::cerr << "WARNING: Adaptive time step requested "
+			          << "but chosen method has no embedded "
+			          << " pair!\n";
 			adaptive_dt = false;
 		}
 	}else if( solver_opts.verbosity ){
@@ -687,7 +686,6 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 					std::cerr << "    " << p.second << "\n";
 				}
 			}
-
 		}
 
 
@@ -697,9 +695,11 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			}
 			return GENERAL_ERROR;
 		}
+
 		if( status & INTERNAL_SOLVE_FAILURE ){
 			status |= DT_TOO_LARGE;
 		}
+
 		if( status & DT_TOO_LARGE ){
 			change_dt = adaptive_dt;
 
@@ -729,6 +729,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			}
 
 			if( solver_opts.verbosity ){
+				std::cerr << "Increasing dt...\n";
 				if( err > tol ){
 					std::cerr << "Err was too big: " << err
 					          << ".\nThis was step "
