@@ -286,7 +286,8 @@ int bootstrap_init( double t, const arma::vec &y0,
 	// If target_order = 6, then we have 6 ys to store,
 	// but the first is already known, so only find target_order-1 more.
 	int irk_status = 0;
-	while( last_ys.size() < target_order ){
+	int num_ys = last_ys.size();
+	while( num_ys < target_order ){
 		irk_status = irk::odeint( t, t + dt, irk_sc, opts,
 		                          yn, func, ts, ys );
 		if( irk_status ) return irk_status;
@@ -313,7 +314,7 @@ int odeint( double t0, double t1,
             std::vector<arma::vec> &y_vals )
 {
 	double t = t0;
-	int step = 0;
+	unsigned long long int step = 0;
 
 	assert( solver_opts.newton_opts && "Newton options not set!" );
 

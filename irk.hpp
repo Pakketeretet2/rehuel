@@ -101,6 +101,13 @@ static std::map<std::string,int> rk_string_to_method = {
 };
 
 
+/**
+   \brief This allows for optimizations when determining stages.
+*/
+enum method_traits { IMPLICIT = 0,
+                     EXPLICIT = 1,
+                     SDIRK    = 2 };
+
 
 /**
    \brief Returns a vector with all method names.
@@ -136,6 +143,18 @@ solver_coeffs get_coefficients( int method );
    \brief Checks if the given method is explicit.
 */
 bool is_method_explicit( const solver_coeffs &sc );
+
+/**
+   \brief Checks if the given method is diagonally implicit.
+*/
+bool is_method_dirk( const solver_coeffs &sc );
+
+/**
+   \brief Checks if the given method is singly diagonally implicit.
+*/
+bool is_method_sdirk( const solver_coeffs &sc );
+
+
 
 
 /**
@@ -325,7 +344,7 @@ struct newton_wrapper
    \brief Calculates the RK stages.
 
 */
-template <typename functor_type, bool is_explicit> inline
+template <typename functor_type, int method_type> inline
 arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
                          const solver_coeffs &sc,
                          const solver_options &solver_opts,
@@ -333,26 +352,6 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
                          const arma::vec &K, bool &success )
 {
 	arma::vec KK = K;
-	auto J = construct_J( t, y, KK, dt, sc, func );
-
-
-	// Use newton iteration to find the Ks for the next level:
-	auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
-		return construct_F( t, y, K, dt, sc, func );
-	};
-
-	auto stages_jac = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
-		return construct_J( t, y, K, dt, sc, func );
-	};
-
-
-	// Approximate the Jacobi matrix as constant...
-	// auto stages_jac_const = [&J]( double t, const arma::vec &K ){ return J; };
-
-	newton_wrapper<decltype(stages_func), decltype(stages_jac),
-	               typename functor_type::jac_type>
-		nw( stages_func, stages_jac );
-
 	const newton::options &opts = *solver_opts.newton_opts;
 	my_timer timer_step( std::cerr );
 
@@ -361,12 +360,12 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 
 	// Check if the method is explicit or implicit:
 
-	if( is_explicit ){
+	if( method_type & EXPLICIT ){
 		// No need to solve with Newton:
 		for( std::size_t i = 0; i < Ns; ++i ){
 			std::size_t offset = i*Neq;
 			arma::vec yi = y;
-			for( std::size_t j = 0; j < Ns; ++j ){
+			for( std::size_t j = 0; j < i; ++j ){
 				std::size_t delta = j*Neq;
 				auto Ki = KK.subvec( delta, delta + Neq - 1 );
 				yi += dt * sc.A(i,j) * Ki;
@@ -375,16 +374,115 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 				= func.fun( t + sc.c[i]*dt, yi );
 		}
 		success = true;
+
+	}else if( false && (method_type & SDIRK) ){
+		// In this case the solution is simplified, because Newton
+		// iteration simplifies to Ns times solving a system of NeqxNeq
+
+		auto single_stage_func = [&t, &y, &dt, &sc, &func]
+			(const arma::vec &k1, const arma::vec &k_rest ){
+			return func.fun( t + sc.c[0]*dt, y + dt*sc.A(0,0)*k1 + k_rest ) - k1;
+		};
+
+		typename functor_type::jac_type I_k1( y.size(), y.size() );
+		I_k1.eye();
+
+		auto single_stage_jac = [&t, &y, &dt, &sc, &func, &I_k1]
+			( const arma::vec &k1, const arma::vec &k_rest ){
+			return func.jac( t + sc.c[0]*dt, y + dt*sc.A(0,0)*k1 + k_rest ) - I_k1;
+		};
+
+
+		for( std::size_t i = 0; i < Ns; ++i ){
+			arma::vec k_rest;
+			k_rest.zeros( Neq );
+			for( std::size_t j = 0; j < i; ++j ){
+				std::size_t delta = j*Neq;
+				auto Ki = KK.subvec( delta, delta + Neq - 1 );
+				k_rest += dt * sc.A(i,j) * Ki;
+			}
+
+			auto ki_func = [&single_stage_func, &k_rest]( const arma::vec &ki ){
+				return single_stage_func( ki, k_rest ); };
+			auto ki_jac  = [&single_stage_jac, k_rest]( const arma::vec &ki ){
+				return single_stage_jac( ki, k_rest ); };
+
+			newton_wrapper<decltype(ki_func),
+			               decltype(ki_jac),
+			               typename functor_type::jac_type>
+				nw_ki( ki_func, ki_jac );
+
+			arma::vec ki_sol;
+
+			switch( solver_opts.internal_solver ){
+				case solver_options::NEWTON:
+					ki_sol = newton::newton_iterate( nw_ki, k_rest,
+					                                 opts, stats );
+				default:
+				case solver_options::BROYDEN:
+					ki_sol = newton::broyden_iterate( nw_ki, k_rest,
+					                                  opts, stats );
+					break;
+			}
+
+			success = stats.conv_status == newton::SUCCESS;
+			if( !success ) return KK;
+			std::size_t offset = i * Neq;
+			std::size_t delta  = Neq;
+			KK.subvec(offset, offset + delta - 1) = ki_sol;
+		}
 	}else{
-		switch( solver_opts.internal_solver ){
-			case solver_options::NEWTON:
-				KK = newton::newton_iterate( nw, K,
-				                             opts, stats );
-		default:
-			case solver_options::BROYDEN:
-				KK = newton::broyden_iterate( nw, K,
-				                              opts, stats );
-				break;
+
+		// For the SDIRK, use constant J but keep same for the rest.
+
+		auto J = construct_J( t, y, KK, dt, sc, func );
+
+		// Use newton iteration to find the Ks for the next level:
+		auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+			return construct_F( t, y, K, dt, sc, func );
+		};
+
+		auto stages_jac = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+			return construct_J( t, y, K, dt, sc, func );
+		};
+
+		auto stages_jac_const = [&J]( const arma::vec &K ){
+			return J;
+		};
+
+		newton_wrapper<decltype(stages_func), decltype(stages_jac_const),
+		               typename functor_type::jac_type>
+			nw_const_J( stages_func, stages_jac_const );
+
+		newton_wrapper<decltype(stages_func), decltype(stages_jac),
+		               typename functor_type::jac_type>
+			nw_update_jac( stages_func, stages_jac );
+
+
+		if( solver_opts.constant_jac_approx ){
+			switch( solver_opts.internal_solver ){
+				case solver_options::NEWTON:
+					KK = newton::newton_iterate( nw_const_J, K,
+					                             opts, stats );
+					break;
+				default:
+				case solver_options::BROYDEN:
+					KK = newton::broyden_iterate( nw_const_J, K,
+					                              opts, stats );
+					break;
+			}
+		}else{
+			switch( solver_opts.internal_solver ){
+				case solver_options::NEWTON:
+					KK = newton::newton_iterate( nw_update_jac, K,
+					                             opts, stats );
+					break;
+				default:
+				case solver_options::BROYDEN:
+					KK = newton::broyden_iterate( nw_update_jac, K,
+					                              opts, stats );
+					break;
+			}
 		}
 		success = stats.conv_status == newton::SUCCESS;
 	}
@@ -412,7 +510,7 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 
    \returns a status code (see \ref odeint_status_codes)
 */
-template <typename functor_type, bool is_explicit> inline
+template <typename functor_type, int method_type> inline
 int take_time_step( double t, arma::vec &y, double dt,
                     newton::status &stats,
                     const irk::solver_coeffs &sc,
@@ -424,7 +522,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 	std::size_t Ns  = sc.b.size();
 
 	bool success = false;
-	arma::vec KK = get_rk_stages<functor_type, is_explicit>( t, y, dt, sc,
+	arma::vec KK = get_rk_stages<functor_type, method_type>( t, y, dt, sc,
 	                                                         solver_opts,
 	                                                         func, stats, K,
 	                                                         success );
@@ -576,7 +674,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	arma::vec y = y0;
 	std::vector<double> tt;
 	std::vector<arma::vec> yy;
-	int steps = 0;
+	unsigned long long int steps = 0;
 
 	if( solver_opts.store_in_vector_every ){
 		tt.push_back(t);
@@ -636,9 +734,18 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	double max_dt = solver_opts.max_dt;
 
 	bool explicit_method = irk::is_method_explicit( sc );
+	bool sdirk_method    = irk::is_method_sdirk( sc );
 
 	int rejected_steps = 0;
 	int latest_n_rejected_steps = 0;
+
+	int method_type = 0;
+	if( explicit_method ){
+		method_type += EXPLICIT;
+	}
+	if( sdirk_method ){
+		method_type += SDIRK;
+	}
 
 	while( t < t1 ){
 
@@ -652,21 +759,25 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			old_dt = dt;
 		}
 
-		if( explicit_method ){
-			status = take_time_step<functor_type, true>( t, y, dt,
-			                                             newton_stats,
-			                                             sc, solver_opts,
-			                                             func, adaptive_dt,
-			                                             err, K );
+		if( method_type & EXPLICIT ){
+			const auto& stepper = take_time_step<functor_type, EXPLICIT>;
+			status = stepper( t, y, dt, newton_stats, sc,
+			                  solver_opts, func, adaptive_dt,
+			                  err, K );
 
 			// To make sure get_better_timestep works:
 			newton_stats.iters = 1;
+		}else if( method_type & SDIRK ){
+			const auto& stepper = take_time_step<functor_type, SDIRK>;
+			status = stepper( t, y, dt, newton_stats, sc,
+			                  solver_opts, func, adaptive_dt,
+			                  err, K );
+
 		}else{
-			status = take_time_step<functor_type, false>( t, y, dt,
-			                                              newton_stats,
-			                                              sc, solver_opts,
-			                                              func, adaptive_dt,
-			                                              err, K );
+			const auto& stepper = take_time_step<functor_type, IMPLICIT>;
+			status = stepper( t, y, dt, newton_stats, sc,
+			                  solver_opts, func, adaptive_dt,
+			                  err, K );
 		}
 
 		if( solver_opts.verbosity ){
@@ -825,7 +936,11 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	}else if( solver_opts.internal_solver == solver_options::BROYDEN ){
 		timer_msg += "broyden";
 	}
-	timer.toc( timer_msg );
+	timer_msg += " (" + std::to_string( steps ) + " steps)";
+
+	double t_diff_msec = timer.toc( timer_msg );
+	double throughput = 1000 * steps / t_diff_msec;
+	std::cerr << "    Performance: " << throughput << " steps/second.\n\n";
 
 	// If everything was fine, store the obtained results
 	t_vals = tt;

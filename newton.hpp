@@ -85,6 +85,28 @@ struct status {
 	bool store_final_J;  ///< If true, the final value of J(x) is stored
 };
 
+/**
+   \brief this function selects between solve and spsolve.
+
+   Implementation for full matrices.
+*/
+inline arma::vec solve_impl( const arma::mat &A, const arma::vec &b )
+{
+	return arma::solve(A,b);
+}
+
+/**
+   \brief this function selects between solve and spsolve.
+
+   Implementation for sparse matrices
+*/
+inline arma::vec solve_impl( const arma::sp_mat &A, const arma::vec &b )
+{
+	return arma::spsolve(A,b);
+}
+
+
+
 
 
 /**
@@ -302,10 +324,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	else max_step2 = -1;
 
 	auto J = func.jac(x);
-	if( !refresh_jac ){
-		// Then you might as well LU decompose the system here:
-		arma::lu( L, U, J );
-	}
 
 	typename functor_type::jac_type P;
 	P.eye(N,N);
@@ -323,15 +341,10 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 			for( std::size_t i = 0; i < N; ++i ){
 				P(i,i) = 1.0 / J(i,i);
 			}
-			direction = -arma::solve(P*J, P*r);
-
-		}else if( !refresh_jac ){
-
-			arma::vec tmp = arma::solve( arma::trimatl(L), r );
-			direction = -arma::solve(arma::trimatu(U), tmp);
+			direction = -solve_impl(P*J, P*r);
 
 		}else{
-			direction = -arma::solve(J, r);
+			direction = -solve_impl(J, r);
 		}
 
 		if( max_step2 > 0 ){
@@ -344,8 +357,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 		x = x0 + direction;
 		if( refresh_jac ){
-			auto Jn = func.jac(x);
-			if( arma::rcond(Jn) >= opts.tol ) J = Jn;
+			J = func.jac(x);
 		}
 
 		r = func.fun(x);

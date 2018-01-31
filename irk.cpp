@@ -386,6 +386,24 @@ solver_coeffs get_coefficients( int method )
 
 			break;
 		}
+			/*
+		case SDIRK_L_43:{
+			assert( false && "SDIRK_L_43 not supported!" );
+			sc.A = { {0.25,  0.0, 0.0, 0.0, 0.0 },
+			         {0.5 , 0.25, 0.0, 0.0, 0.0 },
+			         {17/50.0, -1/25.0, 0.25, 0.0, 0.0 },
+			         {371/1360.0, -137/2720.0, 15/544.0, 0.25, 0.0},
+			         {25/24.0, -49/48.0, 125/16.0, -85/12.0, 0.25} };
+			sc.b  = { 25/24.0, -49/48.0, 125/16.0, -85/12.0, 0.25 };
+			sc.b2 = { 59/48.0, -17/96.0, 225/32.0, -85/12.0, 0.0 };
+			sc.c  = { 0.25, 0.75, 11.0/20.0, 0.5, 1.0 };
+			sc.order = 4;
+			sc.order2 = 3;
+
+			break;
+		}
+			*/
+
 	}
 
 	// Some checks:
@@ -510,5 +528,38 @@ bool is_method_explicit( const solver_coeffs &sc )
 	}
 	return true;
 }
+
+
+bool is_method_dirk( const solver_coeffs &sc )
+{
+	bool is_explicit = is_method_explicit(sc);
+	if( is_explicit ) return false;
+
+	for( std::size_t i = 0; i < sc.b.size(); ++i ){
+		// The diagonal is already determined to not be 0.
+		for( std::size_t j = i+1; j < sc.b.size(); ++j ){
+			if( sc.A(i,j) != 0 ){
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+
+bool is_method_sdirk( const solver_coeffs &sc )
+{
+	bool is_dirk = is_method_dirk( sc );
+	if( !is_dirk ) return false;
+
+	// Check that all diagonal elements are equal:
+	for( std::size_t i = 0; i < sc.b.size()-1; ++i ){
+		if( sc.A(i,i) != sc.A(i+1,i+1) ) return false;
+	}
+
+	return true;
+}
+
 
 } // namespace irk

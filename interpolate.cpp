@@ -1,5 +1,7 @@
 #include "interpolate.hpp"
 
+#include <cassert>
+
 namespace interpolate {
 
 std::vector<arma::vec> linear( const std::vector<double> &x_vals,
@@ -59,5 +61,58 @@ std::vector<arma::vec> linear( const std::vector<double> &x_vals,
 
 	return interp;
 }
+
+
+
+double newton_formula( const std::vector<double> &x_pts,
+                       const std::vector<double> &y_pts,
+                       double x )
+{
+	// Construct the polynomial.
+	// int poly_order = x_pts.size() - 1;
+	assert( x_pts.size() == y_pts.size() &&
+	        "Interpolate should have equal number of xs and ys!" );
+
+	int npts = x_pts.size();
+	assert( npts > 1 &&
+	        "I need at least two points to interpolate!" );
+
+	double xlo = *std::min_element( x_pts.begin(), x_pts.end() );
+	double xhi = *std::max_element( x_pts.begin(), x_pts.end() );
+
+	// Check to make sure x is inside x_pts.
+	if( x < xlo || x > xhi ){
+		std::cerr << "Warning! Target x " << x << " is out of range [ "
+		          << xlo << ", " << xhi << " ]!\n";
+	}
+
+
+	std::vector<double> dx( npts );
+	for( int i = 0; i < npts; ++i ){
+		dx[i] = x - x_pts[i];
+	}
+
+	// Construct the Legendre polynomials:
+	double y = 0.0;
+	for( int i = 0; i < npts; ++i ){
+		double nom = 1.0;
+		double den = 1.0;
+		for( int j = 0; j < i; ++j ){
+			nom *= dx[j];
+			den *= x_pts[i] - x_pts[j];
+		}
+		for( int j = i+1; j < npts; ++j ){
+			nom *= dx[j];
+			den *= x_pts[i] - x_pts[j];
+		}
+		y += nom * y_pts[i] / den;
+	}
+
+	return y;
+}
+
+
+
+
 
 } // namespace interpolate
