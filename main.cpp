@@ -307,7 +307,7 @@ void test_newton()
 }
 
 
-void test_ode_rk( int method, double t0, double t1, double dt )
+void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 {
 	// Solve exponential ODE, check error:
 	newton::options newton_opts;
@@ -325,13 +325,14 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 
 	std::ofstream timestep_file( "timesteps.dat" );
 
-	so.internal_solver = irk::solver_options::BROYDEN;
+	so.internal_solver = irk::solver_options::NEWTON;
 	so.adaptive_step_size = false;
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
 	so.timestep_info_out_interval = 1;
 	so.store_in_vector_every = 1;
 	so.timestep_out = &timestep_file;
+	so.constant_jac_approx = const_jac;
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
 	newton_opts.max_step = 0.0;
@@ -532,6 +533,7 @@ int main( int argc, char **argv )
 	bool use_newton = false;
 	bool test_mstep = false;
 	bool test_cyc_buff = false;
+	bool const_jac = false;
 
 	int multistep_order = 2;
 
@@ -572,6 +574,9 @@ int main( int argc, char **argv )
 
 	parser.add_option( "", "multistep-order", true, multistep_order,
 	                   "Sets the order of the multistep method." );
+	parser.add_switch( "", "constant-jacobi-matrix", false,
+	                   "Approximate the Jacobi matrix as constant each stage." );
+
 
 	parser.parse_cmd_line( argc, argv );
 
@@ -595,6 +600,8 @@ int main( int argc, char **argv )
 
 	parser_status |= parser.option_by_long( "test-cyclic-buffer", test_cyc_buff );
 	parser_status |= parser.option_by_long( "multistep-order", multistep_order );
+	parser_status |= parser.option_by_long( "constant-jacobi-matrix", const_jac );
+
 
 
 	if( parser_status ){
@@ -615,7 +622,7 @@ int main( int argc, char **argv )
 	if( test_exp ){
 		int method = irk::name_to_method( method_str );
 		std::cerr << "Method is " << method_str << ".\n";
-		test_ode_rk( method, t0, t1, dt );
+		test_ode_rk( method, t0, t1, dt, const_jac );
 	}
 
 	if( show_all_methods ) print_all_methods();
