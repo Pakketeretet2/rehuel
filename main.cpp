@@ -22,9 +22,10 @@
    \file main.cpp
 */
 #include "cpparser.hpp"
-#include "interpolate.hpp"
+#include "integrator_io.hpp"
 #include "rehuel.hpp"
 #include "odes.hpp"
+
 
 #include <cmath>
 #include <iostream>
@@ -314,6 +315,20 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 	irk::solver_options so = irk::default_solver_options();
 	irk::solver_coeffs  sc = irk::get_coefficients( method );
 
+	integrator_io::spaced_grid_info spaced_grid;
+	spaced_grid.t0 = t0;
+	spaced_grid.t1 = t1;
+	int Npts = 1001;
+	spaced_grid.dt = (t1 - t0) / (Npts - 1.0);
+	std::cerr << "Printing sol every " << spaced_grid.dt << " times.\n";
+
+	auto output_mode = integrator_io::integrator_output::SPACED_GRID;
+	integrator_io::integrator_output output( output_mode,
+	                                         &std::cout, 100, &std::cerr );
+
+	output.set_spaced_grid( t0, t1, (t1 - t0) / (Npts - 1.0) );
+	so.output = &output;
+
 	std::cerr << "Finding largest error for dt = " << dt << " on interval ["
 	          << t0 << ", " << t1 << "]\n";
 
@@ -323,15 +338,10 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 	std::vector<double> times;
 	std::vector<arma::vec> ys;
 
-	std::ofstream timestep_file( "timesteps.dat" );
-
-	so.internal_solver = irk::solver_options::BROYDEN;
+	so.internal_solver = irk::solver_options::NEWTON;
 	so.adaptive_step_size = false;
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
-	so.timestep_info_out_interval = 1;
-	so.store_in_vector_every = 1;
-	so.timestep_out = &timestep_file;
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
 	newton_opts.max_step = 0.0;
@@ -340,26 +350,8 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 
 	exponential func( 1.0 );
 	arma::vec y0 = func.sol( t0 );
-	int status = irk::odeint( t0, t1, sc, so, y0, func, times, ys );
+	int status = irk::odeint( t0, t1, sc, so, y0, func );
 
-	// Find largest error:
-	double m_abs_err = 0.0;
-	double m_rel_err = 0.0;
-
-	for( std::size_t i = 0; i < times.size(); ++i ){
-
-		double t = times[i];
-		double yn = ys[i][0];
-		double ye = func.sol(t)[0];
-		double abs_err = std::fabs( yn - ye );
-		double rel_err = abs_err == 0 ? 0.0 :
-			abs_err / std::min( yn, ye );
-
-		if( abs_err > m_abs_err ) m_abs_err = abs_err;
-		if( rel_err > m_rel_err ) m_rel_err = rel_err;
-	}
-
-	std::cout << dt << " " << m_abs_err << " " << m_rel_err << "\n";
 }
 
 
@@ -390,8 +382,7 @@ void test_ode_multistep( int method, int order,
 
 	sc.dt = dt;
 
-	int status = multistep::odeint( t0, t1, sc, solver_opts,
-	                                y0, func, t_vals, y_vals );
+	int status = multistep::odeint( t0, t1, sc, solver_opts, y0, func );
 	if( status ){
 		std::cerr << "Error " << status << " while solving ODE.\n";
 	}
@@ -439,9 +430,6 @@ void test_three_body( int method, double t0, double t1, double dt,
 	so.abs_tol = 1e-3;
 
 	so.verbosity = 0;
-	so.timestep_info_out_interval = 25;
-	so.store_in_vector_every = 1;
-	so.timestep_out = &std::cerr;
 	so.use_newton_iters_adaptive_step = true;
 	so.max_dt = 5.0;
 
@@ -467,7 +455,7 @@ void test_three_body( int method, double t0, double t1, double dt,
 	std::vector<double> times;
 
 	std::cerr << "Integrating three-body problem...\n";
-	int status = irk::odeint( t0, t1, sc, so, y0, three_bod, times, ys );
+	int status = irk::odeint( t0, t1, sc, so, y0, three_bod );
 	std::cerr << "status is " << status << "!\n";
 
 	for( std::size_t i = 0; i < times.size(); ++i ){
