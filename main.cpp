@@ -308,7 +308,7 @@ void test_newton()
 }
 
 
-void test_ode_rk( int method, double t0, double t1, double dt )
+void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 {
 	// Solve exponential ODE, check error:
 	newton::options newton_opts;
@@ -335,13 +335,15 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 	so.newton_opts = &newton_opts;
 	sc.dt = dt;
 
-	std::vector<double> times;
-	std::vector<arma::vec> ys;
-
+	so.internal_solver = irk::solver_options::NEWTON;
 	so.internal_solver = irk::solver_options::NEWTON;
 	so.adaptive_step_size = false;
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
+	so.constant_jac_approx = const_jac;
+
+	integrator_io::vector_output vec_out;
+	output.set_vector_output( 1, &vec_out );
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
 	newton_opts.max_step = 0.0;
@@ -352,6 +354,24 @@ void test_ode_rk( int method, double t0, double t1, double dt )
 	arma::vec y0 = func.sol( t0 );
 	int status = irk::odeint( t0, t1, sc, so, y0, func );
 
+	// Find largest error:
+	double m_abs_err = 0.0;
+	double m_rel_err = 0.0;
+
+	for( std::size_t i = 0; i < vec_out.t_vals.size(); ++i ){
+
+		double t = vec_out.t_vals[i];
+		double yn = vec_out.y_vals[i][0];
+		double ye = func.sol(t)[0];
+		double abs_err = std::fabs( yn - ye );
+		double rel_err = abs_err == 0 ? 0.0 :
+			abs_err / std::min( yn, ye );
+
+		if( abs_err > m_abs_err ) m_abs_err = abs_err;
+		if( rel_err > m_rel_err ) m_rel_err = rel_err;
+	}
+
+	std::cout << dt << " " << m_abs_err << " " << m_rel_err << "\n";
 }
 
 
@@ -520,6 +540,7 @@ int main( int argc, char **argv )
 	bool use_newton = false;
 	bool test_mstep = false;
 	bool test_cyc_buff = false;
+	bool const_jac = false;
 
 	int multistep_order = 2;
 
@@ -560,6 +581,9 @@ int main( int argc, char **argv )
 
 	parser.add_option( "", "multistep-order", true, multistep_order,
 	                   "Sets the order of the multistep method." );
+	parser.add_switch( "", "constant-jacobi-matrix", false,
+	                   "Approximate the Jacobi matrix as constant each stage." );
+
 
 	parser.parse_cmd_line( argc, argv );
 
@@ -583,6 +607,8 @@ int main( int argc, char **argv )
 
 	parser_status |= parser.option_by_long( "test-cyclic-buffer", test_cyc_buff );
 	parser_status |= parser.option_by_long( "multistep-order", multistep_order );
+	parser_status |= parser.option_by_long( "constant-jacobi-matrix", const_jac );
+
 
 
 	if( parser_status ){
@@ -603,7 +629,7 @@ int main( int argc, char **argv )
 	if( test_exp ){
 		int method = irk::name_to_method( method_str );
 		std::cerr << "Method is " << method_str << ".\n";
-		test_ode_rk( method, t0, t1, dt );
+		test_ode_rk( method, t0, t1, dt, const_jac );
 	}
 
 	if( show_all_methods ) print_all_methods();
