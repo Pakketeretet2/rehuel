@@ -112,20 +112,6 @@ struct three_body
 	{
 		arma::mat J(12,12);
 
-		double px0 = y[6];
-		double py0 = y[7];
-		double px1 = y[8];
-		double py1 = y[9];
-		double px2 = y[10];
-		double py2 = y[11];
-
-		double x0 = y[0];
-		double y0 = y[1];
-		double x1 = y[2];
-		double y1 = y[3];
-		double x2 = y[4];
-		double y2 = y[5];
-
 		double x2mx1 = y[2] - y[0];
 		double y2my1 = y[3] - y[1];
 		double x3mx1 = y[4] - y[0];
@@ -353,6 +339,10 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	exponential func( 1.0 );
 	arma::vec y0 = func.sol( t0 );
 	int status = irk::odeint( t0, t1, sc, so, y0, func );
+	if( status ){
+		std::cerr << "Error solving ODE!\n";
+		return;
+	}
 
 	// Find largest error:
 	double m_abs_err = 0.0;

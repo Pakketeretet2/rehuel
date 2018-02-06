@@ -27,7 +27,7 @@
 
 // Functions for performing Newton iteration.
 
-#define AMRA_USE_CXX11
+#define ARMA_USE_CXX11
 
 #include <armadillo>
 #include <fstream>

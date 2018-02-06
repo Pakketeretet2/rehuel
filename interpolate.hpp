@@ -59,6 +59,18 @@ double newton( const std::vector<double> &x_pts,
                const std::vector<double> &y_pts, double x );
 
 
+/**
+   \brief Interpolates values on grid to given point.
+
+   \overloads newton for arma::vec
+*/
+arma::vec newton( const std::vector<double> &x_pts,
+                  const std::vector<arma::vec> &y_pts, double x );
+
+
+
+
+
 
 
 

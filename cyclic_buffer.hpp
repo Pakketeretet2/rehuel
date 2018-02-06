@@ -10,81 +10,6 @@ class cyclic_buffer {
 
 public:
 
-	class const_iterator {
-	public:
-		const_iterator() : t(nullptr), start(nullptr), e(nullptr),
-		                   b(nullptr), period(0){}
-		const_iterator( const const_iterator &it )
-			: t(it.t), start(it.start), e(it.e),
-			  b(it.b), period(it.period){}
-		virtual ~const_iterator(){}
-		virtual const_iterator& operator=( const const_iterator &it )
-		{
-			t = it.t;
-			start = it.start;
-			e = it.e;
-			b = it.b;
-			period = it.period;
-		}
-
-		virtual bool operator==( const const_iterator &it )
-		{ return t == it.t && start == it.start && e == it.e
-				&& b == it.b && period = it.period;
-		}
-
-		bool operator!=( const const_iterator &it )
-		{ return !( it == *this ); }
-
-		T operator*() const
-		{ return t; }
-
-		T operator->()
-		{ return t; }
-
-
-		const_iterator &operator++()
-		{
-			t++;
-			if( t == e && e != start ){
-				t = b;
-			}else{
-				// Leave it at end.
-			}
-		}
-		const_iterator operator++(int)
-		{
-			const_iterator cp( *this );
-			this->operator++();
-			return cp;
-		}
-
-		const_iterator &operator--()
-		{
-			if( t == b ){
-				t = e - 1;
-			}else{
-				t--;
-			}
-
-			if( t == start ){
-				t = e;
-			}
-		}
-		const_iterator operator--(int)
-		{
-			const_iterator cp( *this );
-			this->operator++();
-			return cp;
-		}
-
-
-
-		T* t;
-		T* start, e, b;
-		int period;
-	};
-
-
 
 	cyclic_buffer() : period_(0), current_(0), storage_()
 	{
@@ -97,7 +22,8 @@ public:
 		storage_.reserve(period_);
 	}
 	cyclic_buffer( const cyclic_buffer &o )
-		: period_( o.period() ), current_(0), storage_( o.get_storage() ) {}
+		: period_( o.period() ), current_(0), storage_( o.storage() ) {}
+
 
 	cyclic_buffer &operator=( const cyclic_buffer &o )
 	{
@@ -113,12 +39,20 @@ public:
 			std::copy( o.storage().begin(), o.storage().end(),
 			           storage_.begin() );
 		}
+
+		return *this;
 	}
 
 	~cyclic_buffer(){}
 
-	std::vector<T> &storage(){}
-	const std::vector<T> &storage() const {}
+	std::vector<T> &storage()
+	{
+		return storage_;
+	}
+	const std::vector<T> &storage() const
+	{
+		return storage_;
+	}
 
 	T* data() { return storage_.data(); }
 	const T* data() const { return storage_.data(); }
@@ -143,7 +77,8 @@ public:
 
 	void push_back( const T &t )
 	{
-		if( storage_.size() < period_ ){
+		int storage_size = storage_.size();
+		if( storage_size < period_ ){
 			storage_.push_back(t);
 		}else{
 			if( current_ == period_ ){
@@ -154,65 +89,23 @@ public:
 		++current_;
 	}
 
-	/*
-	iterator begin() const {}
-	iterator end() const {}
-	iterator rbegin() const {}
-	iterator rend() const {}
-	*/
 
-	/*
-	const_iterator cbegin() const
-	{
-		const_iterator it;
-		T *storage_start = storage_.data();
-		it.t = storage_start + current_;
-		it.start = it.t;
-		it.e = storage_start + period_;
-		it.b = storage_start;
-		it.period = period_;
-	}
-
-	const_iterator cend() const
-	{
-		const_iterator it;
-		T *storage_start = storage_.data();
-		it.t = storage_start + period_;
-		it.start = it.t;
-		it.e = storage_start + period_;
-		it.b = storage_start;
-		it.period = period_;
-	}
-
-	iterator begin() const
-	{
-		iterator it;
-		T *storage_start = storage_.data();
-		it.t = storage_start + current_;
-		it.start = it.t;
-		it.e = storage_start + period_;
-		it.b = storage_start;
-		it.period = period_;
-	}
-
-	iterator end() const
-	{
-		iterator it;
-		T *storage_start = storage_.data();
-		it.t = storage_start + period_;
-		it.start = it.t;
-		it.e = storage_start + period_;
-		it.b = storage_start;
-		it.period = period_;
-	}
-	*/
-	/*
-	const_iterator crbegin() const {}
-	const_iterator crend() const {}
-	*/
 	std::size_t size() const { return storage_.size(); }
-	int period() const { return period_; }
+	std::size_t period() const { return period_; }
 	int current() const { return current_; }
+
+	/**
+	   \brief Resizes the internal storage.
+
+	   \warning This invalidates the contents of the cyclic buffer!
+	*/
+	void resize( std::size_t size )
+	{
+		storage_.clear();
+		storage_.reserve( size );
+		period_  = size;
+		current_ = 0;
+	}
 
 	/*
 	max_size

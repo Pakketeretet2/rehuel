@@ -28,12 +28,13 @@
 #ifndef IRK_HPP
 #define IRK_HPP
 
-#define AMRA_USE_CXX11
+#define ARMA_USE_CXX11
 #include <armadillo>
 #include <cassert>
 #include <limits>
 
 #include "enums.hpp"
+#include "integrator_io.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
@@ -62,6 +63,9 @@ struct solver_coeffs
 	/// If the method satisfies first-same-as-last (FSAL), set this to
 	/// true to enable the optimizations associated with FSAL.
 	bool FSAL;
+
+	/// True if the method has an interpolating formula for dense output.
+	bool dense_output;
 };
 
 
@@ -131,6 +135,7 @@ bool verify_solver_options( const solver_options &opts );
 */
 bool verify_solver_coeffs( const solver_coeffs &sc );
 
+
 /**
    \brief Returns coefficients for given integrator.
    \param method The time integrator to use. See \ref rk_methods
@@ -144,17 +149,17 @@ solver_coeffs get_coefficients( int method );
 */
 bool is_method_explicit( const solver_coeffs &sc );
 
+
 /**
    \brief Checks if the given method is diagonally implicit.
 */
 bool is_method_dirk( const solver_coeffs &sc );
 
+
 /**
    \brief Checks if the given method is singly diagonally implicit.
 */
 bool is_method_sdirk( const solver_coeffs &sc );
-
-
 
 
 /**
@@ -495,7 +500,7 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 /**
    \brief Performs one time step from (t,y) to (t+dt, y+dy)
 
-   K shall be unmodified upon failure
+   K and y shall be unmodified upon failure
 
    \param t             Current time
    \param y             Current solution to the ODE at t
@@ -620,6 +625,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 	return SUCCESS;
 }
 
+
 /**
    \brief Time-integrate a given ODE from t0 to t1, starting at y0
 
@@ -630,28 +636,18 @@ int take_time_step( double t, arma::vec &y, double dt,
    \param sc           Solver coefficients
    \param solver_opts  Options for the internal solver
    \param y0           Initial values
-   \param fun          RHS to the ODE to integrate
-   \param jac          Jacobi matrix to the ODE to integrate
-   \param t_vals       Will contain the time points corresponding to obtained y
-   \param y_vals       Will contain the numerical solution to the ODE.
+   \param func         Functor of the ODE to integrate
 
    \returns a status code (see \ref odeint_status_codes)
 */
 template <typename functor_type> inline
 int odeint( double t0, double t1, const solver_coeffs &sc,
             const solver_options &solver_opts,
-            const arma::vec &y0, functor_type &func,
-            std::vector<double> &t_vals, std::vector<arma::vec> &y_vals )
+            const arma::vec &y0, functor_type &func )
 {
 	double t = t0;
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
 	assert( solver_opts.newton_opts && "Newton solver options not set!" );
-
-	if( solver_opts.verbosity && (!y_vals.empty() || !t_vals.empty()) ){
-		std::cerr << "Vectors for storing are not empty! I will _not_ "
-		          << "clear them!\n";
-	}
-
 	assert( sc.dt > 0 && "Cannot use time step size of 0!" );
 
 
@@ -674,42 +670,22 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	arma::vec y = y0;
 	std::vector<double> tt;
 	std::vector<arma::vec> yy;
-	unsigned long long int steps = 0;
-
-	if( solver_opts.store_in_vector_every ){
-		tt.push_back(t);
-		yy.push_back(y);
-	}
-
+	unsigned long long int step = 0;
 
 	newton::status newton_stats; // Use these for adaptive time step control.
 
-	auto print_solution_out = [&steps, &t, &y, &solver_opts]{
-		if( !solver_opts.solution_out ) return;
-		*solver_opts.solution_out << steps << "  " << t;
-		for( std::size_t i = 0; i < y.size(); ++i ){
-			*solver_opts.solution_out << " " << y[i];
-		}
-		*solver_opts.solution_out << "\n"; };
 
-	auto print_timestep_stats = [&steps, &t, &dt, &err,
-	                             &solver_opts, &newton_stats]{
-		if( !solver_opts.timestep_out ) return;
-		*solver_opts.timestep_out << steps << "       " << t << "      "
-		<< dt << "       " << err << "        " << newton_stats.iters
-		<< "\n"; };
+	// Prepare output if necessary:
+	if( solver_opts.output ){
 
+		auto *output = solver_opts.output;
+		output->set_storage_size( sc.order + 1 );
+		output->add_solution( t, y );
+		output->write_solution();
 
-	// Print headers:
-	if( solver_opts.solution_out ){
-		*solver_opts.solution_out << "# step   time   ys...\n";
-		print_solution_out();
+		output->store_vector_solution( step, t, y );
 	}
-	if( solver_opts.timestep_out ){
-		*solver_opts.timestep_out << "# step  t      dt         "
-		                          << "err   (newton iters)\n";
-		print_timestep_stats();
-	}
+
 
 
 	// Main integration loop:
@@ -736,8 +712,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	bool explicit_method = irk::is_method_explicit( sc );
 	bool sdirk_method    = irk::is_method_sdirk( sc );
 
-	int rejected_steps = 0;
-	int latest_n_rejected_steps = 0;
+	int rejected_step = 0;
+	int latest_n_rejected_step = 0;
 
 	int method_type = 0;
 	if( explicit_method ){
@@ -758,6 +734,19 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			dt = t1 - t;
 			old_dt = dt;
 		}
+
+		// Also check to make sure the output routine will not have
+		// poor interpolation:
+
+		/*
+		if( solver_opts.output ){
+			double to = solver_opts.output->next_output_time_step();
+			if( t + dt > to ){
+				dt = to - t;
+				old_dt = dt;
+			}
+		}
+		*/
 
 		if( method_type & EXPLICIT ){
 			const auto& stepper = take_time_step<functor_type, EXPLICIT>;
@@ -781,7 +770,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		}
 
 		if( solver_opts.verbosity ){
-			std::cerr << "t = " << t << ", step " << steps
+			std::cerr << "t = " << t << ", step " << step
 			          << ", status = " << status << "\n";
 			std::vector<std::pair<int,std::string> > pairs =
 				{ {SUCCESS                 , "SUCCESS"},
@@ -844,7 +833,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 				if( err > tol ){
 					std::cerr << "Err was too big: " << err
 					          << ".\nThis was step "
-					          << latest_n_rejected_steps
+					          << latest_n_rejected_step
 					          << " rejected.\n";
 				}else{
 					std::cerr << "Err was too small: "
@@ -858,7 +847,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 			dt = get_better_time_step( dt, err, old_err, tol,
 			                           newton_stats.iters,
-			                           latest_n_rejected_steps,
+			                           latest_n_rejected_step,
 			                           solver_opts, sc, max_dt );
 
 			if( solver_opts.verbosity ){
@@ -877,11 +866,12 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
 			move_on = true;
 		}
+
 		if( !move_on ){
 			// Restore err to the old error:
 			err = old_err;
-			++rejected_steps;
-			++latest_n_rejected_steps;
+			++rejected_step;
+			++latest_n_rejected_step;
 
 			continue;
 		}
@@ -889,27 +879,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 		// OK, advance time:
 		t += old_dt;
-		++steps;
-		latest_n_rejected_steps = 0;
-
-
-		// Store new time point:
-		if( solver_opts.store_in_vector_every &&
-		    steps % solver_opts.store_in_vector_every == 0 ){
-			tt.push_back( t );
-			yy.push_back( y );
-		}
-
-		if( solver_opts.solution_out &&
-		    (steps % solver_opts.solution_out_interval == 0) ){
-			print_solution_out();
-		}
-
-
-		if( solver_opts.timestep_out &&
-		    steps % solver_opts.timestep_info_out_interval == 0 ){
-			print_timestep_stats();
-		}
+		++step;
+		latest_n_rejected_step = 0;
 
 
 		// Some FSAL preparation here:
@@ -926,25 +897,33 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			i1 = (i+1)*Neq - 1;
 			K.subvec( i0, i1 ) = func.fun( t, y );
 		}
+
+
+		// Output:
+		auto *output = solver_opts.output;
+		if( output ){
+			output->add_solution( t, y );
+			output->write_solution();
+			output->store_vector_solution( step, t, y );
+
+
+		}
 	}
 
-	std::string timer_msg = "Solving ODE with ";
+	std::string timer_msg = "    Rehuel: Solving ODE with ";
 	timer_msg += sc.name;
-	timer_msg += " with internal solver ";
+	timer_msg += " and internal solver ";
 	if( solver_opts.internal_solver == solver_options::NEWTON ){
 		timer_msg += "newton";
 	}else if( solver_opts.internal_solver == solver_options::BROYDEN ){
 		timer_msg += "broyden";
 	}
-	timer_msg += " (" + std::to_string( steps ) + " steps)";
+	timer_msg += " (" + std::to_string( step ) + " steps)";
 
 	double t_diff_msec = timer.toc( timer_msg );
-	double throughput = 1000 * steps / t_diff_msec;
-	std::cerr << "    Performance: " << throughput << " steps/second.\n\n";
-
-	// If everything was fine, store the obtained results
-	t_vals = tt;
-	y_vals = yy;
+	double throughput = 1000*step / t_diff_msec;
+	std::cerr << "    Rehuel: Performance: " << throughput
+	          << " steps/second.\n\n";
 
 	return 0;
 }

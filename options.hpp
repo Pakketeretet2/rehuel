@@ -8,6 +8,7 @@
 
 #include <iosfwd>
 
+#include "integrator_io.hpp"
 
 namespace newton {
 struct options;
@@ -30,12 +31,8 @@ struct common_solver_options
 		  rel_tol(1e-5),
 		  abs_tol(10*rel_tol),
 		  max_dt( 100.0 ),
-		  solution_out_interval( 1000 ),
-		  timestep_info_out_interval( 1000 ),
 		  newton_opts( nullptr ),
-		  store_in_vector_every( 1 ),
-		  solution_out( nullptr ),
-		  timestep_out( nullptr ),
+		  output( nullptr ),
 		  verbosity( 0 ),
 		  constant_jac_approx( false ),
 		  abort_on_solver_fail( false )
@@ -55,23 +52,11 @@ struct common_solver_options
 	/// Maximum time step size
 	double max_dt;
 
-	/// Output interval for solution:
-	int solution_out_interval;
-
-	/// Output interval for time step size and error.
-	int timestep_info_out_interval;
-
 	/// Options for the internal solver.
 	const newton::options *newton_opts;
 
-	/// Store solution in vector every this many steps (0 to disable)
-	int store_in_vector_every;
-
-	/// Write solution to this output stream.
-	std::ostream *solution_out;
-
-	/// Write time step info to this output stream.
-	std::ostream *timestep_out;
+	/// To output solutions.
+	integrator_io::integrator_output *output;
 
 	/// if > 0, print some output.
 	int verbosity;

@@ -109,10 +109,6 @@ private:
 	bool check()
 	{
 		bool is_valid = true;
-		is_valid &= (output_mode == SPACED_GRID ||
-		             output_mode == GIVEN_TIME_VALUES);
-
-		assert( is_valid && "Invalid input given to integrator_output!" );
 
 		return is_valid;
 	}
@@ -227,6 +223,16 @@ public:
 	*/
 	void write_solution()
 	{
+		if( output_mode & SPACED_GRID ){
+			write_solution_spaced_grid();
+		}
+	}
+
+	/**
+
+	 */
+	void write_solution_spaced_grid()
+	{
 		double next_write = last_write + spaced_grid->dt;
 
 		double t_now = sol_times[0];
@@ -238,50 +244,6 @@ public:
 			}
 			*solution_out << "\n";
 			last_write = sol_times[0];
-		}
-
-		/*
-		if( output_mode & SPACED_GRID ){
-			write_solution_spaced_grid();
-		}
-		*/
-	}
-
-	/**
-
-	 */
-	void write_solution_spaced_grid()
-	{
-		if( sol_times.size() < sol_times.period() ) return;
-
-		double t_now = sol_times[0];
-		if( !have_written ){
-			have_written = true;
-			last_write = spaced_grid->t0;
-		}
-
-		double tt = last_write;
-
-		std::cerr << "Last_write was at " << last_write << ".\n";
-		std::cerr << "Current time is now " << t_now << ".\n";
-		std::cerr << "Next write ought to be at "
-		          << last_write + spaced_grid->dt << ".\n";
-		double next_write = last_write + spaced_grid->dt;
-		while( (next_write <= t_now) &&
-		       (next_write <= spaced_grid->t1) ){
-
-			// Write at tt.
-			*solution_out << tt;
-			arma::vec y = interpolate::newton( sol_times.storage(),
-			                                   sol_values.storage(),
-			                                   tt );
-			for( std::size_t i = 0; i < y.size(); ++i ){
-				*solution_out << " " << y[i];
-			}
-			*solution_out << "\n";
-
-			last_write = next_write;
-			next_write += spaced_grid->dt;
 		}
 	}
 
@@ -351,6 +313,52 @@ public:
 		return 0;
 	}
 
+	/**
+	   \brief Returns read-only ptr to vector output struct.
+	*/
+	const vector_output *get_vector_output() const
+	{
+		return vec_out;
+	}
+
+	/**
+	   \brief This adds a time point to the vectors in vec_out.
+
+	   \note the solution is only stored if the current step
+	         matches vector_output_interval
+
+	   \param step Current simulation time step
+	   \param time Current simulation time
+	   \param y    Current simulation solution
+
+	*/
+	void store_vector_solution( int step, double time, const arma::vec &y )
+	{
+		if( vec_out &&
+		    step % vector_out_interval == 0){
+			vec_out->t_vals.push_back(time);
+			vec_out->y_vals.push_back(y);
+		}
+	}
+
+	/**
+	   \brief Sets the timestep out info.
+
+	   \param out_interval         Output interval
+	   \param timestep_out_stream  Output stream for time step.
+	*/
+	int set_timestep_output( int out_interval,
+	                         std::ostream *timestep_out_stream )
+	{
+		timestep_out_interval = out_interval;
+		if( timestep_out ){
+			std::cerr << "WARNING: Output stream for time "
+			          << "step already set!\n";
+		}
+		timestep_out = timestep_out_stream;
+
+		return 0;
+	}
 
 };
 

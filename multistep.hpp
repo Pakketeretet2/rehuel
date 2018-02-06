@@ -288,8 +288,7 @@ int bootstrap_init( double t, const arma::vec &y0,
 	int irk_status = 0;
 	int num_ys = last_ys.size();
 	while( num_ys < target_order ){
-		irk_status = irk::odeint( t, t + dt, irk_sc, opts,
-		                          yn, func, ts, ys );
+		irk_status = irk::odeint( t, t + dt, irk_sc, opts, yn, func );
 		if( irk_status ) return irk_status;
 
 		// The last value in ys is the new value for last_ys.
@@ -309,9 +308,7 @@ int odeint( double t0, double t1,
             const solver_coeffs &sc,
             const solver_options &solver_opts,
             const arma::vec &y0,
-            functor_type &func,
-            std::vector<double> &t_vals,
-            std::vector<arma::vec> &y_vals )
+            functor_type &func )
 {
 	double t = t0;
 	unsigned long long int step = 0;
@@ -336,34 +333,14 @@ int odeint( double t0, double t1,
 	cyclic_buffer<historic_vec> last_ys( sc.order );
 	cyclic_buffer<historic_vec> last_fs( sc.order );
 
-	y_vals.push_back(y);
-	t_vals.push_back(t);
-
 	last_ys.push_back( std::make_pair( t, y ) );
 	last_fs.push_back( std::make_pair( t, func.fun( t, y ) ) );
-
-	// Lambda for printing the solution to file:
-	auto print_solution_out = [&step, &t, &y, &solver_opts]{
-		if( !solver_opts.solution_out ) return;
-		*solver_opts.solution_out << step << "  " << t;
-		for( std::size_t i = 0; i < y.size(); ++i ){
-			*solver_opts.solution_out << " " << y[i];
-		}
-		*solver_opts.solution_out << "\n"; };
-
-	if( solver_opts.solution_out ){
-		*solver_opts.solution_out << "# step   time   ys...\n";
-		print_solution_out();
-	}
-
 
 
 	// Bootstrap the methods:
 	int order = 0;
 	int bootstrap_status = bootstrap_init( t, y, last_ys, dt, stats, sc,
 	                                       solver_opts, func );
-	std::cerr << "Done bootstrapping, status = "
-	          << bootstrap_status << ".\n";
 
 	t = last_ys[0].first;
 	y = last_ys[0].second;
@@ -380,8 +357,18 @@ int odeint( double t0, double t1,
 		return bootstrap_status;
 	}
 
+	if( solver_opts.output ){
+		auto *output = solver_opts.output;
 
+		output->set_storage_size( sc.order + 1 );
 
+		if( output ){
+			output->add_solution( t, y );
+			output->write_solution();
+
+			output->store_vector_solution( step, t, y );
+		}
+	}
 
 
 	while( t < t1 ){
@@ -418,17 +405,15 @@ int odeint( double t0, double t1,
 			last_fs.push_back( std::make_pair(t, func.fun(t, y)) );
 
 
-			if( solver_opts.store_in_vector_every &&
-			    (step % solver_opts.store_in_vector_every == 0) ){
-				y_vals.push_back(y);
-				t_vals.push_back(t);
-			}
 
-			if( solver_opts.solution_out &&
-			    (step % solver_opts.solution_out_interval == 0) ){
-				print_solution_out();
-			}
+			// Output:
+			auto *output = solver_opts.output;
+			if( output ){
+				output->add_solution( t, y );
+				output->write_solution();
 
+				output->store_vector_solution( step, t, y );
+			}
 		}
 	}
 
