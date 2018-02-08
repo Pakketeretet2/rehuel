@@ -309,8 +309,12 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	std::cerr << "Printing sol every " << spaced_grid.dt << " times.\n";
 
 	auto output_mode = integrator_io::integrator_output::SPACED_GRID;
-	integrator_io::integrator_output output( output_mode,
-	                                         &std::cout, 100, &std::cerr );
+	std::string fname = "ode_";
+	fname += irk::method_to_name( method );
+	fname += ".dat";
+	std::ofstream ode_out( fname );
+	integrator_io::integrator_output output( output_mode, &ode_out,
+	                                         100, &std::cerr );
 
 	output.set_spaced_grid( t0, t1, (t1 - t0) / (Npts - 1.0) );
 	so.output = &output;
@@ -459,14 +463,18 @@ void test_three_body( int method, double t0, double t1, double dt,
 		return;
 	}
 
-
-
-	std::vector<arma::vec> ys;
-	std::vector<double> times;
+	integrator_io::vector_output vec_out;
+	integrator_io::integrator_output output;
+	output.set_vector_output( 1, &vec_out );
+	so.output = &output;
 
 	std::cerr << "Integrating three-body problem...\n";
 	int status = irk::odeint( t0, t1, sc, so, y0, three_bod );
 	std::cerr << "status is " << status << "!\n";
+
+	const std::vector<arma::vec> &ys = vec_out.y_vals;
+	const std::vector<double> &times = vec_out.t_vals;
+
 
 	for( std::size_t i = 0; i < times.size(); ++i ){
 		double t = times[i];
