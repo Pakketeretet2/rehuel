@@ -12,23 +12,9 @@
 
 #include "enums.hpp"
 #include "irk.hpp"
+#include "multistep.hpp"
 
 
-/**
-   \brief exposes a more constant interface to the underlying IRK functions.
-*/
-namespace rehuel {
-
-
-
-/// Enumerates all implemented Runge-Kutta methods.
-typedef irk::rk_methods rk_methods;
-/// Enumerates possible return codes of odeint.
-typedef irk::odeint_status_codes odeint_status_codes;
-
-
-
-} // namespace rehuel
 
 
 #endif // REHUEL_HPP

@@ -1,5 +1,9 @@
 #include "interpolate.hpp"
 
+#include <cassert>
+#include <typeinfo>
+
+
 namespace interpolate {
 
 std::vector<arma::vec> linear( const std::vector<double> &x_vals,
@@ -59,5 +63,82 @@ std::vector<arma::vec> linear( const std::vector<double> &x_vals,
 
 	return interp;
 }
+
+
+
+/**
+   \brief This is the actual implementation of the formula.
+
+   \note Make sure the reference is initialized with zeros!
+*/
+template <typename T>
+void newton_interpolation_formula( const std::vector<double> &x_pts,
+                                   const std::vector<T> &y_pts,
+                                   double x, T &res )
+{
+	// Construct the polynomial.
+	// int poly_order = x_pts.size() - 1;
+	assert( x_pts.size() == y_pts.size() &&
+	        "Interpolate should have equal number of xs and ys!" );
+
+	double xlo = *std::min_element( x_pts.begin(), x_pts.end() );
+	double xhi = *std::max_element( x_pts.begin(), x_pts.end() );
+
+	// Check to make sure x is inside x_pts.
+	if( x < xlo || x > xhi ){
+		std::cerr << "Warning! Target x " << x << " is out of range [ "
+		          << xlo << ", " << xhi << " ]!\n";
+	}
+
+	int npts = x_pts.size();
+
+	std::vector<double> dx( npts );
+	for( int i = 0; i < npts; ++i ){
+		dx[i] = x - x_pts[i];
+	}
+
+	for( int i = 0; i < npts; ++i ){
+		double nom = 1.0;
+		double den = 1.0;
+		for( int j = 0; j < i; ++j ){
+			nom *= dx[j];
+			den *= x_pts[i] - x_pts[j];
+		}
+		for( int j = i+1; j < npts; ++j ){
+			nom *= dx[j];
+			den *= x_pts[i] - x_pts[j];
+		}
+		res += nom * y_pts[i] / den;
+	}
+}
+
+
+
+
+double newton( const std::vector<double> &x_pts,
+               const std::vector<double> &y_pts, double x )
+{
+
+	// Construct the Legendre polynomials:
+	double y = 0.0;
+	//newton_interpolation_formula<double>( x_pts, y_pts, x, y );
+	return y;
+}
+
+
+arma::vec newton( const std::vector<double> &x_pts,
+                  const std::vector<arma::vec> &y_pts, double x )
+{
+
+	// Construct the Legendre polynomials:
+	arma::vec y;
+	y.zeros( y_pts[0].size() );
+	newton_interpolation_formula<arma::vec>( x_pts, y_pts, x, y );
+	return y;
+}
+
+
+
+
 
 } // namespace interpolate

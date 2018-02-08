@@ -42,9 +42,36 @@ namespace interpolate {
 
    \returns the interpolation of y on t_grid.
 */
-std::vector<arma::vec> linear( const std::vector<double> &x_vals,
+std::vector<arma::vec> linear( const std::vector<double>    &x_vals,
                                const std::vector<arma::vec> &y_vals,
-                               const std::vector<double> &x_grid );
+                               const std::vector<double>    &x_grid );
+
+/**
+   \brief Interpolates values on grid to given point.
+
+   \param x_vals  The x coordinates of the points
+   \param y_vals  The values corresponding to the points
+   \param x       The target point to interpolate to.
+
+   \returns the interpolation of y on t_grid.
+*/
+double newton( const std::vector<double> &x_pts,
+               const std::vector<double> &y_pts, double x );
+
+
+/**
+   \brief Interpolates values on grid to given point.
+
+   \overloads newton for arma::vec
+*/
+arma::vec newton( const std::vector<double> &x_pts,
+                  const std::vector<arma::vec> &y_pts, double x );
+
+
+
+
+
+
 
 
 } // namespace interpolate

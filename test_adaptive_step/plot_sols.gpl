@@ -1,0 +1,13 @@
+
+plot 'stiff_sol_BOGACKI_SHAMPINE_32.dat' u 1:2 w lp lw 2 ti 'y(BS32)' \
+   , ''                                  u 1:3 w lp lw 2 ti 'u(BS32)' \
+   , 'stiff_sol_CASH_KARP_54.dat'        u 1:2 w  l lw 2 ti 'y(CK54)' \
+   , ''                                  u 1:3 w  l lw 2 ti 'u(CK54)' \
+   , 'stiff_sol_LOBATTO_IIIA_65.dat'     u 1:2 w  p lw 2 ti 'y(LIIIA65)' \
+   , ''                                  u 1:3 w  p lw 2 ti 'u(LIIIA65)' \
+   , 'stiff_sol_LOBATTO_IIIC_65.dat'     u 1:2 w  p lw 2 ti 'y(LIIIC65)' \
+   , ''                                  u 1:3 w  p lw 2 ti 'u(LIIIC65)' \
+   , 'stiff_sol_RADAU_IIA_32.dat'        u 1:2 w  p lw 2 ti 'y(RIIA32)' \
+   , ''                                  u 1:3 w  p lw 2 ti 'u(RIIA32)' \
+   , 'stiff_sol_GAUSS_LEGENDRE_63.dat'   u 1:2 w  p lw 2 ti 'y(GL63)' \
+   , ''                                  u 1:3 w  p lw 2 ti 'u(GL63)' \
