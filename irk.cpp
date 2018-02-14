@@ -7,13 +7,14 @@
 
 namespace irk {
 
-
 bool verify_solver_coeffs( const solver_coeffs &sc )
 {
 	auto N = sc.b.size();
 	if( N != sc.c.size() || N != sc.A.n_rows || N != sc.A.n_cols ){
 		return false;
 	}
+	if( N == 0 ) return false;
+
 	return true;
 }
 
@@ -74,6 +75,7 @@ solver_coeffs get_coefficients( int method )
 			sc.order2 = 2;
 
 			break;
+
 		case CASH_KARP_54:
 			sc.A.zeros( 6,6 );
 
@@ -239,7 +241,7 @@ solver_coeffs get_coefficients( int method )
 			sc.A = { {0.0, 0.0 },
 			         {0.5, 0.5 } };
 			sc.b = { 0.5, 0.5 };
-			sc.c = { 0.0, 1.0 };
+			sc.c = { 1.0, 0.0 };
 			sc.b2 = { 0.25, 0.75 };
 			sc.order  = 2;
 			sc.order2 = 1;
@@ -249,7 +251,7 @@ solver_coeffs get_coefficients( int method )
 			sc.A  = { {0.5, -0.5},
 			          {0.5,  0.5 } };
 			sc.b  = { 0.5, 0.5 };
-			sc.b2 = { 1.0/3.0, 2.0/3.0 };
+			sc.b2 = { 3.0/4.0, 1.0/4.0 };
 			sc.c  = { 0.0, 1.0 };
 			sc.order = 2;
 			sc.order2 = 1;
@@ -257,28 +259,37 @@ solver_coeffs get_coefficients( int method )
 			break;
 
 
-		case RADAU_IA_32:
-			sc.A = { { 1.0 / 4.0, -1.0 / 4.0 },
+		case RADAU_IA_31:
+			sc.A = { { 1.0 / 4.0, -1.0 / 4.0  },
 			         { 1.0 / 4.0,  5.0 / 12.0 } };
+
 			sc.c = { 0.0, 2.0/3.0 };
 			sc.b = { 1.0/4.0, 3.0/4.0 };
+			sc.b2 = { 0.5, 0.5 };
+
 
 			sc.order = 3;
-			sc.order2 = 0;
+			sc.order2 = 1;
 
 			break;
-		case RADAU_IIA_32:
+
+		case RADAU_IIA_31:
+
+			// Try adding an explicit Euler stage?
+
 			sc.A = { { 5.0 / 12.0, -1.0 / 12.0 },
 			         { 3.0 / 4.0,   1.0 / 4.0 } };
 			sc.c = { 1.0/3.0, 1.0 };
 			sc.b = { 3.0/4.0, 1.0/4.0 };
+			sc.b2 = { 5.0/8.0, 3.0/8.0 };
 
 			sc.order = 3;
-			sc.order2 = 0;
+			sc.order2 = 1;
 			break;
 
 
-		case LOBATTO_IIIA_43:
+		case LOBATTO_IIIA_42:
+
 			sc.A = { {      0.0,     0.0,       0.0 },
 			         { 5.0/24.0, 1.0/3.0, -1.0/24.0 },
 			         {  1.0/6.0, 2.0/3.0,  1.0/6.0 } };
@@ -287,12 +298,12 @@ solver_coeffs get_coefficients( int method )
 			sc.b = { 1.0/6.0, 2.0/3.0, 1.0/6.0 };
 			sc.b2 = { -0.5, 2.0, -0.5 };
 			sc.order = 4;
-			sc.order2 = 3;
+			sc.order2 = 2;
 			sc.FSAL = true;
 
 			break;
 
-		case LOBATTO_IIIC_43:
+		case LOBATTO_IIIC_42:
 
 			sc.A = { { 1.0/6.0, -1.0/3.0, 1.0/6.0 },
 			         { 1.0/6.0, 5.0/12.0, -1.0/12.0 },
@@ -301,75 +312,68 @@ solver_coeffs get_coefficients( int method )
 			sc.b2 = { -0.5, 2.0, -0.5 };
 			sc.c = { 0.0, 0.5, 1.0 };
 			sc.order = 4;
-			sc.order2 = 3;
+			sc.order2 = 2;
 
 			break;
 
+
 		case GAUSS_LEGENDRE_42:
 
-			sc.A = { { 0.25, 0.25 - sqrt3/6.0 },
-			         { 0.25 + sqrt3/6.0, 0.25 } };
-			sc.c = { 0.5 - sqrt3/6.0, 0.5 + sqrt3/6.0 };
-			sc.b = { 0.5, 0.5 };
-			sc.b2= { 0.5 + 0.5*sqrt3, 0.5 - 0.5*sqrt3 };
+			sc.A = { { 0.25, 0.25 - sqrt3/6.0, 0.0 },
+			         { 0.25 + sqrt3/6.0, 0.25, 0.0 },
+			         { 0.0, 0.0, 0.0 } };
+			sc.c = { 0.5 - sqrt3/6.0, 0.5 + sqrt3/6.0, 0.0 };
+			sc.b = { 0.5, 0.5, 0.0 };
+			sc.b2= { (3*sqrt3 + 1)/12.0, (7-sqrt3)/12.0, (2-sqrt3)/6.0 };
 			sc.order = 4;
 			sc.order2 = 2;
 			break;
 
 
-		case RADAU_IA_54:
+		case RADAU_IA_52:
 
 			sc.A = { { 1.0/9.0, (-1 - sqrt6)/18.0, (-1 + sqrt6)/18.0},
 			         { 1.0/9.0, (88.0 + 7*sqrt6)/360.0, (88 - 43*sqrt6)/360.0 },
 			         { 1.0/9.0, (88 + 43*sqrt6)/360.0, (88.0 - 7*sqrt6)/360.0 } };
 			sc.c  = { 0.0, (6.0 - sqrt6)/10.0, (6.0 + sqrt6)/10.0 };
 			sc.b  = { 1.0/9.0, (16.0 + sqrt6)/36.0, (16.0 - sqrt6)/36.0 };
+			sc.b2 = { -13/18.0, (31.0 + 16*sqrt6)/36.0, (31 - 6*sqrt6)/36.0 };
+
 			sc.order = 5;
-			sc.order2 = 0;
+			sc.order2 = 2;
 
 			break;
-		case RADAU_IIA_54:
+		case RADAU_IIA_52:
 
 			sc.A = { { (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
 			         { (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
 			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
 			sc.c  = {  (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
 			sc.b  = {  (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
+			sc.b2 = { (12-7*sqrt6)/12.0, (12+7*sqrt6)/12.0, -1.0, 0.0 };
 			sc.order = 5;
-			sc.order2 = 0;
+			sc.order2 = 2;
 
 			break;
 
-		case GAUSS_LEGENDRE_63:
-			sc.A = { { 5.0/36.0, 2.0/9.0 - sqrt15 / 15.0, 5.0/36.0 - sqrt15 / 30.0 },
-			         { 5.0/36.0 + sqrt15 / 24.0, 2.0/9.0, 5.0/36.0 - sqrt15 / 24.0 },
-			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0 } };
-			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0 };
+			// Up to here everything is nicely paired/embedded.
+		case GAUSS_LEGENDRE_62:
+			sc.A = { { 5.0/36.0, 2.0/9.0 - sqrt15 / 15.0, 5.0/36.0 - sqrt15 / 30.0, 0 },
+			         { 5.0/36.0 + sqrt15 / 24.0, 2.0/9.0, 5.0/36.0 - sqrt15 / 24.0, 0 },
+			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0, 0 },
+			         { 0, 0, 0, 0 } };
+			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0, 0 };
 			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0 };
-			sc.b2 = { -5.0/6.0, 8.0/3.0, -5.0/6.0 };
+
+			sc.b2 = {2/9.0, 5/9.0, 2/9.0 };
 			sc.order = 6;
-			sc.order2 = 3;
+			sc.order2 = 2;
 
 			break;
 
-		case LOBATTO_IIIA_65: {
-			double a1 = 11.0/120.0;
-			double a2 = 25.0/120.0;
-			double a3 = sqrt5 / 120.0;
-			double a4 = 1.0 / 120.0;
 
-			sc.A = { { 0.0, 0.0, 0.0, 0.0 },
-			         { a1 + a3, a2 - a3, a2 - 13*a3, -a4 + a3 },
-			         { a1 - a3, a2 + 13*a3, a2 + a3, -a4 - a3 },
-			         { 1.0/12.0, 5.0/12.0, 5.0/12.0, 1.0/12.0 } };
-			sc.b = { 1.0/12.0, 5.0/12.0, 5.0/12.0, 1.0/12.0 };
-			sc.c = { 0.0, 0.5 - sqrt5/10.0, 0.5 + sqrt5/10.0, 1.0 };
-			sc.order = 6;
-			sc.order2 = 0;
-
-			break;
-		}
-		case LOBATTO_IIIC_65:{
+			// Up to here everything is nicely paired/embedded.
+		case LOBATTO_IIIC_63:{
 			double a1 = 1.0 / 12.0;
 			double a2 = sqrt5/12.0;
 			double a3 = 0.25;
@@ -380,29 +384,16 @@ solver_coeffs get_coefficients( int method )
 			         { a1, a4 + 7*a5, a3, -a5 },
 			         { a1, 5*a1, 5*a1, a1 } };
 			sc.b = { a1, 5*a1, 5*a1, a1 };
-			sc.c = { 0.0, 0.5 - sqrt5/10.0, 0.5 + sqrt5/10.0, 1.0 };
-			sc.order = 6;
-			sc.order2 = 0;
+			sc.b2 = { 4.0/3.0, (5 - 15*sqrt5)/12.0, (5 + 15*sqrt5)/12.0, -7.0/6.0 };
 
-			break;
-		}
-			/*
-		case SDIRK_L_43:{
-			assert( false && "SDIRK_L_43 not supported!" );
-			sc.A = { {0.25,  0.0, 0.0, 0.0, 0.0 },
-			         {0.5 , 0.25, 0.0, 0.0, 0.0 },
-			         {17/50.0, -1/25.0, 0.25, 0.0, 0.0 },
-			         {371/1360.0, -137/2720.0, 15/544.0, 0.25, 0.0},
-			         {25/24.0, -49/48.0, 125/16.0, -85/12.0, 0.25} };
-			sc.b  = { 25/24.0, -49/48.0, 125/16.0, -85/12.0, 0.25 };
-			sc.b2 = { 59/48.0, -17/96.0, 225/32.0, -85/12.0, 0.0 };
-			sc.c  = { 0.25, 0.75, 11.0/20.0, 0.5, 1.0 };
-			sc.order = 4;
+			sc.c = { 0.0, a1 + a3 + a4 - 7*a5 + a5,
+			         a1 + a4 + 7*a5  + a3 - a5, 1.0 };
+			sc.order = 6;
 			sc.order2 = 3;
 
 			break;
 		}
-			*/
+
 
 	}
 

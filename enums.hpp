@@ -24,21 +24,20 @@
 	METHOD(FEHLBERG_54,105)           \
 	                                  \
 	METHOD(IMPLICIT_EULER,200)        \
-	METHOD(RADAU_IA_32,   201)        \
-	METHOD(RADAU_IIA_32,  202)	  \
-	METHOD(RADAU_IA_54,   203)        \
-	METHOD(RADAU_IIA_54,  204)        \
+	METHOD(RADAU_IA_31,   201)        \
+	METHOD(RADAU_IIA_31,  202)	  \
+	METHOD(RADAU_IA_52,   203)        \
+	METHOD(RADAU_IIA_52,  204)        \
 	                                  \
 	METHOD(IMPLICIT_MIDPOINT, 210)    \
 	METHOD(GAUSS_LEGENDRE_42, 211)	  \
-	METHOD(GAUSS_LEGENDRE_63, 212)    \
+	METHOD(GAUSS_LEGENDRE_62, 212)    \
 	                                  \
 	METHOD(LOBATTO_IIIA_21, 220)	  \
 	METHOD(LOBATTO_IIIC_21, 221)	  \
-	METHOD(LOBATTO_IIIA_43, 222)	  \
-	METHOD(LOBATTO_IIIC_43, 223)	  \
-	METHOD(LOBATTO_IIIA_65, 224)      \
-	METHOD(LOBATTO_IIIC_65, 225)      \
+	METHOD(LOBATTO_IIIA_42, 222)	  \
+	METHOD(LOBATTO_IIIC_42, 223)	  \
+	METHOD(LOBATTO_IIIC_63, 224)      \
 	                                  \
 //	METHOD(SDIRK_L_43, 230)
 
@@ -59,12 +58,15 @@ enum ms_methods {
 	FOREACH_MULTISTEP_METHOD(GENERATE_ENUM)
 };
 
+/// \brief testing doxygen.
+enum poop{
+	WHUT
+};
 
 } // namespace multistep
 
 
 namespace irk {
-
 
 /// \brief enumerates all implemented RK methods.
 enum rk_methods {
@@ -73,6 +75,7 @@ enum rk_methods {
 };
 
 
+} // namespace irk
 
 
 /// \brief enumerates possible return codes.
@@ -99,6 +102,5 @@ enum odeint_status_codes {
 	ERROR_LARGER_THAN_ABSTOL = 64
 };
 
-} // namespace irk
 
 #endif // ENUMS_HPP
