@@ -27,7 +27,7 @@
 
 // Functions for performing Newton iteration.
 
-#define AMRA_USE_CXX11
+#define ARMA_USE_CXX11
 
 #include <armadillo>
 #include <fstream>
@@ -50,7 +50,8 @@ enum newton_solve_ret_codes {
 */
 struct options {
 	options() : tol(1e-4), maxit(500), time_internals(false),
-	            max_step(-1), refresh_jac(true), precondition(false){}
+	            max_step(-1), refresh_jac(true), precondition(false),
+	            limit_step(false) {}
 
 	double tol;           ///< Desired tolerance.
 	int maxit;            ///< Maximum number of iterations
@@ -83,6 +84,28 @@ struct status {
 	bool store_final_F;  ///< If true, the final value of F(x) is stored
 	bool store_final_J;  ///< If true, the final value of J(x) is stored
 };
+
+/**
+   \brief this function selects between solve and spsolve.
+
+   Implementation for full matrices.
+*/
+inline arma::vec solve_impl( const arma::mat &A, const arma::vec &b )
+{
+	return arma::solve(A,b);
+}
+
+/**
+   \brief this function selects between solve and spsolve.
+
+   Implementation for sparse matrices
+*/
+inline arma::vec solve_impl( const arma::sp_mat &A, const arma::vec &b )
+{
+	return arma::spsolve(A,b);
+}
+
+
 
 
 
@@ -191,14 +214,6 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 	arma::mat Jaci( N, N );
 	Jaci.eye(N,N);
 
-	auto print_stuff = [&stats, &x, &res2](){
-		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
-		for( std::size_t i = 0; i < x.size(); ++i ){
-			std::cerr << " " << x[i];
-		}
-		std::cerr << "\n";};
-
-	// print_stuff();
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
@@ -229,8 +244,6 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		res2 = arma::dot( r, r );
 
 		++stats.iters;
-
-		// print_stuff();
 
 		f0 = r;
 		x0 = x;
@@ -311,23 +324,11 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	else max_step2 = -1;
 
 	auto J = func.jac(x);
-	if( !refresh_jac ){
-		// Then you might as well LU decompose the system here:
-		arma::lu( L, U, J );
-	}
 
 	typename functor_type::jac_type P;
 	P.eye(N,N);
 
 
-	auto print_stuff = [&stats, &x, &res2](){
-		std::cerr << "Step " << stats.iters << ", res2 = " << res2 << ", x =";
-		for( std::size_t i = 0; i < x.size(); ++i ){
-			std::cerr << " " << x[i];
-		}
-		std::cerr << "\n";};
-
-	// print_stuff();
 
 	while( res2 > tol2 && stats.iters < opts.maxit ){
 		double lambda = 1.0;
@@ -340,15 +341,10 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 			for( std::size_t i = 0; i < N; ++i ){
 				P(i,i) = 1.0 / J(i,i);
 			}
-			direction = -arma::solve(P*J, P*r);
-
-		}else if( !refresh_jac ){
-
-			arma::vec tmp = arma::solve( arma::trimatl(L), r );
-			direction = -arma::solve(arma::trimatu(U), tmp);
+			direction = -solve_impl(P*J, P*r);
 
 		}else{
-			direction = -arma::solve(J, r);
+			direction = -solve_impl(J, r);
 		}
 
 		if( max_step2 > 0 ){
@@ -361,15 +357,13 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 		x = x0 + direction;
 		if( refresh_jac ){
-			auto Jn = func.jac(x);
-			if( arma::rcond(Jn) >= opts.tol ) J = Jn;
+			J = func.jac(x);
 		}
 
 		r = func.fun(x);
 		res2 = arma::dot( r, r );
 
 		++stats.iters;
-		// print_stuff();
 		f0 = r;
 		x0 = x;
 	}

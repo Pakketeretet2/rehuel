@@ -1,17 +1,16 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -shared -ffast-math -fPIC \
-        -Werror=return-type -Werror=uninitialized -Wall -Werror
+FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -march=native \
+        -Werror=return-type -Werror=uninitialized -Wall
 
-LNK = -L./ -larmadillo
-INC = -I./ -I./my_timer
+LNK = -L./ -L../ -larmadillo -lrehuel
+INC = -I./ -I../ -I../my_timer/
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
 
-EXE = librehuel.so
+EXE = test_adaptive_step
 EXT = cpp
 SRC = $(wildcard *.$(EXT))
-SRC := $(subst main.cpp,,$(SRC))
 
 # For windows:
 #MAKE_DIR = $(if exist $(1),,mkdir $(1))
@@ -22,7 +21,7 @@ S=/
 
 
 
-OBJ_DIR = obj_lib
+OBJ_DIR = obj
 OBJ = $(SRC:%.$(EXT)=$(OBJ_DIR)$(S)%.o)
 OBJ_DIRS = $(dir $(OBJ))
 DEPS = $(OBJ:%.o=%.d)
@@ -32,7 +31,7 @@ DEPS = $(OBJ:%.o=%.d)
 all : dirs $(EXE)
 
 install : $(EXE)
-	cp $(EXE) /usr/local/lib
+	cp $(EXE) /usr/local/bin
 
 dirs : $(OBJ_DIR)
 
