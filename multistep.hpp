@@ -18,6 +18,9 @@
 #include <utility>
 #include <vector>
 
+/**
+   \brief Namespace containing functions related to linear multistep methods.
+ */
 namespace multistep {
 
 /// Ease-of-use typedef for history
@@ -261,7 +264,7 @@ int bootstrap_init( double t, const arma::vec &y0,
 	// at least the desired order.
 
 	int target_order = sc.order;
-	int method = irk::LOBATTO_IIIC_65;
+	int method = irk::LOBATTO_IIIC_63;
 
 	irk::solver_options opts = irk::default_solver_options();
 	irk::solver_coeffs irk_sc = irk::get_coefficients( method );

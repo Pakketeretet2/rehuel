@@ -129,17 +129,29 @@ bool verify_solver_options( const solver_options &opts );
 
 
 /**
-   \brief Checks if the solver Butcher tableau is consistent.
-   \param sc The coefficients to check
-   \returns true if the coefficients are alright, false otherwise
+   \brief Checks whether or not the given coefficients are consistent in size.
+
+   \param sc the coefficients to check.
+
+   \returns true if the coefficients are valid, false otherwise.
 */
 bool verify_solver_coeffs( const solver_coeffs &sc );
 
 
 /**
-   \brief Returns coefficients for given integrator.
-   \param method The time integrator to use. See \ref rk_methods
-   \returns solver coefficients for given method.
+   \brief Returns coefficients belonging to the given method.
+
+   See irk::rk_methods for all methods.
+
+   For solving stiff systems, we recommend using a solver that is
+   L-stable and has support for adaptive time stepping.
+
+   \note If the method is not recognized, the coefficients
+         returned will not pass verify_solver_coefficients.
+
+   \param method The method to return coefficients for.
+
+   \returns coefficients belonging to given method.
 */
 solver_coeffs get_coefficients( int method );
 
