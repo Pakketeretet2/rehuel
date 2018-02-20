@@ -30,10 +30,8 @@ int main( int argc, char **argv )
 
 	std::vector<int> methods = { irk::BOGACKI_SHAMPINE_32,
 	                             irk::CASH_KARP_54,
-	                             irk::LOBATTO_IIIA_65,
-	                             irk::LOBATTO_IIIC_65,
-	                             irk::GAUSS_LEGENDRE_63,
-	                             irk::RADAU_IIA_32 };
+	                             irk::RADAU_IIA_53,
+	                             irk::RADAU_IA_53 };
 
 	for( int method : methods ){
 
