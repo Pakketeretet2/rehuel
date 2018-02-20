@@ -580,9 +580,10 @@ int take_time_step( double t, arma::vec &y, double dt,
 			// Use relative error:
 			arma::vec rel_y_err = y_err;
 			for( std::size_t i = 0; i < y_err.size(); ++i ){
-				double y_min = std::min( yn[i], y_alt[i] );
+				double yi_abs = std::abs( yn[i] );
+				double ya_abs = std::abs( y_alt[i] );
+				double y_min = std::min( yi_abs, ya_abs );
 				rel_y_err[i] /= y_min;
-
 			}
 
 			bool use_rel_tol = false;
@@ -745,10 +746,9 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( t + dt > t1 ){
 			dt = t1 - t;
 			old_dt = dt;
+			std::cerr << "    Rehuel: This is probably the last step, t = "
+			          << t << " and dt = " << dt << "!\n";
 		}
-
-		// Also check to make sure the output routine will not have
-		// poor interpolation:
 
 		/*
 		if( solver_opts.output ){
@@ -835,13 +835,17 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			double abs_tol = solver_opts.abs_tol;
 
 			double tol = abs_tol;
-
-			if( status & ERROR_LARGER_THAN_RELTOL ){
-				tol = rel_tol * ynorm;
+			if( ynorm < 0 ){
+				// Yes. For some reason the norm of y
+				// overflowed to negative inf.
+				ynorm = std::abs(ynorm);
 			}
 
+			if( ynorm < abs_tol ){
+				tol = rel_tol * ynorm;
+			}
+			err = std::abs(err); // To take care of -inf. :/
 			if( solver_opts.verbosity ){
-				std::cerr << "Increasing dt...\n";
 				if( err > tol ){
 					std::cerr << "Err was too big: " << err
 					          << ".\nThis was step "
@@ -871,9 +875,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 					dt = 0.5*old_dt;
 				}
 			}
-
 		}
-
+		
 		bool move_on = (status == SUCCESS);
 		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
 			move_on = true;
@@ -918,6 +921,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			output->write_solution();
 			output->store_vector_solution( step, t, y );
 
+			output->write_timestep_info( step, t, dt, err, old_err,
+			                             newton_stats.iters );
 
 		}
 	}

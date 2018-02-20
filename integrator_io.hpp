@@ -228,6 +228,36 @@ public:
 		}
 	}
 
+
+	/**
+	   \brief Writes time step info and stuff.
+	*/
+	void write_timestep_info( unsigned long long int step, double t,
+	                          double dt, double err, double old_err, int iters )
+	{
+		if( timestep_out && (step % timestep_out_interval == 0) ){
+			std::ostream &out = *timestep_out;
+
+			out << step << " " << t << " " << dt << " "
+			    << err << " " << old_err << " " << iters << "\n";
+		}
+	}
+
+	/**
+	   \brief Writes only the time step and iterations.
+	*/
+	void write_timestep_info( unsigned long long int step,
+	                          double t, double dt )
+	{
+		if( timestep_out && (step % timestep_out_interval == 0) ){
+			std::ostream &out = *timestep_out;
+
+			out << step << " " << t << " " << dt << "\n";
+		}
+	}
+
+
+
 	/**
 
 	 */

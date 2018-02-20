@@ -282,8 +282,10 @@ int bootstrap_init( double t, const arma::vec &y0,
 
 	irk_sc.dt = 0.001 * dt;
 
-	std::vector<double> ts;
-	std::vector<arma::vec> ys;
+	integrator_io::integrator_output output;
+	integrator_io::vector_output vec_out;
+	output.set_vector_output( 1, &vec_out );
+	opts.output = &output;
 
 	arma::vec yn = y0;
 	// If target_order = 6, then we have 6 ys to store,
@@ -295,11 +297,12 @@ int bootstrap_init( double t, const arma::vec &y0,
 		if( irk_status ) return irk_status;
 
 		// The last value in ys is the new value for last_ys.
-		yn = ys.back();
+		yn = vec_out.y_vals.back();
 		t += dt;
 		last_ys.push_back( std::make_pair( t, yn ) );
+		++num_ys;
 	}
-
+	std::cerr << "  Rehuel: Done bootstrapping multistep method...\n";
 	return irk_status;
 }
 
@@ -408,14 +411,14 @@ int odeint( double t0, double t1,
 			last_fs.push_back( std::make_pair(t, func.fun(t, y)) );
 
 
-
 			// Output:
 			auto *output = solver_opts.output;
 			if( output ){
 				output->add_solution( t, y );
 				output->write_solution();
-
 				output->store_vector_solution( step, t, y );
+
+				output->write_timestep_info( step, t, dt );
 			}
 		}
 	}

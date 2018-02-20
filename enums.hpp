@@ -9,9 +9,9 @@
 
 
 #define FOREACH_MULTISTEP_METHOD(METHOD) \
-	METHOD(ADAMS_BASHFORTH, 0) \
-	METHOD(ADAMS_MOULTON,1)    \
-	METHOD(BDF, 2)             \
+	METHOD(ADAMS_BASHFORTH, 10) \
+	METHOD(ADAMS_MOULTON,11)    \
+	METHOD(BDF, 20)             \
 
 
 // Some macro magic for enum to string and back.
@@ -26,8 +26,8 @@
 	METHOD(IMPLICIT_EULER,200)        \
 	METHOD(RADAU_IA_31,   201)        \
 	METHOD(RADAU_IIA_31,  202)	  \
-	METHOD(RADAU_IA_52,   203)        \
-	METHOD(RADAU_IIA_52,  204)        \
+	METHOD(RADAU_IA_53,   203)        \
+	METHOD(RADAU_IIA_53,  204)        \
 	                                  \
 	METHOD(IMPLICIT_MIDPOINT, 210)    \
 	METHOD(GAUSS_LEGENDRE_42, 211)	  \
@@ -38,7 +38,7 @@
 	METHOD(LOBATTO_IIIA_42, 222)	  \
 	METHOD(LOBATTO_IIIC_42, 223)	  \
 	METHOD(LOBATTO_IIIC_63, 224)      \
-	                                  \
+
 //	METHOD(SDIRK_L_43, 230)
 
 

@@ -330,29 +330,31 @@ solver_coeffs get_coefficients( int method )
 			break;
 
 
-		case RADAU_IA_52:
+		case RADAU_IA_53:
 
-			sc.A = { { 1.0/9.0, (-1 - sqrt6)/18.0, (-1 + sqrt6)/18.0},
-			         { 1.0/9.0, (88.0 + 7*sqrt6)/360.0, (88 - 43*sqrt6)/360.0 },
-			         { 1.0/9.0, (88 + 43*sqrt6)/360.0, (88.0 - 7*sqrt6)/360.0 } };
-			sc.c  = { 0.0, (6.0 - sqrt6)/10.0, (6.0 + sqrt6)/10.0 };
-			sc.b  = { 1.0/9.0, (16.0 + sqrt6)/36.0, (16.0 - sqrt6)/36.0 };
-			sc.b2 = { -13/18.0, (31.0 + 16*sqrt6)/36.0, (31 - 6*sqrt6)/36.0 };
+			sc.A = { { 0, 0, 0, 0 },
+			         { 0, 1.0/9.0, (-1 - sqrt6)/18.0, (-1 + sqrt6)/18.0},
+			         { 0, 1.0/9.0, (88.0 + 7*sqrt6)/360.0, (88 - 43*sqrt6)/360.0 },
+			         { 0, 1.0/9.0, (88 + 43*sqrt6)/360.0, (88.0 - 7*sqrt6)/360.0 } };
+			sc.c  = { 0.0, 0.0, (6.0 - sqrt6)/10.0, (6.0 + sqrt6)/10.0 };
+			sc.b  = { 0, 1.0/9.0, (16.0 + sqrt6)/36.0, (16.0 - sqrt6)/36.0 };
+			sc.b2 = { 5.0/2.0, -43/18.0, (sqrt(6)+16.0)/36.0, (16-sqrt(6))/36.0 };
 
 			sc.order = 5;
-			sc.order2 = 2;
+			sc.order2 = 3;
 
 			break;
-		case RADAU_IIA_52:
+		case RADAU_IIA_53:
 
-			sc.A = { { (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
-			         { (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
-			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
-			sc.c  = {  (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
-			sc.b  = {  (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
-			sc.b2 = { (12-7*sqrt6)/12.0, (12+7*sqrt6)/12.0, -1.0, 0.0 };
+			sc.A = { { 0, 0, 0, 0 },
+			         { 0, (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
+			         { 0, (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
+			         { 0, (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
+			sc.c  = {  0, (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
+			sc.b  = {  0, (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
+			sc.b2 = { 5/2.0, -(23*sqrt(6) + 7)/18.0, (23*sqrt(6) - 7)/18.0, -13/18.0 };
 			sc.order = 5;
-			sc.order2 = 2;
+			sc.order2 = 3;
 
 			break;
 
@@ -363,9 +365,9 @@ solver_coeffs get_coefficients( int method )
 			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0, 0 },
 			         { 0, 0, 0, 0 } };
 			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0, 0 };
-			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0 };
+			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0, 0.0 };
 
-			sc.b2 = {2/9.0, 5/9.0, 2/9.0 };
+			sc.b2 = {2/9.0, 5/9.0, 2/9.0, 0.0 };
 			sc.order = 6;
 			sc.order2 = 2;
 
@@ -438,10 +440,19 @@ double get_better_time_step( double dt_old, double err, double old_err,
 	// so C = err / dt^min_order. We want
 	// C*dtn^min_order = tol so we get
 	// dtn = dt * (tol / err)^(1 / min_order);
+
 	err = std::max( err, 2e-16 );
 	old_err = std::max( old_err, 2e-16 );
 
-	double fac = 1.0/sqrt(1+n_rejected);
+	double expt = 1.0 / min_order;
+	double factor = std::pow( tol/err, expt );
+	factor /= sqrt( 1.0 + n_rejected);
+	if( opts.use_newton_iters_adaptive_step ){
+		factor /= sqrt( newton_iters );
+	}
+
+	factor = std::min( factor, 2.0 );
+	return dt_old * factor;
 
 	// double dt_new = fac * dt_old * std::pow(tol / err, power);
 	double frac1 = tol / err;
@@ -449,7 +460,7 @@ double get_better_time_step( double dt_old, double err, double old_err,
 
 	double fact1 = std::pow( frac1, alpha );
 	double fact2 = std::pow( frac2, beta );
-	double factor = fact1 * fact2;
+	/* double */ factor = fact1 * fact2;
 	if( opts.use_newton_iters_adaptive_step ){
 		factor /= sqrt( newton_iters );
 	}
@@ -466,12 +477,16 @@ double get_better_time_step( double dt_old, double err, double old_err,
 		std::terminate();
 	}
 
-	double dt_new = dt_old * factor * fac;
+	// TODO: Currently there is the problem that factor can become
+	// huge if the error is really small, leading to a crazily large factor.
+	// We limit factor to a maximum of 100;
+	factor = std::min( factor, 100.0 );
+	double dt_new = dt_old * factor / sqrt( 1.0 + n_rejected );
 
 	if( opts.verbosity ){
-		std::cerr << "Factor is " << factor << ", old_err is " << old_err
-		          << " and new err is " << err << ". ";
-		std::cerr << "New dt = min( " << dt_new << ", "
+		std::cerr << "    Factor is " << factor << ", old_err is "
+		          << old_err << " and new err is " << err << ". ";
+		std::cerr << "    New dt = min( " << dt_new << ", "
 		          << max_dt << " ).\n";
 	}
 

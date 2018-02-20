@@ -308,10 +308,13 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	spaced_grid.dt = (t1 - t0) / (Npts - 1.0);
 	std::cerr << "Printing sol every " << spaced_grid.dt << " times.\n";
 
+	std::string fname = "ode_";
+	fname += irk::method_to_name( method );
+	fname += ".dat";
 	auto output_mode = integrator_io::integrator_output::SPACED_GRID;
-	integrator_io::integrator_output output( output_mode,
-	                                         &std::cout, 100, &std::cerr );
-
+	std::ofstream out_file( fname );
+	integrator_io::integrator_output output( output_mode, &out_file,
+	                                         10, &std::cerr );
 	output.set_spaced_grid( t0, t1, (t1 - t0) / (Npts - 1.0) );
 	so.output = &output;
 
