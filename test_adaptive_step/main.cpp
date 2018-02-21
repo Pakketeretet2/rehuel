@@ -16,35 +16,31 @@ int main( int argc, char **argv )
 
 	double t0 = 0.0;
 	double t1 = 10.0;
-	double dt = 1e-1;
+	double dt = 1e-12;
 
 	newton::options newt_opts;
 
 	so.internal_solver = irk::solver_options::NEWTON;
-	so.rel_tol = 1e-4;
-	so.abs_tol = 1e-3;
+	so.rel_tol = 1e-6;
+	so.abs_tol = 1e-5;
 	newt_opts.tol = 0.1*so.rel_tol;
 	newt_opts.maxit = 10000;
 	so.newton_opts = &newt_opts;
 
 
-	std::vector<int> methods = { irk::BOGACKI_SHAMPINE_32,
-	                             irk::CASH_KARP_54,
-	                             irk::RADAU_IIA_53,
-	                             irk::RADAU_IA_53 };
+	std::vector<int> methods = { irk::RADAU_IIA_53 };
+
 
 	for( int method : methods ){
 
 		irk::solver_coeffs  sc = irk::get_coefficients( method );
 		integrator_io::vector_output vec_out;
 		integrator_io::integrator_output output;
-		int interval = 1;
-		if( method == irk::BOGACKI_SHAMPINE_32 ){
-			interval = 500;
-		}
+		int interval = 10;
 		output.set_vector_output( interval, &vec_out );
-
+		output.set_timestep_output( 1, &std::cerr );
 		so.output = &output;
+		so.verbosity = 0;
 
 		sc.dt = dt;
 		int status = irk::odeint( t0, t1, sc, so, y0, stiff );

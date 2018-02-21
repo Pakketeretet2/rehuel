@@ -426,71 +426,40 @@ solver_options default_solver_options()
 
 
 
-double get_better_time_step( double dt_old, double err, double old_err,
-                             double tol, int newton_iters, int n_rejected,
+double get_better_time_step( double dt_n, double dt_nm, double err,
+                             double old_err, double tol,
+                             int newton_iters, int n_rejected,
                              const solver_options &opts,
                              const solver_coeffs &sc, double max_dt )
 {
-	// From Wanner & Hairer's book, "A PI Step Size Control"
+	// From "Stiff differential equations solved by Radau methods.
+	old_err = std::max( 2e-16, old_err );
+	err     = std::max( 2e-16, err );
+
 	double min_order = std::min( sc.order, sc.order2 );
-	double alpha = 1.0 / min_order;
-	double beta  = 0.08; // 0.4 / min_order;
+	double inv_err = 1.0 / err;
+	double fac = 0.9 / sqrt( 1.0 + newton_iters );
+	fac /= static_cast<double>( 1.0 + n_rejected );
+	double err_frac = old_err / err;
+	double pow = 1.0 / ( 1.0 + min_order );
+	double dt_frac = dt_n / dt_nm;
 
-	// err = | y - y2 | = C * dt^min_order + O( dt^(min_order+1 ) )
-	// so C = err / dt^min_order. We want
-	// C*dtn^min_order = tol so we get
-	// dtn = dt * (tol / err)^(1 / min_order);
+	double scale_27 = std::pow( inv_err, pow );
+	double scale_28 = scale_27 * std::pow( err_frac, pow ) * dt_frac;
 
-	err = std::max( err, 2e-16 );
-	old_err = std::max( old_err, 2e-16 );
+	double min_scale = std::min( scale_27, scale_28 );
+	/*
+	std::cerr << "    Rehuel: (err, old_err) = ( " << err << ", " << old_err << ")\n";
+	std::cerr << "    Rehuel: err_frac = " << err_frac << ", pow = "
+	          << pow << ", min_order = " << min_order << ".\n";
+	std::cerr << "    Rehuel: (err, old_err) = ( " << err << ", " << old_err << ")\n";
+	std::cerr << "    Rehuel: scale_27 = " << scale_27 << ", scale_28 = " << scale_28 << "\n";
+	*/
 
-	double expt = 1.0 / min_order;
-	double factor = std::pow( tol/err, expt );
-	factor /= sqrt( 1.0 + n_rejected);
-	if( opts.use_newton_iters_adaptive_step ){
-		factor /= sqrt( newton_iters );
-	}
+	double dt_new = fac * dt_n * min_scale;
+	// if( dt_new >
+	return dt_new;
 
-	factor = std::min( factor, 2.0 );
-	return dt_old * factor;
-
-	// double dt_new = fac * dt_old * std::pow(tol / err, power);
-	double frac1 = tol / err;
-	double frac2 = old_err / tol;
-
-	double fact1 = std::pow( frac1, alpha );
-	double fact2 = std::pow( frac2, beta );
-	/* double */ factor = fact1 * fact2;
-	if( opts.use_newton_iters_adaptive_step ){
-		factor /= sqrt( newton_iters );
-	}
-
-	if( factor >= 1e10 ){
-		// Fix a factor of inf.
-		std::cerr << "Factor was way too large because "
-		          << "tol = " << tol << ", err = " << err
-		          << " and old_err = " << old_err << " so frac1 = "
-		          << frac1 << " and frac2 = " << frac2
-		          << " because fact1 = " << fact1 << " and fact2 = "
-		          << fact2 << " and newton_iters = "
-		          << newton_iters << "\n";
-		std::terminate();
-	}
-
-	// TODO: Currently there is the problem that factor can become
-	// huge if the error is really small, leading to a crazily large factor.
-	// We limit factor to a maximum of 100;
-	factor = std::min( factor, 100.0 );
-	double dt_new = dt_old * factor / sqrt( 1.0 + n_rejected );
-
-	if( opts.verbosity ){
-		std::cerr << "    Factor is " << factor << ", old_err is "
-		          << old_err << " and new err is " << err << ". ";
-		std::cerr << "    New dt = min( " << dt_new << ", "
-		          << max_dt << " ).\n";
-	}
-
-	return ( dt_new > max_dt ) ? max_dt : dt_new;
 }
 
 

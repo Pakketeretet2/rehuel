@@ -184,7 +184,8 @@ solver_options default_solver_options();
 /**
    \brief Attempts to find a more optimal time step size based on error estimate
 
-   \param dt_old         Old time step size
+   \param dt_n           Time step size of last taken step
+   \param dt_nm          Time step size of previous taken step.
    \param abs_err        Absolute error estimate
    \param rel_err        Current error estimate
    \param newton_iters   Number of Newton iterations used.
@@ -195,8 +196,9 @@ solver_options default_solver_options();
 
    \return A time step size that is estimated to be more optimal.
 */
-double get_better_time_step( double dt_old, double err, double old_err,
-                             double tol, int newton_iters, int n_rejected,
+double get_better_time_step( double dt_n, double dt_nm, double err,
+                             double old_err, double tol,
+                             int newton_iters, int n_rejected,
                              const solver_options &opts,
                              const solver_coeffs &sc, double max_dt );
 
@@ -509,6 +511,37 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 }
 
 
+
+
+/**
+   \brief Estimates the error in the solution given two numerical
+   solutions of order p and q.
+*/
+inline double get_error_estimate( const arma::vec &yn, const arma::vec &y_alt,
+                           const irk::solver_options &solver_opts,
+                           const irk::solver_coeffs &sc )
+{
+	// See Hairer and Wanner, Solving ODES II, page 124
+	arma::vec y_err = yn - y_alt;
+
+	double err = 0.0;
+	double n = 0.0;
+	for( std::size_t i = 0; i < y_err.size(); ++i ){
+		double erri = y_err[i];
+		double y0i_abs = std::fabs( yn[i] );
+		double y1i_abs = std::fabs( y_alt[i] );
+
+		double sci  = solver_opts.abs_tol;
+		sci += std::max( y0i_abs, y1i_abs ) * solver_opts.rel_tol;
+
+		err += erri*erri / (sci*sci);
+		n += 1.0;
+	}
+	return sqrt( err / n );
+}
+
+
+
 /**
    \brief Performs one time step from (t,y) to (t+dt, y+dy)
 
@@ -572,52 +605,14 @@ int take_time_step( double t, arma::vec &y, double dt,
 		}
 
 		if( adaptive_dt ){
-			arma::vec y_err = yn - y_alt;
-			double ynorm = arma::norm( yn, "inf" );
-
-			// Use absolute error:
-			double abs_err = arma::norm( y_err, "inf" );
-			// Use relative error:
-			arma::vec rel_y_err = y_err;
-			for( std::size_t i = 0; i < y_err.size(); ++i ){
-				double yi_abs = std::abs( yn[i] );
-				double ya_abs = std::abs( y_alt[i] );
-				double y_min = std::min( yi_abs, ya_abs );
-				rel_y_err[i] /= y_min;
-			}
-
-			bool use_rel_tol = false;
-			double rel_err = arma::norm( rel_y_err, "inf" );
-			double tol = solver_opts.abs_tol;
-			if( ynorm < solver_opts.abs_tol ){
-				err = abs_err;
-			}else{
-				use_rel_tol = true;
-				err = rel_err;
-				tol = solver_opts.rel_tol;
-			}
-
-			if( err < 0.1*tol ){
-				increase_dt = true;
-			}else if( err > tol ){
-				// Returning here prevents y from being updated.
-				int retcode = DT_TOO_LARGE;
-				if( use_rel_tol )
-					retcode |= ERROR_LARGER_THAN_RELTOL;
-				else
-					retcode |= ERROR_LARGER_THAN_ABSTOL;
-				return retcode;
-			}
+			err = get_error_estimate( yn, y_alt, solver_opts, sc );
 		}
 
 		// If you get here, either adaptive_dt == false
 		// or everything is fine.
 		// Store new y:
 		y = yn;
-		int ret_code = 0;
-
-		if( increase_dt )      ret_code |= DT_TOO_SMALL;
-		else                   ret_code |= SUCCESS;
+		int ret_code = SUCCESS;
 		if( stats.iters < 10 ) ret_code |= INTERNAL_SOLVE_FEW_ITERS;
 
 
@@ -626,7 +621,7 @@ int take_time_step( double t, arma::vec &y, double dt,
 		return ret_code;
 
 	}else{
-		// At this point, y has not changed. Neither has K. Only err.
+		// At this point, y has not changed. Neither has K _nor_ err.
 		if( solver_opts.verbosity ){
 			std::cerr << "Internal solver failed to converge at "
 			          << "t = " << t << ". Final dt = " << dt << ", final res = "
@@ -736,29 +731,32 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		method_type += SDIRK;
 	}
 
+	// Contains [ dt_n+1, dt_n, dt_n-1 ].
+	double dts[3];
+	auto print_dts = [&dts]( std::ostream &out )
+		{ out << "dts = { " << dts[0] << ", " << dts[1]
+		  << ", " << dts[2] << " }"; };
+
+	dts[0] = dt;
+	dts[1] = dt;
+	dts[2] = dt;
+
 	while( t < t1 ){
-
-		bool change_dt = false;
-		double old_dt = dt;
-		old_err = err;
-
 		// Check if you need to lower dt to exactly hit
 		if( t + dt > t1 ){
 			dt = t1 - t;
-			old_dt = dt;
 			std::cerr << "    Rehuel: This is probably the last step, t = "
 			          << t << " and dt = " << dt << "!\n";
+			std::cerr << "            ";
+			print_dts( std::cerr );
+			std::cerr << "\n";
 		}
 
-		/*
-		if( solver_opts.output ){
-			double to = solver_opts.output->next_output_time_step();
-			if( t + dt > to ){
-				dt = to - t;
-				old_dt = dt;
-			}
-		}
-		*/
+
+		bool change_dt = false;
+		old_err = err;
+		double dt_for_step = dt;
+
 
 		if( method_type & EXPLICIT ){
 			const auto& stepper = take_time_step<functor_type, EXPLICIT>;
@@ -783,16 +781,16 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 		if( solver_opts.verbosity ){
 			std::cerr << "t = " << t << ", step " << step
-			          << ", status = " << status << "\n";
+			          << ", status = " << status;
+			print_dts( std::cerr );
+			std::cerr << "\n";
 			std::vector<std::pair<int,std::string> > pairs =
 				{ {SUCCESS                 , "SUCCESS"},
 				  {DT_TOO_SMALL            , "DT_TOO_SMALL            "},
 				  {INTERNAL_SOLVE_FEW_ITERS, "INTERNAL_SOLVE_FEW_ITERS"},
 				  {GENERAL_ERROR           , "GENERAL_ERROR           "},
 				  {DT_TOO_LARGE            , "DT_TOO_LARGE            "},
-				  {INTERNAL_SOLVE_FAILURE  , "INTERNAL_SOLVE_FAILURE  "},
-				  {ERROR_LARGER_THAN_RELTOL, "ERROR_LARGER_THAN_RELTOL"},
-				  {ERROR_LARGER_THAN_ABSTOL, "ERROR_LARGER_THAN_ABSTOL"} };
+				  {INTERNAL_SOLVE_FAILURE  , "INTERNAL_SOLVE_FAILURE  "} };
 			for( const auto &p : pairs ){
 				if( status & p.first ){
 					std::cerr << "    " << p.second << "\n";
@@ -808,10 +806,16 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			return GENERAL_ERROR;
 		}
 
+		change_dt = adaptive_dt;
 		if( status & INTERNAL_SOLVE_FAILURE ){
-			status |= DT_TOO_LARGE;
+			// If the internal solve failed, there is no new error
+			// estimate and hence the only thing you can do is
+			// reduce the time step size and try again.
+			dt *= 0.5;
+			change_dt = false;
 		}
 
+		/*
 		if( status & DT_TOO_LARGE ){
 			change_dt = adaptive_dt;
 
@@ -827,56 +831,19 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( status & DT_TOO_SMALL ){
 			change_dt = adaptive_dt;
 		}
-
-
+		*/
 		if( change_dt ){
-			double ynorm = arma::norm( y, "inf" );
-			double rel_tol = solver_opts.rel_tol;
-			double abs_tol = solver_opts.abs_tol;
-
-			double tol = abs_tol;
-			if( ynorm < 0 ){
-				// Yes. For some reason the norm of y
-				// overflowed to negative inf.
-				ynorm = std::abs(ynorm);
-			}
-
-			if( ynorm < abs_tol ){
-				tol = rel_tol * ynorm;
-			}
-			err = std::abs(err); // To take care of -inf. :/
-			if( solver_opts.verbosity ){
-				if( err > tol ){
-					std::cerr << "Err was too big: " << err
-					          << ".\nThis was step "
-					          << latest_n_rejected_step
-					          << " rejected.\n";
-				}else{
-					std::cerr << "Err was too small: "
-					          << err << ".\n";
-				}
-				std::cerr << "Tol is " << tol << " ("
-				          << rel_tol*ynorm
-				          << " vs. " << abs_tol << ")\n";
-			}
-			double old_dt = dt;
-
-			dt = get_better_time_step( dt, err, old_err, tol,
-			                           newton_stats.iters,
-			                           latest_n_rejected_step,
-			                           solver_opts, sc, max_dt );
-
-			if( solver_opts.verbosity ){
-				std::cerr << "changing dt from " << old_dt
-				          << "... to " << dt << "\n";
-			}
-			if( status & INTERNAL_SOLVE_FAILURE ){
-				if( dt >= old_dt ){
-					dt = 0.5*old_dt;
-				}
-			}
+			dt = get_better_time_step( dt, dts[1], err, old_err,
+			                           1.0, newton_stats.iters,
+			                           latest_n_rejected_step, solver_opts,
+			                           sc, max_dt );
 		}
-		
+
+		dts[2] = dts[1];
+		dts[1] = dts[0];
+		dts[0] = dt;
+
+
 		bool move_on = (status == SUCCESS);
 		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
 			move_on = true;
@@ -893,9 +860,11 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 
 
 		// OK, advance time:
-		t += old_dt;
+		t += dt_for_step;
 		++step;
 		latest_n_rejected_step = 0;
+
+
 
 
 		// Some FSAL preparation here:
