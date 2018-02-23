@@ -643,6 +643,7 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 	std::vector<arma::vec> yy;
 	unsigned long long int step = 0;
 
+	int maxit = solver_opts.newton_opts->maxit;
 	newton::status newton_stats; // Use these for adaptive time step control.
 
 
@@ -769,7 +770,14 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 			return GENERAL_ERROR;
 		}
 
-		change_dt = adaptive_dt;
+		if( adaptive_dt ){
+			if( err < 0.01 ){
+				change_dt = true;
+			}else if( err >= 1.0 ){
+				change_dt = true;
+			}
+		}
+
 		if( status & INTERNAL_SOLVE_FAILURE ){
 			// If the internal solve failed, there is no new error
 			// estimate and hence the only thing you can do is
@@ -798,8 +806,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( change_dt ){
 			dt = get_better_time_step( dt, dts[1], err, old_err,
 			                           1.0, newton_stats.iters,
-			                           opts.maxit,
-			                           solver_opts, sc, max_dt );
+			                           maxit, solver_opts,
+			                           sc, max_dt );
 		}
 
 		dts[2] = dts[1];
