@@ -258,7 +258,7 @@ solver_coeffs get_coefficients( int method )
 
 			break;
 
-
+			/*
 		case RADAU_IA_31:
 			sc.A = { { 1.0 / 4.0, -1.0 / 4.0  },
 			         { 1.0 / 4.0,  5.0 / 12.0 } };
@@ -272,19 +272,18 @@ solver_coeffs get_coefficients( int method )
 			sc.order2 = 1;
 
 			break;
+			*/
+		case RADAU_IIA_32:
 
-		case RADAU_IIA_31:
-
-			// Try adding an explicit Euler stage?
-
-			sc.A = { { 5.0 / 12.0, -1.0 / 12.0 },
-			         { 3.0 / 4.0,   1.0 / 4.0 } };
-			sc.c = { 1.0/3.0, 1.0 };
-			sc.b = { 3.0/4.0, 1.0/4.0 };
-			sc.b2 = { 5.0/8.0, 3.0/8.0 };
+			sc.A = { { 0.0, 0.0, 0.0 },
+			         { 0.0, 5.0 / 12.0, -1.0 / 12.0 },
+			         { 0.0, 3.0 / 4.0,   1.0 / 4.0 } };
+			sc.c = { 0.0, 1.0/3.0, 1.0 };
+			sc.b = { 0.0, 3.0/4.0, 1.0/4.0 };
+			sc.b2 = { -1.0/2.0, 3.0/2.0, 0.0 };
 
 			sc.order = 3;
-			sc.order2 = 1;
+			sc.order2 = 2;
 			break;
 
 
@@ -344,6 +343,7 @@ solver_coeffs get_coefficients( int method )
 			sc.order2 = 3;
 
 			break;
+
 		case RADAU_IIA_53:
 
 			sc.A = { { 0, 0, 0, 0 },
@@ -428,36 +428,43 @@ solver_options default_solver_options()
 
 double get_better_time_step( double dt_n, double dt_nm, double err,
                              double old_err, double tol,
-                             int newton_iters, int n_rejected,
+                             int newton_iters, int maxit,
                              const solver_options &opts,
                              const solver_coeffs &sc, double max_dt )
 {
 	// From "Stiff differential equations solved by Radau methods.
-	old_err = std::max( 2e-16, old_err );
-	err     = std::max( 2e-16, err );
-
+	// err is now normalized, so an error < 1.0 is good.
+	double newton_fac = (1.0 + 2.0*maxit) / (newton_iters + 2.0*maxit);
+	double fac  = std::min( 0.9, 0.9 * newton_fac );
+	double facr = 1.0/8.0;
+	double facl = 5.0;
 	double min_order = std::min( sc.order, sc.order2 );
-	double inv_err = 1.0 / err;
-	double fac = 0.9 / sqrt( 1.0 + newton_iters );
-	fac /= static_cast<double>( 1.0 + n_rejected );
-	double err_frac = old_err / err;
-	double pow = 1.0 / ( 1.0 + min_order );
-	double dt_frac = dt_n / dt_nm;
+	double expt = 1.0 / ( min_order + 1.0 );
+	double err_pow = std::pow( err, expt );
+	double quot = std::max( facr, std::min( facl, err_pow / fac ) );
 
-	double scale_27 = std::pow( inv_err, pow );
-	double scale_28 = scale_27 * std::pow( err_frac, pow ) * dt_frac;
+	double dt_new = dt_n / quot;
 
-	double min_scale = std::min( scale_27, scale_28 );
-	/*
-	std::cerr << "    Rehuel: (err, old_err) = ( " << err << ", " << old_err << ")\n";
-	std::cerr << "    Rehuel: err_frac = " << err_frac << ", pow = "
-	          << pow << ", min_order = " << min_order << ".\n";
-	std::cerr << "    Rehuel: (err, old_err) = ( " << err << ", " << old_err << ")\n";
-	std::cerr << "    Rehuel: scale_27 = " << scale_27 << ", scale_28 = " << scale_28 << "\n";
-	*/
+	if( err < 1.0 ){
+		// If the step is accepted you can apply the controller
+		// of Gustafsson:
 
-	double dt_new = fac * dt_n * min_scale;
-	// if( dt_new >
+		double dt_frac = dt_nm / dt_n;
+		double err_frac = err / old_err;
+
+		double scale_27 = std::pow( err_frac, expt ) / 0.9;
+		double scale_28 = dt_frac * scale_27;
+
+		double fac_g = std::max( facr, std::min( facl, scale_28 ) );
+		quot = std::max( quot, fac_g );
+	}
+	dt_new = std::min( dt_new, max_dt );
+
+	if( err >= 1.0 ){
+		dt_new = std::min( dt_new, dt_n );
+	}
+
+
 	return dt_new;
 
 }

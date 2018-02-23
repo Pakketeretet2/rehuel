@@ -198,7 +198,7 @@ solver_options default_solver_options();
 */
 double get_better_time_step( double dt_n, double dt_nm, double err,
                              double old_err, double tol,
-                             int newton_iters, int n_rejected,
+                             int newton_iters, int maxit,
                              const solver_options &opts,
                              const solver_coeffs &sc, double max_dt );
 
@@ -334,30 +334,6 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 }
 
 
-/**
-   \brief A wrapper struct to make Newton iteration easier.
-
-*/
-template <typename f_func, typename J_func, typename Jac_type>
-struct newton_wrapper
-{
-	typedef Jac_type jac_type;
-
-	newton_wrapper( f_func &f, J_func &J ) : f(f), J(J) {}
-
-	arma::vec fun( const arma::vec &K )
-	{
-		return f(K);
-	}
-
-	jac_type jac( const arma::vec &K )
-	{
-		return J(K);
-	}
-
-	f_func &f;
-	J_func &J;
-};
 
 /**
    \brief Calculates the RK stages.
@@ -370,6 +346,8 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
                          functor_type &func, newton::status &stats,
                          const arma::vec &K, bool &success )
 {
+	using newton::newton_lambda_wrapper;
+
 	arma::vec KK = K;
 	const newton::options &opts = *solver_opts.newton_opts;
 	my_timer timer_step( std::cerr );
@@ -426,9 +404,9 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 			auto ki_jac  = [&single_stage_jac, k_rest]( const arma::vec &ki ){
 				return single_stage_jac( ki, k_rest ); };
 
-			newton_wrapper<decltype(ki_func),
-			               decltype(ki_jac),
-			               typename functor_type::jac_type>
+			newton_lambda_wrapper<decltype(ki_func),
+			                      decltype(ki_jac),
+			                      typename functor_type::jac_type>
 				nw_ki( ki_func, ki_jac );
 
 			arma::vec ki_sol;
@@ -469,39 +447,21 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 			return J;
 		};
 
-		newton_wrapper<decltype(stages_func), decltype(stages_jac_const),
-		               typename functor_type::jac_type>
-			nw_const_J( stages_func, stages_jac_const );
-
-		newton_wrapper<decltype(stages_func), decltype(stages_jac),
-		               typename functor_type::jac_type>
+		newton_lambda_wrapper<decltype(stages_func), decltype(stages_jac),
+		                      typename functor_type::jac_type>
 			nw_update_jac( stages_func, stages_jac );
 
 
-		if( solver_opts.constant_jac_approx ){
-			switch( solver_opts.internal_solver ){
-				case solver_options::NEWTON:
-					KK = newton::newton_iterate( nw_const_J, K,
-					                             opts, stats );
-					break;
-				default:
-				case solver_options::BROYDEN:
-					KK = newton::broyden_iterate( nw_const_J, K,
-					                              opts, stats );
-					break;
-			}
-		}else{
-			switch( solver_opts.internal_solver ){
-				case solver_options::NEWTON:
-					KK = newton::newton_iterate( nw_update_jac, K,
-					                             opts, stats );
-					break;
-				default:
-				case solver_options::BROYDEN:
-					KK = newton::broyden_iterate( nw_update_jac, K,
-					                              opts, stats );
-					break;
-			}
+		switch( solver_opts.internal_solver ){
+			case solver_options::NEWTON:
+				KK = newton::newton_iterate( nw_update_jac, K,
+				                             opts, stats );
+				break;
+			default:
+			case solver_options::BROYDEN:
+				KK = newton::broyden_iterate( nw_update_jac, K,
+				                              opts, stats );
+				break;
 		}
 		success = stats.conv_status == newton::SUCCESS;
 	}
@@ -556,6 +516,9 @@ inline double get_error_estimate( const arma::vec &yn, const arma::vec &y_alt,
    \param jac           The Jacobian of the RHS of the ODE.
    \param adaptive_dt   If true, also update embedded pair.
    \param err           Will contain an error estimate, if available.
+                        Note that the error estimate is normalized
+                        to the tolerance, so err < 1.0 is good,
+                        err > 1.0 is bad.
    \param K             Will contain the new stages on success.
 
    \returns a status code (see \ref odeint_status_codes)
@@ -738,8 +701,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		  << ", " << dts[2] << " }"; };
 
 	dts[0] = dt;
-	dts[1] = dt;
-	dts[2] = dt;
+	dts[1] = dts[0];
+	dts[2] = dts[1];;
 
 	while( t < t1 ){
 		// Check if you need to lower dt to exactly hit
@@ -835,8 +798,8 @@ int odeint( double t0, double t1, const solver_coeffs &sc,
 		if( change_dt ){
 			dt = get_better_time_step( dt, dts[1], err, old_err,
 			                           1.0, newton_stats.iters,
-			                           latest_n_rejected_step, solver_opts,
-			                           sc, max_dt );
+			                           opts.maxit,
+			                           solver_opts, sc, max_dt );
 		}
 
 		dts[2] = dts[1];

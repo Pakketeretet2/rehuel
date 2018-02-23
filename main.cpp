@@ -329,7 +329,6 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	so.adaptive_step_size = false;
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
-	so.constant_jac_approx = const_jac;
 
 	integrator_io::vector_output vec_out;
 	output.set_vector_output( 1, &vec_out );
@@ -462,12 +461,18 @@ void test_three_body( int method, double t0, double t1, double dt,
 		return;
 	}
 
+	integrator_io::integrator_output output;
+	integrator_io::vector_output vec_out;
+	output.set_vector_output( 100, &vec_out );
+	output.set_timestep_output( 100, &std::cerr );
 
+	so.output = &output;
 
-	std::vector<arma::vec> ys;
-	std::vector<double> times;
+	std::vector<arma::vec> &ys = vec_out.y_vals;
+	std::vector<double> &times = vec_out.t_vals;
 
-	std::cerr << "Integrating three-body problem...\n";
+	std::cerr << "Integrating three-body problem from "
+	          << t0 << " to " << t1 << "...\n";
 	int status = irk::odeint( t0, t1, sc, so, y0, three_bod );
 	std::cerr << "status is " << status << "!\n";
 

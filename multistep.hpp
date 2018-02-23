@@ -276,7 +276,6 @@ int bootstrap_init( double t, const arma::vec &y0,
 	opts.abs_tol		 = 5e-2*solver_opts.abs_tol;
 	opts.max_dt		 = solver_opts.max_dt;
 	opts.newton_opts	 = solver_opts.newton_opts;
-	opts.constant_jac_approx = solver_opts.constant_jac_approx;
 	opts.adaptive_step_size  = true;
 	opts.use_newton_iters_adaptive_step = true;
 

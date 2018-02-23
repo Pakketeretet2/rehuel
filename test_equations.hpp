@@ -65,8 +65,8 @@ struct rober {
 	arma::vec fun( double t, const arma::vec &y )
 	{
 		return { -0.04*y[0] + 1e4 * y[1]*y[2],
-		          0.04*y[0] - 1e4 * y[1]*y[2] - 3e7*y[2]*y[2],
-		          3e7*y[2]*y[2] };
+		          0.04*y[0] - 1e4 * y[1]*y[2] - 3e7*y[1]*y[1],
+		          3e7*y[1]*y[1] };
 	}
 
 	jac_type jac( double t, const arma::vec &y )
@@ -77,11 +77,11 @@ struct rober {
 		J(0,2) = 1e4*y[1];
 
 		J(1,0) = 0.04;
-		J(1,1) = -1e4*y[2];
-		J(1,2) = -1e4*y[1] - 6e7*y[2];
+		J(1,1) = -1e4*y[2] - 2*3e7*y[1];
+		J(1,2) = -1e4*y[1];
 
-		J(2,0) = J(2,1) = 0.0;
-		J(2,2) = 6e7*y[2];
+		J(2,0) = J(2,2) = 0.0;
+		J(2,1) = 2*3e7*y[1];
 		return J;
 	}
 };
@@ -103,10 +103,10 @@ struct dimer {
 	{
 		jac_type J(2,2);
 		J(0,0) = -4*rate*y[0];
-		J(0,1) = -4*rate*y[0];
+		J(0,1) =  2*irate;
 
-		J(1,0) = -4*rate*y[0];
-		J(1,1) = -4*rate*y[0];
+		J(1,0) =  2*rate*y[0];
+		J(1,1) =   -irate;
 		return J;
 	}
 
@@ -127,9 +127,9 @@ struct reac_diff {
 	// n1'(x=1) = 0
 	// n2(x=0)  = 0.5
 	// n2'(x=1) = 0
-	//
-	typedef arma::sp_mat jac_type;
-	// typedef arma::mat jac_type;
+
+	//typedef arma::sp_mat jac_type;
+	typedef arma::mat jac_type;
 
 
 	reac_diff( int Nx, double D1, double D2, double rate )

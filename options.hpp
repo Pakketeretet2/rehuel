@@ -34,7 +34,6 @@ struct common_solver_options
 		  newton_opts( nullptr ),
 		  output( nullptr ),
 		  verbosity( 0 ),
-		  constant_jac_approx( false ),
 		  abort_on_solver_fail( false )
 	{ }
 
@@ -60,9 +59,6 @@ struct common_solver_options
 
 	/// if > 0, print some output.
 	int verbosity;
-
-	/// If true, use a constant Jacobi matrix approximation
-	bool constant_jac_approx;
 
 	/// If true, abort if the internal solver failed.
 	bool abort_on_solver_fail;

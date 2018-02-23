@@ -24,8 +24,7 @@
 	METHOD(FEHLBERG_54,105)           \
 	                                  \
 	METHOD(IMPLICIT_EULER,200)        \
-	METHOD(RADAU_IA_31,   201)        \
-	METHOD(RADAU_IIA_31,  202)	  \
+	METHOD(RADAU_IIA_32,  202)	  \
 	METHOD(RADAU_IA_53,   203)        \
 	METHOD(RADAU_IIA_53,  204)        \
 	                                  \

@@ -85,6 +85,68 @@ struct status {
 	bool store_final_J;  ///< If true, the final value of J(x) is stored
 };
 
+
+
+/**
+   \brief A wrapper struct to make Newton iteration easier.
+
+   It wraps a function that returns an RHS and a function that
+   returns a Jacobi matrix.
+*/
+template <typename f_func, typename J_func, typename Jac_type>
+struct newton_lambda_wrapper
+{
+	typedef Jac_type jac_type;
+
+	newton_lambda_wrapper( f_func &f, J_func &J ) : f(f), J(J) {}
+
+	arma::vec fun( const arma::vec &K )
+	{
+		return f(K);
+	}
+
+	jac_type jac( const arma::vec &K )
+	{
+		return J(K);
+	}
+
+	f_func &f;
+	J_func &J;
+};
+
+
+
+
+/**
+   \brief A wrapper struct to make Newton iteration easier.
+
+   It wraps an ODE functor that returns an RHS and a function that
+   returns a Jacobi matrix.
+*/
+template <typename functor_type>
+struct newton_functor_wrapper
+{
+	typedef typename functor_type::jac_type jac_type;
+
+	newton_functor_wrapper( functor_type &func, double t ) : func(func), t(t) {}
+
+	arma::vec fun( const arma::vec &Y )
+	{
+		return func.fun( t, Y );
+	}
+
+	jac_type jac( const arma::vec &Y )
+	{
+		return func.jac( t, Y );
+	}
+
+	functor_type &func;
+	double t;
+};
+
+
+
+
 /**
    \brief this function selects between solve and spsolve.
 
@@ -92,7 +154,7 @@ struct status {
 */
 inline arma::vec solve_impl( const arma::mat &A, const arma::vec &b )
 {
-	return arma::solve(A,b);
+	return arma::solve(A,b, arma::solve_opts::no_approx);
 }
 
 /**
@@ -180,8 +242,6 @@ bool verify_jacobi_matrix( const arma::vec &y, functor_type &func )
 		          << max_diff << "\n";
 		return false;
 	}else{
-		std::cerr << "Jacobi matrix seems fine with max diff of "
-		          << max_diff << "\n";
 		return true;
 	}
 }
@@ -337,7 +397,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		}
 
 		if( precondition ){
-
 			for( std::size_t i = 0; i < N; ++i ){
 				P(i,i) = 1.0 / J(i,i);
 			}
