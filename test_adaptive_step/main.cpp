@@ -26,7 +26,7 @@ int main( int argc, char **argv )
 	newt_opts.tol = 0.1*so.rel_tol;
 	newt_opts.maxit = 10000;
 	so.newton_opts = &newt_opts;
-
+	so.adaptive_step_size = true;
 
 	std::vector<int> methods = { irk::RADAU_IIA_53 };
 
@@ -38,7 +38,7 @@ int main( int argc, char **argv )
 		integrator_io::integrator_output output;
 		int interval = 10;
 		output.set_vector_output( interval, &vec_out );
-		output.set_timestep_output( 1, &std::cerr );
+		output.set_timestep_output( 10000, &std::cerr );
 		so.output = &output;
 		so.verbosity = 0;
 
