@@ -13,9 +13,13 @@
 
 #include <vector>
 
+#include "functor.hpp"
 #include "irk.hpp"
 #include "newton.hpp"
 
+/**
+   \brief Integrator class for non-sparse Jacobian matrix.
+*/
 class integrator
 {
 public:
@@ -38,28 +42,37 @@ public:
 		bool adaptive_time_step;
 	};
 
-	integrator() {}
+	integrator( int method ) : sc( irk::get_coefficients(method) ) {}
 	~integrator() {}
 
 
-	template <typename functor_type>
-	int odeint( functor_type &func, const arma::vec &y0,
+	int odeint( functor &func, const arma::vec &y0,
 	            double t0, double t1, double dt );
-
 
 
 private:
 	options int_opts;
 	irk::solver_coeffs sc;
 
-
-	template <typename functor_type>
-	double estimate_error( const arma::vec &K, const arma::vec &y_new,
+	double estimate_error( const arma::vec &y_new,
 	                       const arma::vec &y_alt,
-	                       const typename functor_type::jac_type &J,
-	                       double dt );
+	                       const arma::mat &J,
+	                       double gamma, double dt );
+
+	double get_new_dt( double dt1, double dt0, double err, double err_old );
+
+
+
+	arma::vec construct_F( double t, const arma::vec &y,
+	                       const arma::vec &K, double dt, functor &func );
+
+
+	arma::mat construct_J( double t, const arma::vec &y,
+	                       const arma::vec &K, double dt, functor &func );
 
 };
+
+
 
 
 
