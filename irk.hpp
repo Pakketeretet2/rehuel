@@ -32,6 +32,7 @@
 #include <armadillo>
 #include <cassert>
 #include <limits>
+#include <iomanip>
 
 #include "enums.hpp"
 #include "integrator_io.hpp"
@@ -53,7 +54,6 @@ struct solver_coeffs
 	arma::vec b; ///< weights for the new y-value
 	arma::vec c; ///< these set the intermediate time points
 	arma::mat A; ///< alpha coefficients in Butcher tableau
-	double dt;   ///< time step size to use
 
 	arma::vec b2; ///< weights for the new y-value of the embedded RK method
 
@@ -64,8 +64,11 @@ struct solver_coeffs
 	/// true to enable the optimizations associated with FSAL.
 	bool FSAL;
 
-	/// True if the method has an interpolating formula for dense output.
-	bool dense_output;
+	/// This gamma is used as weight for the current value for embedding.
+	double gamma;
+
+	/// This matrix defines the interpolating polynomial, if available.
+	arma::mat b_interp;
 };
 
 
@@ -106,11 +109,23 @@ static std::map<std::string,int> rk_string_to_method = {
 
 
 /**
-   \brief This allows for optimizations when determining stages.
+   \brief a struct that contains time stamps and stages that can be used for
+   constructing the solution all time points in the interval (dense output).
 */
-enum method_traits { IMPLICIT = 0,
-                     EXPLICIT = 1,
-                     SDIRK    = 2 };
+struct rk_output
+{
+	int status;
+
+	std::vector<double> t_vals;
+	std::vector<arma::vec> y_vals;
+	std::vector<arma::vec> stages;
+
+	std::vector<arma::vec> err_est;
+	std::vector<double>    err;
+
+	std::size_t n_jac_evals, n_func_evals;
+};
+
 
 
 /**
@@ -260,10 +275,13 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
 	for( unsigned int i = 0; i < Ns; ++i ){
 		double ti = t + dt * c[i];
 		arma::vec yi = y;
+		arma::vec delta;
+		delta.zeros( Neq );
 		for( unsigned int j = 0; j < Ns; ++j ){
 			unsigned int offset = j*Neq;
-			yi += dt * A(i,j) * K.subvec( offset, offset + Neq - 1 );
+			delta += A(i,j) * K.subvec( offset, offset + Neq - 1 );
 		}
+		yi += dt*delta;
 		arma::vec ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
 		arma::vec tmp = func.fun( ti, yi );
 		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
@@ -335,104 +353,80 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 
 
 
+
 /**
-   \brief Calculates the RK stages.
+   \brief Time-integrate a given ODE from t0 to t1, starting at y0
 
+   t_vals and y_vals shall be unmodified upon failure.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+   \param sc           Solver coefficients
+   \param solver_opts  Options for the internal solver.
+
+   \returns a status code (see \ref odeint_status_codes)
 */
-template <typename functor_type, int method_type> inline
-arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
-                         const solver_coeffs &sc,
-                         const solver_options &solver_opts,
-                         functor_type &func, newton::status &stats,
-                         const arma::vec &K, bool &success )
+template <typename functor_type> inline
+rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::vec &y0,
+                        const solver_options &solver_opts, double dt = 1e-6 )
 {
-	using newton::newton_lambda_wrapper;
+	double t = t0;
+	rk_output sol;
+	sol.status = SUCCESS;
 
-	arma::vec KK = K;
-	const newton::options &opts = *solver_opts.newton_opts;
-	my_timer timer_step( std::cerr );
+	sol.t_vals.push_back(t);
+	sol.y_vals.push_back(y0);
 
-	std::size_t Neq = y.size();
+	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_53 );
+
+	assert( strcmp( sc.name, "RADAU_IIA_53" ) == 0 &&
+	        "For some reason get_coefficients returned wrong coeffs!" );
+	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+	assert( solver_opts.newton_opts && "Newton solver options not set!" );
+	assert( dt > 0 && "Cannot use time step size <= 0!" );
+
+	const newton::options &newton_opts = *solver_opts.newton_opts;
+
+	std::size_t Neq = y0.size();
 	std::size_t Ns  = sc.b.size();
+	std::size_t N   = Neq * Ns;
 
-	// Check if the method is explicit or implicit:
+	arma::vec y = y0;
+	arma::vec K_np, K_n;
+	K_np.zeros( N );
+	K_n.zeros( N );
 
-	if( method_type & EXPLICIT ){
-		// No need to solve with Newton:
-		for( std::size_t i = 0; i < Ns; ++i ){
-			std::size_t offset = i*Neq;
-			arma::vec yi = y;
-			for( std::size_t j = 0; j < i; ++j ){
-				std::size_t delta = j*Neq;
-				auto Ki = KK.subvec( delta, delta + Neq - 1 );
-				yi += dt * sc.A(i,j) * Ki;
-			}
-			KK.subvec( offset, offset + Neq - 1 )
-				= func.fun( t + sc.c[i]*dt, yi );
+	newton::status newton_stats;
+	long long int step = 0;
+
+	double dts[3];
+	double errs[3];
+	dts[0] = dts[1] = dts[2] = dt;
+	errs[0] = errs[1] = errs[2] = 0.9;
+
+	std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+
+	std::size_t n_attempt = 0;
+	std::size_t n_reject_newton = 0;
+	std::size_t n_reject_err    = 0;
+
+	std::ofstream err_info( "err.log" );
+	err_info << "# step time  err  iters\n";
+
+	bool alternative_error_formula = true;
+
+	// Make sure you stop exactly at t = t1.
+	while( t < t1 ){
+
+		// ****************  Calculate stages:   ************
+		if( t + dt > t1 ){
+			dt = t1 - t;
 		}
-		success = true;
+		++n_attempt;
 
-	}else if( false && (method_type & SDIRK) ){
-		// In this case the solution is simplified, because Newton
-		// iteration simplifies to Ns times solving a system of NeqxNeq
-
-		auto single_stage_func = [&t, &y, &dt, &sc, &func]
-			(const arma::vec &k1, const arma::vec &k_rest ){
-			return func.fun( t + sc.c[0]*dt, y + dt*sc.A(0,0)*k1 + k_rest ) - k1;
-		};
-
-		typename functor_type::jac_type I_k1( y.size(), y.size() );
-		I_k1.eye();
-
-		auto single_stage_jac = [&t, &y, &dt, &sc, &func, &I_k1]
-			( const arma::vec &k1, const arma::vec &k_rest ){
-			return func.jac( t + sc.c[0]*dt, y + dt*sc.A(0,0)*k1 + k_rest ) - I_k1;
-		};
-
-
-		for( std::size_t i = 0; i < Ns; ++i ){
-			arma::vec k_rest;
-			k_rest.zeros( Neq );
-			for( std::size_t j = 0; j < i; ++j ){
-				std::size_t delta = j*Neq;
-				auto Ki = KK.subvec( delta, delta + Neq - 1 );
-				k_rest += dt * sc.A(i,j) * Ki;
-			}
-
-			auto ki_func = [&single_stage_func, &k_rest]( const arma::vec &ki ){
-				return single_stage_func( ki, k_rest ); };
-			auto ki_jac  = [&single_stage_jac, k_rest]( const arma::vec &ki ){
-				return single_stage_jac( ki, k_rest ); };
-
-			newton_lambda_wrapper<decltype(ki_func),
-			                      decltype(ki_jac),
-			                      typename functor_type::jac_type>
-				nw_ki( ki_func, ki_jac );
-
-			arma::vec ki_sol;
-
-			switch( solver_opts.internal_solver ){
-				case solver_options::NEWTON:
-					ki_sol = newton::newton_iterate( nw_ki, k_rest,
-					                                 opts, stats );
-				default:
-				case solver_options::BROYDEN:
-					ki_sol = newton::broyden_iterate( nw_ki, k_rest,
-					                                  opts, stats );
-					break;
-			}
-
-			success = stats.conv_status == newton::SUCCESS;
-			if( !success ) return KK;
-			std::size_t offset = i * Neq;
-			std::size_t delta  = Neq;
-			KK.subvec(offset, offset + delta - 1) = ki_sol;
-		}
-	}else{
-
-		// For the SDIRK, use constant J but keep same for the rest.
-
-		auto J = construct_J( t, y, KK, dt, sc, func );
+		int integrator_status = 0;
 
 		// Use newton iteration to find the Ks for the next level:
 		auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
@@ -443,157 +437,186 @@ arma::vec get_rk_stages( double t, const arma::vec &y, double dt,
 			return construct_J( t, y, K, dt, sc, func );
 		};
 
-		auto stages_jac_const = [&J]( const arma::vec &K ){
-			return J;
-		};
+		newton::newton_lambda_wrapper<decltype(stages_func),
+		                              decltype(stages_jac),
+		                              typename functor_type::jac_type>
+			nw( stages_func, stages_jac );
 
-		newton_lambda_wrapper<decltype(stages_func), decltype(stages_jac),
-		                      typename functor_type::jac_type>
-			nw_update_jac( stages_func, stages_jac );
+		K_np = newton::newton_iterate( nw, K_n, newton_opts,
+		                               newton_stats, true /* false */ );
+		int newton_status = newton_stats.conv_status;
 
-
-		switch( solver_opts.internal_solver ){
-			case solver_options::NEWTON:
-				KK = newton::newton_iterate( nw_update_jac, K,
-				                             opts, stats );
-				break;
-			default:
-			case solver_options::BROYDEN:
-				KK = newton::broyden_iterate( nw_update_jac, K,
-				                              opts, stats );
-				break;
+		// *********** Verify Newton iteration convergence ************
+		if( newton_status != newton::SUCCESS ){
+			dt *= 0.1;
+			++n_reject_newton;
+			continue;
 		}
-		success = stats.conv_status == newton::SUCCESS;
+
+
+		// ****************  Construct solution at t + dt   ************
+		arma::vec delta_y, delta_alt;
+		std::size_t Neq = y.size();
+		double gamma = sc.gamma;
+		delta_y.zeros( Neq );
+		delta_alt.zeros( Neq );
+
+		for( std::size_t i = 0; i < Ns; ++i ){
+			std::size_t i0 = i*Neq;
+			std::size_t i1 = (i+1)*Neq - 1;
+			auto Ki = K_np.subvec( i0, i1 );
+			delta_y   += dt * sc.b[i]  * Ki;
+			delta_alt += dt * sc.b2[i] * Ki;
+		}
+
+		arma::vec dy_alt = dt*gamma * func.fun( t, y ) + delta_alt;
+		arma::vec y_n    = y + delta_y;
+		arma::vec yp     = y + dy_alt;
+		arma::vec delta_delta = dy_alt - delta_y;
+
+
+		/*
+		std::cerr << "    Rehuel: old y, new y, y' and dy:\n";
+		for( std::size_t i = 0; i < y_n.size(); ++i ){
+			std::cerr << "        " << y[i] << "   " << y_n[i] << "   " << yp[i]
+			          << "  " << std::scientific << delta_delta[i]
+			          << "\n";
+		}
+		*/
+		// **************      Estimate error:    **********************
+		arma::mat I, J0;
+		I.eye(Neq, Neq);
+		J0 = func.jac( t, y );
+		// Formula 8.19:
+		arma::vec err_8_19 = arma::solve( I - gamma * dt * J0,
+		                                  delta_delta );
+		arma::vec err_est = err_8_19;
+
+
+		// Alternative formula 8.20:
+		if( alternative_error_formula ){
+			// Use the alternative formulation:
+			arma::vec dy_alt_alt = dt*gamma*func.fun(t, y+err_est);
+			dy_alt_alt += delta_alt;
+			arma::vec err_alt = dy_alt_alt - delta_y;
+			err_est = arma::solve( I - gamma*dt*J0, err_alt );
+		}
+
+		double err_tot = 0.0;
+		double n = 0.0;
+		for( std::size_t i = 0; i < err_est.size(); ++i ){
+			double erri = err_est[i];
+			double sci  = solver_opts.abs_tol;
+			double y0i  = std::fabs( y[i] );
+			double y1i  = std::fabs( y_n[i] );
+
+			sci += solver_opts.rel_tol * std::max( y0i, y1i );
+			err_tot += erri*erri / sci / sci;
+			n += 1.0;
+		}
+
+		double err = std::sqrt( err_tot / n );
+
+		assert( err >= 0.0 && "Error cannot be negative!" );
+		if( err < machine_precision ){
+			err = machine_precision;
+		}
+
+		errs[2] = errs[1];
+		errs[1] = errs[0];
+		errs[0] = err;
+
+		if( err > 1.0 ){
+			// This is bad.
+			alternative_error_formula = true;
+			integrator_status = 1;
+			++n_reject_err;
+
+
+			err_info << step << " " << t << " " << dt << " "
+			         << err << " " << newton_stats.iters << "\n";
+		}
+
+
+		// **************      Find new dt:    **********************
+
+
+		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
+		fac /= ( newton_opts.maxit + newton_stats.iters );
+
+		double expt = 1.0 / ( 1.0 + std::min( sc.order, sc.order2 ) );
+		double err_inv = 1.0 / err;
+		double scale_27 = std::pow( err_inv, expt );
+		double dt_rat = dts[0] / dts[1];
+		double err_frac = errs[1] / errs[0];
+		double err_rat = std::pow( err_frac, expt );
+		double scale_28 = scale_27 * dt_rat * err_rat;
+		/*
+		std::cerr << "    Rehuel: Time step controller:\n"
+		          << "            err      = " << err << "\n"
+		          << "            err_inv  = " << err_inv << "\n"
+		          << "            dt_rat   = " << dt_rat << "\n"
+		          << "            err_frac = " << err_frac << "\n"
+		          << "            err_rat  = " << err_rat << "\n"
+		          << "            scale_27 = " << scale_27 << "\n"
+		          << "            scale_28 = " << scale_28 << "\n\n";
+		*/
+		double new_dt = fac * dt * std::min( scale_27, scale_28 );
+
+		// **************    Update y and time   ********************
+
+		if( solver_opts.out_interval > 0 &&
+		    (step % solver_opts.out_interval == 0) ){
+			std::cerr  << "    Rehuel: " << step << " " << t
+			           << " " <<  dt << " " << err << " "
+			           << newton_stats.iters << "\n";
+		}
+
+
+		if( integrator_status == 0 ){
+
+			y = y_n;
+			t += dt;
+			++step;
+
+			sol.t_vals.push_back(t);
+			sol.y_vals.push_back(y_n);
+			sol.stages.push_back(K_np);
+			sol.err_est.push_back( err_est );
+			sol.err.push_back( err );
+
+			alternative_error_formula = false;
+
+
+			err_info << step << " " << t << " " << dt << " "
+			         << err << " " << newton_stats.iters << "\n";
+
+			// ***************   Estimate new stages:  *************
+
+
+
+		}
+
+		// **************      Actually set the new dt:    **********************
+
+		dt = new_dt;
+		dts[2] = dts[1];
+		dts[1] = dts[0];
+		dts[0] = dt;
+
 	}
 
+	double accept_rat = static_cast<double>(step) / n_attempt;
 
-	return KK;
-}
+	std::cerr << "    Rehuel: Done integrating ODE over [ " << t0 << ", "
+	          << t1 << " ].\n";
+	std::cerr << "            Number of succesful steps: " << step
+	          << " / " << n_attempt
+	          << ". Accept ratio = " << accept_rat
+	          << ", rejected due to newton: " << n_reject_newton
+	          << ", rejected due to err: " << n_reject_err << "\n";
 
-
-
-
-/**
-   \brief Estimates the error in the solution given two numerical
-   solutions of order p and q.
-*/
-inline double get_error_estimate( const arma::vec &yn, const arma::vec &y_alt,
-                           const irk::solver_options &solver_opts,
-                           const irk::solver_coeffs &sc )
-{
-	// See Hairer and Wanner, Solving ODES II, page 124
-	arma::vec y_err = yn - y_alt;
-
-	double err = 0.0;
-	double n = 0.0;
-	for( std::size_t i = 0; i < y_err.size(); ++i ){
-		double erri = y_err[i];
-		double y0i_abs = std::fabs( yn[i] );
-		double y1i_abs = std::fabs( y_alt[i] );
-
-		double sci  = solver_opts.abs_tol;
-		sci += std::max( y0i_abs, y1i_abs ) * solver_opts.rel_tol;
-
-		err += erri*erri / (sci*sci);
-		n += 1.0;
-	}
-	return sqrt( err / n );
-}
-
-
-
-/**
-   \brief Performs one time step from (t,y) to (t+dt, y+dy)
-
-   K and y shall be unmodified upon failure
-
-   \param t             Current time
-   \param y             Current solution to the ODE at t
-   \param dt            Current time step size
-   \param sc            Solver coefficients
-   \param solver_opts   Options for the solver
-   \param fun           The RHS of the ODE
-   \param jac           The Jacobian of the RHS of the ODE.
-   \param adaptive_dt   If true, also update embedded pair.
-   \param err           Will contain an error estimate, if available.
-                        Note that the error estimate is normalized
-                        to the tolerance, so err < 1.0 is good,
-                        err > 1.0 is bad.
-   \param K             Will contain the new stages on success.
-
-   \returns a status code (see \ref odeint_status_codes)
-*/
-template <typename functor_type, int method_type> inline
-int take_time_step( double t, arma::vec &y, double dt,
-                    newton::status &stats,
-                    const irk::solver_coeffs &sc,
-                    const irk::solver_options &solver_opts,
-                    functor_type &func,
-                    bool adaptive_dt, double &err, arma::vec &K )
-{
-	std::size_t Neq = y.size();
-	std::size_t Ns  = sc.b.size();
-
-	bool success = false;
-	arma::vec KK = get_rk_stages<functor_type, method_type>( t, y, dt, sc,
-	                                                         solver_opts,
-	                                                         func, stats, K,
-	                                                         success );
-	if( solver_opts.abort_on_solver_fail && !success ){
-		std::cerr << "Internal solver failed! Aborting!\n";
-		return GENERAL_ERROR;
-	}
-	bool increase_dt = false;
-
-
-	if( success ){
-		arma::vec y_alt;
-		// First, do adaptive time step:
-		if( adaptive_dt ){
-			y_alt = y;
-			for( unsigned int i = 0; i < Ns; ++i ){
-				unsigned int offset = i*Neq;
-				const auto &Ki = KK.subvec( offset,
-				                            offset + Neq - 1 );
-				y_alt += dt * sc.b2[i] * Ki;
-			}
-		}
-
-		arma::vec yn = y;
-
-		for( unsigned int i = 0; i < Ns; ++i ){
-			unsigned int offset = i*Neq;
-			const auto &Ki = KK.subvec( offset, offset + Neq - 1 );
-			yn += dt * sc.b[i] * Ki;
-		}
-
-		if( adaptive_dt ){
-			err = get_error_estimate( yn, y_alt, solver_opts, sc );
-		}
-
-		// If you get here, either adaptive_dt == false
-		// or everything is fine.
-		// Store new y:
-		y = yn;
-		int ret_code = SUCCESS;
-		if( stats.iters < 10 ) ret_code |= INTERNAL_SOLVE_FEW_ITERS;
-
-
-
-		K = KK; // Store the new stages.
-		return ret_code;
-
-	}else{
-		// At this point, y has not changed. Neither has K _nor_ err.
-		if( solver_opts.verbosity ){
-			std::cerr << "Internal solver failed to converge at "
-			          << "t = " << t << ". Final dt = " << dt << ", final res = "
-			          << stats.res << "\n";
-		}
-		return INTERNAL_SOLVE_FAILURE;
-	}
-
-	return SUCCESS;
+	return sol;
 }
 
 
@@ -602,281 +625,21 @@ int take_time_step( double t, arma::vec &y, double dt,
 
    t_vals and y_vals shall be unmodified upon failure.
 
+   \param func         Functor of the ODE to integrate
    \param t0           Starting time
    \param t1           Final time
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver
    \param y0           Initial values
-   \param func         Functor of the ODE to integrate
+   \param dt           Initial time step size.
+   \param solver_opts  Options for the internal solver.
 
    \returns a status code (see \ref odeint_status_codes)
 */
 template <typename functor_type> inline
-int odeint( double t0, double t1, const solver_coeffs &sc,
-            const solver_options &solver_opts,
-            const arma::vec &y0, functor_type &func )
+rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
+                  const solver_options &solver_opts, double dt = 1e-6 )
 {
-	double t = t0;
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-	assert( solver_opts.newton_opts && "Newton solver options not set!" );
-	assert( sc.dt > 0 && "Cannot use time step size of 0!" );
-
-
-	double dt = sc.dt;
-	double err = 0.0;
-	double old_err = err;
-	bool adaptive_dt = solver_opts.adaptive_step_size;
-
-	if( adaptive_dt ){
-		if( sc.b2.size() != sc.b.size() ){
-			std::cerr << "WARNING: Adaptive time step requested "
-			          << "but chosen method has no embedded "
-			          << " pair!\n";
-			adaptive_dt = false;
-		}
-	}else if( solver_opts.verbosity ){
-		std::cerr << "Not using adaptive time step.\n";
-	}
-
-	arma::vec y = y0;
-	std::vector<double> tt;
-	std::vector<arma::vec> yy;
-	unsigned long long int step = 0;
-
-	newton::status newton_stats; // Use these for adaptive time step control.
-
-
-	// Prepare output if necessary:
-	if( solver_opts.output ){
-
-		auto *output = solver_opts.output;
-		output->set_storage_size( sc.order + 1 );
-		output->add_solution( t, y );
-		output->write_solution();
-
-		output->store_vector_solution( step, t, y );
-	}
-
-
-
-	// Main integration loop:
-	int status = 0;
-
-	my_timer timer( std::cerr );
-	timer.tic();
-
-	// Prepare stages:
-	std::size_t Neq = y.size();
-	std::size_t Ns  = sc.b.size();
-	std::size_t NN = Ns * Neq;
-
-	arma::vec K = arma::zeros( NN, 1 );
-	for( std::size_t i = 0; i < Ns; ++i ){
-		std::size_t i0 = i*Neq;
-		std::size_t i1 = (i+1)*Neq - 1;
-		K.subvec( i0, i1 ) = func.fun( t, y );
-	}
-
-	// Grab max_dt for convenience:
-	double max_dt = solver_opts.max_dt;
-
-	bool explicit_method = irk::is_method_explicit( sc );
-	bool sdirk_method    = irk::is_method_sdirk( sc );
-
-	int rejected_step = 0;
-	int latest_n_rejected_step = 0;
-
-	int method_type = 0;
-	if( explicit_method ){
-		method_type += EXPLICIT;
-	}
-	if( sdirk_method ){
-		method_type += SDIRK;
-	}
-
-	// Contains [ dt_n+1, dt_n, dt_n-1 ].
-	double dts[3];
-	auto print_dts = [&dts]( std::ostream &out )
-		{ out << "dts = { " << dts[0] << ", " << dts[1]
-		  << ", " << dts[2] << " }"; };
-
-	dts[0] = dt;
-	dts[1] = dts[0];
-	dts[2] = dts[1];;
-
-	while( t < t1 ){
-		// Check if you need to lower dt to exactly hit
-		if( t + dt > t1 ){
-			dt = t1 - t;
-			std::cerr << "    Rehuel: This is probably the last step, t = "
-			          << t << " and dt = " << dt << "!\n";
-			std::cerr << "            ";
-			print_dts( std::cerr );
-			std::cerr << "\n";
-		}
-
-
-		bool change_dt = false;
-		old_err = err;
-		double dt_for_step = dt;
-
-
-		if( method_type & EXPLICIT ){
-			const auto& stepper = take_time_step<functor_type, EXPLICIT>;
-			status = stepper( t, y, dt, newton_stats, sc,
-			                  solver_opts, func, adaptive_dt,
-			                  err, K );
-
-			// To make sure get_better_timestep works:
-			newton_stats.iters = 1;
-		}else if( method_type & SDIRK ){
-			const auto& stepper = take_time_step<functor_type, SDIRK>;
-			status = stepper( t, y, dt, newton_stats, sc,
-			                  solver_opts, func, adaptive_dt,
-			                  err, K );
-
-		}else{
-			const auto& stepper = take_time_step<functor_type, IMPLICIT>;
-			status = stepper( t, y, dt, newton_stats, sc,
-			                  solver_opts, func, adaptive_dt,
-			                  err, K );
-		}
-
-		if( solver_opts.verbosity ){
-			std::cerr << "t = " << t << ", step " << step
-			          << ", status = " << status;
-			print_dts( std::cerr );
-			std::cerr << "\n";
-			std::vector<std::pair<int,std::string> > pairs =
-				{ {SUCCESS                 , "SUCCESS"},
-				  {DT_TOO_SMALL            , "DT_TOO_SMALL            "},
-				  {INTERNAL_SOLVE_FEW_ITERS, "INTERNAL_SOLVE_FEW_ITERS"},
-				  {GENERAL_ERROR           , "GENERAL_ERROR           "},
-				  {DT_TOO_LARGE            , "DT_TOO_LARGE            "},
-				  {INTERNAL_SOLVE_FAILURE  , "INTERNAL_SOLVE_FAILURE  "} };
-			for( const auto &p : pairs ){
-				if( status & p.first ){
-					std::cerr << "    " << p.second << "\n";
-				}
-			}
-		}
-
-
-		if( status == GENERAL_ERROR ){
-			if( solver_opts.verbosity ){
-				std::cerr << "Generic error in odeint!\n";
-			}
-			return GENERAL_ERROR;
-		}
-
-		change_dt = adaptive_dt;
-		if( status & INTERNAL_SOLVE_FAILURE ){
-			// If the internal solve failed, there is no new error
-			// estimate and hence the only thing you can do is
-			// reduce the time step size and try again.
-			dt *= 0.5;
-			change_dt = false;
-		}
-
-		/*
-		if( status & DT_TOO_LARGE ){
-			change_dt = adaptive_dt;
-
-			if( !change_dt ){
-				dt *= 0.3;
-			}
-		}
-
-		if( status & INTERNAL_SOLVE_FEW_ITERS ){
-			// This means you can probably increase max_dt and dt:
-			status |= DT_TOO_SMALL;
-		}
-		if( status & DT_TOO_SMALL ){
-			change_dt = adaptive_dt;
-		}
-		*/
-		if( change_dt ){
-			dt = get_better_time_step( dt, dts[1], err, old_err,
-			                           1.0, newton_stats.iters,
-			                           opts.maxit,
-			                           solver_opts, sc, max_dt );
-		}
-
-		dts[2] = dts[1];
-		dts[1] = dts[0];
-		dts[0] = dt;
-
-
-		bool move_on = (status == SUCCESS);
-		if( status & DT_TOO_SMALL || status & INTERNAL_SOLVE_FEW_ITERS ){
-			move_on = true;
-		}
-
-		if( !move_on ){
-			// Restore err to the old error:
-			err = old_err;
-			++rejected_step;
-			++latest_n_rejected_step;
-
-			continue;
-		}
-
-
-		// OK, advance time:
-		t += dt_for_step;
-		++step;
-		latest_n_rejected_step = 0;
-
-
-
-
-		// Some FSAL preparation here:
-		std::size_t i0 = (Ns-1)*Neq;
-		std::size_t i1 = Ns*Neq - 1;
-		if( sc.FSAL ){
-			K.subvec( 0, Neq - 1 ) = K.subvec( i0, i1 );
-		}else{
-			K.subvec( 0, Neq - 1 ) = func.fun( t, y );
-		}
-
-		for( std::size_t i = 1; i < Ns; ++i ){
-			i0 = i*Neq;
-			i1 = (i+1)*Neq - 1;
-			K.subvec( i0, i1 ) = func.fun( t, y );
-		}
-
-
-		// Output:
-		auto *output = solver_opts.output;
-		if( output ){
-			output->add_solution( t, y );
-			output->write_solution();
-			output->store_vector_solution( step, t, y );
-
-			output->write_timestep_info( step, t, dt, err, old_err,
-			                             newton_stats.iters );
-
-		}
-	}
-
-	std::string timer_msg = "    Rehuel: Solving ODE with ";
-	timer_msg += sc.name;
-	timer_msg += " and internal solver ";
-	if( solver_opts.internal_solver == solver_options::NEWTON ){
-		timer_msg += "newton";
-	}else if( solver_opts.internal_solver == solver_options::BROYDEN ){
-		timer_msg += "broyden";
-	}
-	timer_msg += " (" + std::to_string( step ) + " steps)";
-
-	double t_diff_msec = timer.toc( timer_msg );
-	double throughput = 1000*step / t_diff_msec;
-	std::cerr << "    Rehuel: Performance: " << throughput
-	          << " steps/second.\n\n";
-
-	return 0;
+	return radau_IIA_53( func, t0, t1, y0, solver_opts );
 }
-
 
 
 

@@ -360,7 +360,7 @@ arma::vec gauss_seidel( functor_type &func, arma::vec x,
    \returns the root of F(x).
 */
 template <typename functor_type, bool refresh_jac, bool precondition,
-          bool time_internals, bool limit_step> inline
+          bool time_internals, bool limit_step, bool quiet> inline
 arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
                                const options &opts, status &stats )
 {
@@ -368,6 +368,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	double tol2 = opts.tol*opts.tol;
 	arma::vec r = func.fun(x);
 	double res2 = arma::dot( r, r );
+	// double old_res2 = res2;
 	stats.iters = 1;
 
 	std::size_t N = x.size();
@@ -385,12 +386,15 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 	auto J = func.jac(x);
 
+	if( !quiet ){
+		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
+		          << " " << res2 << "\n";
+	}
+
 	typename functor_type::jac_type P;
 	P.eye(N,N);
 
-
-
-	while( res2 > tol2 && stats.iters < opts.maxit ){
+	while( (res2 > tol2) && (stats.iters < opts.maxit) ){
 		double lambda = 1.0;
 		if( limit_step ){
 			lambda = (1.0 + opts.tol*res2)  / (1.0 + res2);
@@ -398,7 +402,9 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 		if( precondition ){
 			for( std::size_t i = 0; i < N; ++i ){
-				P(i,i) = 1.0 / J(i,i);
+				if( J(i,i) != 0.0 ){
+					P(i,i) = 1.0 / J(i,i);
+				}
 			}
 			direction = -solve_impl(P*J, P*r);
 
@@ -413,7 +419,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 			}
 		}
 
-
 		x = x0 + direction;
 		if( refresh_jac ){
 			J = func.jac(x);
@@ -425,6 +430,13 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		++stats.iters;
 		f0 = r;
 		x0 = x;
+
+		if( !quiet ){
+			std::cerr << "    Newton: " << stats.iters << "/"
+			          << opts.maxit << " " << res2 << "\n";
+		}
+
+
 	}
 	if( stats.iters == opts.maxit && res2 > tol2 ){
 		stats.conv_status = NOT_CONVERGED;
@@ -432,6 +444,12 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		stats.conv_status = SUCCESS;
 	}
 	stats.res = std::sqrt( res2 );
+
+	// Check whether or not res is NaN or inf or somesuch.
+	if( !std::isfinite( stats.res ) ){
+		stats.conv_status = NOT_CONVERGED;
+	}
+
 	return x;
 }
 
@@ -448,66 +466,117 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 */
 template <typename functor_type> inline
 arma::vec newton_iterate( functor_type &func, arma::vec x,
-                          const options &opts, status &stats )
+                          const options &opts, status &stats,
+                          bool quiet = true )
 {
 	int option_bits = 0;
 	option_bits += 1 * ( opts.refresh_jac == true );
 	option_bits += 2 * ( opts.precondition == true );
 	option_bits += 4 * ( opts.time_internals == true );
 	option_bits += 8 * ( opts.limit_step == true );
+	option_bits += 16* ( quiet == true );
 
 	//std::cerr << "Option combo is " << option_bits << ".\n";
 
 	switch(option_bits){
 		default:
 		case 0:
-			return newton_iterate_impl<functor_type, 0, 0, 0, 0>(
+			return newton_iterate_impl<functor_type, 0, 0, 0, 0,0>(
 				func, x, opts, stats );
 		case 1:
-			return newton_iterate_impl<functor_type, 1, 0, 0, 0>(
+			return newton_iterate_impl<functor_type, 1, 0, 0, 0,0>(
 				func, x, opts, stats );
 		case 2:
-			return newton_iterate_impl<functor_type, 0, 1, 0, 0>(
+			return newton_iterate_impl<functor_type, 0, 1, 0, 0,0>(
 				func, x, opts, stats );
 		case 3:
-			return newton_iterate_impl<functor_type, 1, 1, 0, 0>(
+			return newton_iterate_impl<functor_type, 1, 1, 0, 0,0>(
 				func, x, opts, stats );
 		case 4:
-			return newton_iterate_impl<functor_type, 0, 0, 1, 0>(
+			return newton_iterate_impl<functor_type, 0, 0, 1, 0,0>(
 				func, x, opts, stats );
 		case 5:
-			return newton_iterate_impl<functor_type, 1, 0, 1, 0>(
+			return newton_iterate_impl<functor_type, 1, 0, 1, 0,0>(
 				func, x, opts, stats );
 		case 6:
-			return newton_iterate_impl<functor_type, 0, 1, 1, 0>(
+			return newton_iterate_impl<functor_type, 0, 1, 1, 0,0>(
 				func, x, opts, stats );
 		case 7:
-			return newton_iterate_impl<functor_type, 1, 1, 1, 0>(
+			return newton_iterate_impl<functor_type, 1, 1, 1, 0,0>(
 				func, x, opts, stats );
 		case 8:
-			return newton_iterate_impl<functor_type, 0, 0, 0, 1>(
+			return newton_iterate_impl<functor_type, 0, 0, 0, 1,0>(
 				func, x, opts, stats );
 		case 9:
-			return newton_iterate_impl<functor_type, 1, 0, 0, 1>(
+			return newton_iterate_impl<functor_type, 1, 0, 0, 1,0>(
 				func, x, opts, stats );
 		case 10:
-			return newton_iterate_impl<functor_type, 0, 1, 0, 1>(
+			return newton_iterate_impl<functor_type, 0, 1, 0, 1,0>(
 				func, x, opts, stats );
 		case 11:
-			return newton_iterate_impl<functor_type, 1, 1, 0, 1>(
+			return newton_iterate_impl<functor_type, 1, 1, 0, 1,0>(
 				func, x, opts, stats );
 		case 12:
-			return newton_iterate_impl<functor_type, 0, 0, 1, 1>(
+			return newton_iterate_impl<functor_type, 0, 0, 1, 1,0>(
 				func, x, opts, stats );
 		case 13:
-			return newton_iterate_impl<functor_type, 1, 0, 1, 1>(
+			return newton_iterate_impl<functor_type, 1, 0, 1, 1,0>(
 				func, x, opts, stats );
 		case 14:
-			return newton_iterate_impl<functor_type, 0, 1, 1, 1>(
+			return newton_iterate_impl<functor_type, 0, 1, 1, 1,0>(
 				func, x, opts, stats );
 		case 15:
-			return newton_iterate_impl<functor_type, 1, 1, 1, 1>(
+			return newton_iterate_impl<functor_type, 1, 1, 1, 1,0>(
 				func, x, opts, stats );
+		case 16:
+			return newton_iterate_impl<functor_type, 0, 0, 0, 0,1>(
+				func, x, opts, stats );
+		case 17:
+			return newton_iterate_impl<functor_type, 1, 0, 0, 0,1>(
+				func, x, opts, stats );
+		case 18:
+			return newton_iterate_impl<functor_type, 0, 1, 0, 0,1>(
+				func, x, opts, stats );
+		case 19:
+			return newton_iterate_impl<functor_type, 1, 1, 0, 0,1>(
+				func, x, opts, stats );
+		case 20:
+			return newton_iterate_impl<functor_type, 0, 0, 1, 0,1>(
+				func, x, opts, stats );
+		case 21:
+			return newton_iterate_impl<functor_type, 1, 0, 1, 0,1>(
+				func, x, opts, stats );
+		case 22:
+			return newton_iterate_impl<functor_type, 0, 1, 1, 0,1>(
+				func, x, opts, stats );
+		case 23:
+			return newton_iterate_impl<functor_type, 1, 1, 1, 0,1>(
+				func, x, opts, stats );
+		case 24:
+			return newton_iterate_impl<functor_type, 0, 0, 0, 1,1>(
+				func, x, opts, stats );
+		case 25:
+			return newton_iterate_impl<functor_type, 1, 0, 0, 1,1>(
+				func, x, opts, stats );
+		case 26:
+			return newton_iterate_impl<functor_type, 0, 1, 0, 1,1>(
+				func, x, opts, stats );
+		case 27:
+			return newton_iterate_impl<functor_type, 1, 1, 0, 1,1>(
+				func, x, opts, stats );
+		case 28:
+			return newton_iterate_impl<functor_type, 0, 0, 1, 1,1>(
+				func, x, opts, stats );
+		case 29:
+			return newton_iterate_impl<functor_type, 1, 0, 1, 1,1>(
+				func, x, opts, stats );
+		case 30:
+			return newton_iterate_impl<functor_type, 0, 1, 1, 1,1>(
+				func, x, opts, stats );
+		case 31:
+			return newton_iterate_impl<functor_type, 1, 1, 1, 1,1>(
+				func, x, opts, stats );
+
 	}
 }
 

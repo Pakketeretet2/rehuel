@@ -262,12 +262,7 @@ int bootstrap_init( double t, const arma::vec &y0,
 {
 	// To obtain the first N values, use an RK method that is stable and of
 	// at least the desired order.
-
-	int target_order = sc.order;
-	int method = irk::LOBATTO_IIIC_63;
-
 	irk::solver_options opts = irk::default_solver_options();
-	irk::solver_coeffs irk_sc = irk::get_coefficients( method );
 
 	// Copy over all shared parts from solver_opts:
 
@@ -279,12 +274,9 @@ int bootstrap_init( double t, const arma::vec &y0,
 	opts.adaptive_step_size  = true;
 	opts.use_newton_iters_adaptive_step = true;
 
-	irk_sc.dt = 0.001 * dt;
+	int target_order = sc.order;
 
-	integrator_io::integrator_output output;
 	integrator_io::vector_output vec_out;
-	output.set_vector_output( 1, &vec_out );
-	opts.output = &output;
 
 	arma::vec yn = y0;
 	// If target_order = 6, then we have 6 ys to store,
@@ -292,8 +284,9 @@ int bootstrap_init( double t, const arma::vec &y0,
 	int irk_status = 0;
 	int num_ys = last_ys.size();
 	while( num_ys < target_order ){
-		irk_status = irk::odeint( t, t + dt, irk_sc, opts, yn, func );
-		if( irk_status ) return irk_status;
+		irk::rk_output irk_sol = irk::radau_IIA_53( func, t, t + dt, yn,
+		                                            opts, 0.01*dt );
+		if( irk_sol.status ) return -1;
 
 		// The last value in ys is the new value for last_ys.
 		yn = vec_out.y_vals.back();
@@ -301,8 +294,8 @@ int bootstrap_init( double t, const arma::vec &y0,
 		last_ys.push_back( std::make_pair( t, yn ) );
 		++num_ys;
 	}
-	std::cerr << "  Rehuel: Done bootstrapping multistep method...\n";
-	return irk_status;
+	std::cerr << "    Rehuel: Done bootstrapping multistep method...\n";
+	return 0;
 }
 
 
@@ -362,19 +355,6 @@ int odeint( double t0, double t1,
 		return bootstrap_status;
 	}
 
-	if( solver_opts.output ){
-		auto *output = solver_opts.output;
-
-		output->set_storage_size( sc.order + 1 );
-
-		if( output ){
-			output->add_solution( t, y );
-			output->write_solution();
-
-			output->store_vector_solution( step, t, y );
-		}
-	}
-
 
 	while( t < t1 ){
 		arma::vec yn(y);
@@ -410,15 +390,6 @@ int odeint( double t0, double t1,
 			last_fs.push_back( std::make_pair(t, func.fun(t, y)) );
 
 
-			// Output:
-			auto *output = solver_opts.output;
-			if( output ){
-				output->add_solution( t, y );
-				output->write_solution();
-				output->store_vector_solution( step, t, y );
-
-				output->write_timestep_info( step, t, dt );
-			}
 		}
 	}
 

@@ -357,17 +357,21 @@ public:
 	   \note the solution is only stored if the current step
 	         matches vector_output_interval
 
-	   \param step Current simulation time step
-	   \param time Current simulation time
-	   \param y    Current simulation solution
+	   \param step        Current simulation time step
+	   \param time        Current simulation time
+	   \param y           Current simulation solution
+	   \param force_add   If true, add solution regardless of step.
 
 	*/
-	void store_vector_solution( int step, double time, const arma::vec &y )
+	void store_vector_solution( int step, double time, const arma::vec &y,
+	                            bool force_add = false)
 	{
-		if( vec_out &&
-		    step % vector_out_interval == 0){
-			vec_out->t_vals.push_back(time);
-			vec_out->y_vals.push_back(y);
+		if( vec_out ){
+			if( (step % vector_out_interval == 0)
+			    || force_add ) {
+				vec_out->t_vals.push_back(time);
+				vec_out->y_vals.push_back(y);
+			}
 		}
 	}
 

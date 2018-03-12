@@ -1,8 +1,11 @@
 #include "integrator.hpp"
 
 
+
 int integrator::odeint( functor &func, const arma::vec &y0,
-                        double t0, double t1, double dt )
+                        double t0, double t1, double dt,
+                        std::vector<double> &tvals,
+                        std::vector<arma::vec> &yvals )
 {
 	double t = t0;
 
@@ -16,10 +19,9 @@ int integrator::odeint( functor &func, const arma::vec &y0,
 	K_n.zeros( N );
 
 	newton::options opts;
-	opts.maxit = 50;
-	opts.tol = 1e-1 * int_opts.rel_tol;
-	opts.refresh_jac = false;
-	// opts.limit_step = true;
+	opts.maxit = 250;
+	opts.tol = 0.7 * int_opts.rel_tol;
+	opts.limit_step = false;
 
 	newton::status newton_stats;
 	long long int step = 0;
@@ -34,18 +36,34 @@ int integrator::odeint( functor &func, const arma::vec &y0,
 	}
 	sol_log << "\n";
 
-	double dt_old = dt;
+	double dts[3];
+	double errs[3];
+	dts[0] = dts[1] = dts[2] = dt;
+	errs[0] = errs[1] = errs[2] = 0.9;
 
-	double err = 0.0;
-	double err_old = err;
+	std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+
+	err_log << "# step t dt err iters res scale27 scale28 new_dt\n";
+
+	std::size_t n_reject  = 0;
+	std::size_t n_attempt = 0;
+
+	bool alternative_error_formula = true;
 
 	// Make sure you stop exactly at t = t1.
-	while( true ){
-		if( t + dt >= t1 ){
+	while( t < t1 ){
+
+		// ****************  Calculate stages:   ************
+		if( t + dt > t1 ){
 			dt = t1 - t;
+			std::cerr << "    Rehuel: Last step coming up... t = "
+			          << t << ", dt = " << dt << ".\n";
 		}
+		++n_attempt;
 
 		int integrator_status = 0;
+
+
 		// Calculate the stages:
 		auto J = construct_J( t, y, K_n, dt, func );
 
@@ -54,10 +72,10 @@ int integrator::odeint( functor &func, const arma::vec &y0,
 			return construct_F( t, y, K, dt, func );
 		};
 
+
 		auto stages_jac_const = [&J]( const arma::vec &K ){
 			return J;
 		};
-
 
 		newton::newton_lambda_wrapper<decltype(stages_func),
 		                              decltype(stages_jac_const),
@@ -65,69 +83,125 @@ int integrator::odeint( functor &func, const arma::vec &y0,
 			nw( stages_func, stages_jac_const );
 
 		K_np = newton::newton_iterate( nw, K_n, opts, newton_stats );
+		// K_np = newton::broyden_iterate( nw, K_n, opts, newton_stats );
 
+		// *********** Verify Newton iteration convergence ************
 		int newton_status = newton_stats.conv_status;
 		if( newton_status != newton::SUCCESS ){
-			// Iteration failed. Reject.
-			dt *= 0.5;
+			dt *= 0.1;
+			++n_reject;
 			continue;
+		} else {
+			// std::cerr << "    Rehuel: Newton succeeded with dt = "
+			//           << dt << "\n";
 		}
 
-		// Apparently your stages are alright. Calculate the error:
+
+		// ****************  Construct solution at t + dt   ************
 		arma::vec delta_y, delta_alt;
+		std::size_t Neq = y.size();
 		delta_y.zeros( Neq );
-		delta_alt.zeros( Neq );
+		delta_alt.zeros(Neq);
 
 		for( std::size_t i = 0; i < Ns; ++i ){
 			std::size_t i0 = i*Neq;
 			std::size_t i1 = (i+1)*Neq - 1;
-
-			delta_y   += sc.b[i]  * K_np.subvec( i0, i1 );
-			delta_alt += sc.b2[i] * K_np.subvec( i0, i1 );
-
+			auto Ki = K_np.subvec( i0, i1 );
+			delta_y   += sc.b[i]  * Ki;
+			delta_alt += sc.b2[i]  * Ki;
 		}
 
-		arma::vec yn   = y + dt * delta_y;
-		arma::vec yalt = y + dt * delta_alt;
-		double gamma0 = 0.274888829595677;
-		arma::mat J0 = func.jac( t, y );
+		arma::vec y_n   = y + dt * delta_y;
+		arma::vec y_alt = y + dt * delta_alt;
 
-		err_old = err;
-		err = estimate_error( yn, yalt, J0, gamma0, dt );
+		arma::vec delta_delta = dt*( delta_alt - delta_y );
+
+		// **************      Estimate error:    **********************
+		double gamma = sc.b2[0];
+		arma::mat I, J0;
+		I.eye(Neq, Neq);
+		J0 = func.jac( t, y );
+		// Formula 8.19:
+		arma::vec err_8_19 = arma::solve( I - gamma * dt * J0,
+		                                  delta_delta );
+		arma::vec err_est = err_8_19;
+
+		// Alternative formula 8.20:
+
+		if( alternative_error_formula ){
+			// Use the alternative formulation:
+			arma::vec stage_0_delta = gamma*func.fun( t, y + err_est );
+			arma::vec delta_alt_alt = stage_0_delta;
+			for( std::size_t i = 1; i < Ns; ++i ){
+				std::size_t i0 = i*Neq;
+				std::size_t i1 = (i+1)*Neq - 1;
+				auto Ki = K_np.subvec( i0, i1 );
+				delta_alt_alt += sc.b2[i] * Ki;
+			}
+			arma::vec dd_alt = dt*( delta_alt_alt - delta_y );
+			err_est = arma::solve( I - gamma * dt * J0, dd_alt );
+		}
+
+		double err_tot = 0.0;
+		double n = 0.0;
+		for( std::size_t i = 0; i < err_est.size(); ++i ){
+			double erri = err_est[i];
+			double sci  = int_opts.abs_tol;
+			double y0i = std::fabs( y[i] );
+			double y1i = std::fabs( y_n[i] );
+
+			sci += int_opts.rel_tol * std::max( y0i, y1i );
+			err_tot += erri*erri / sci / sci;
+			n += 1.0;
+		}
+
+		double err = std::sqrt( err_tot / n );
+		if( err == 0 ) err = 3e-16;
+		errs[2] = errs[1];
+		errs[1] = errs[0];
+		errs[0] = err;
 
 		if( err > 1.0 ){
 			// This is bad.
-			std::cerr << "    Rehuel: Error of " << err
-			          << " too large!\n";
+			alternative_error_formula = true;
 			integrator_status = 1;
+			++n_reject;
 		}
 
-		arma::mat I;
-		I.eye( Neq, Neq );
-		arma::vec dy = yalt - yn;
-		arma::vec err_est = arma::solve( I - dt * gamma0 * J0, dy );
 
-		double new_dt = get_new_dt( dt, dt_old, err, err_old );
+		// **************      Find new dt:    **********************
+		double fac = 0.9 * ( 2*opts.maxit + 1.0 );
+		fac /= ( 2*opts.maxit + newton_stats.iters );
 
-		/*
-		std::cerr << "    Rehuel: Step and errors at t = " << t
-		          << ", dt = " << dt << ":\n";
-		std::cerr << "            y   yn   yalt   dy   erry\n";
+		double expt = 1.0 / ( 1.0 + std::min( sc.order, sc.order2 ) );
+		double err_inv = 1.0 / err;
+		double scale_27 = std::pow( err_inv, expt );
+		double dt_rat = dts[0] / dts[1];
+		double err_frac = errs[1] / errs[0];
+		double err_rat = std::pow( err_frac, expt );
+		double scale_28 = scale_27 * dt_rat * err_rat;
 
-		for( std::size_t i = 0; i < Neq; ++i ){
-			std::cerr << "           " << y[i] << "    " << yn[i]
-			          << "   " << yalt[i] << "   " << "   " << dy[i]
-			          << "     " << err_est[i] << "\n";
-		}
-		std::cerr << "            Error estimate = " << err << ".\n";
-		*/
-		err_log << step << " " << t << " " << dt << " " << err << "\n";
+		double new_dt = fac * dt * std::min( scale_27, scale_28 );
 
-		// Update y and the time step:
+
+		// **************    Update y and time   ********************
+
+
+		err_log << step << " " << t << " " << dt << " " << err << " "
+		        << newton_stats.iters << " " << newton_stats.res << " "
+		        << scale_27 << " " << scale_28 << " " << new_dt << "\n";
+
 		if( integrator_status == 0 ){
-			y = yn;
+
+			y = y_n;
 			t += dt;
 			++step;
+
+			tvals.push_back(t);
+			yvals.push_back(y_n);
+
+
+			alternative_error_formula = false;
 
 			sol_log << step << " " << t;
 
@@ -135,50 +209,89 @@ int integrator::odeint( functor &func, const arma::vec &y0,
 				sol_log << " " << y[i];
 			}
 			sol_log << "\n";
+
+			// K_n = K_np; // This seems to do better.
 		}
 
-		// Adjust time step size:
-		dt_old = dt;
+		// **************      Actually set the new dt:    **********************
+
 		dt = new_dt;
+		dts[2] = dts[1];
+		dts[1] = dts[0];
+		dts[0] = dt;
 
-		if( t >= t1 ){
-			break;
-		}
 	}
+
+	double accept_rat = static_cast<double>(step) / n_attempt;
+
+	std::cerr << "    Rehuel: Done integrating ODE over [ " << t0 << ", "
+	          << t1 << " ].\n";
+	std::cerr << "            Number of succesful steps: " << step
+	          << " / " << n_attempt
+	          << ", number of rejected steps: " << n_reject << ".\n"
+	          << "            Accept ratio: " << accept_rat
+	          << ", reject ratio: " << 1.0 - accept_rat << "\n";
 
 	return 0;
 }
 
 
 
-double integrator::estimate_error( const arma::vec &y_new,
-                                   const arma::vec &y_alt,
+double integrator::estimate_error( functor &func,
+                                   double t,
+                                   const arma::vec &y0,
+                                   const arma::vec &yn,
+                                   const arma::vec &yalt,
+                                   const arma::vec &Ks,
                                    const arma::mat &J,
-                                   double gamma, double dt )
+                                   double gamma, double dt,
+                                   arma::vec &err_est, bool alt_formula )
 {
-	std::size_t Neq = y_new.size();
+	std::size_t Neq = y0.size();
+	arma::mat I( Neq, Neq );
 
-        functor::jac_type I;
+	arma::vec delta_y = yalt - yn;
+	// Solving stiff ODEs eq. 8.19:
+	arma::vec err_8_19 = arma::solve( I - dt*gamma*J, delta_y );
 
-	I.eye( Neq, Neq );
-	arma::vec delta_y = y_alt - y_new;
+	err_est = err_8_19;
+	if( false && alt_formula ){
+		std::size_t Ns = sc.b.size();
+		arma::vec y0_alt = y0 + err_8_19;
+		arma::vec stage_0_alt = gamma*func.fun( t, y0_alt );
 
-	arma::vec err = arma::solve( I - dt * gamma * J, delta_y );
-	double n = 0.0;
-	double tot_err = 0.0;
-	for( std::size_t i = 0; i < Neq; ++i ){
-		double erri = err(i);
-		double y0i = std::fabs( y_new(i) );
-		double y1i = std::fabs( y_alt(i) );
+		arma::vec yalt_alt = stage_0_alt;
+		for( std::size_t i = 1; i < Ns; ++i ){
+			std::size_t i0 = i*Neq;
+			std::size_t i1 = (i+1)*Neq - 1;
+			auto Ki = Ks.subvec( i0, i1 );
+			yalt_alt += sc.b2[i] * Ki;
+		}
+		yalt_alt *= dt;
+		arma::vec delta_y_alt = yalt_alt - yn;
+		arma::vec err_8_20 = arma::solve( I - dt*gamma*J, delta_y_alt );
 
-		double sci = int_opts.abs_tol + std::max( y0i, y1i ) * int_opts.rel_tol;
-
-		tot_err += erri*erri / (sci*sci);
-		n += 1.0;
+		err_est = err_8_20;
 	}
 
-	return std::sqrt( tot_err / n );
+	double err_tot = 0.0;
+	double n = 0.0;
+	for( std::size_t i = 0; i < Neq; ++i ){
+		double erri_2 = err_est(i)*err_est(i);
+		double sci    = int_opts.abs_tol;
+		double y0i = std::fabs( y0[i] );
+		double y1i = std::fabs( yn[i] );
+
+		sci += std::max( y0i, y1i ) * int_opts.rel_tol;
+
+		double sci_2  = sci*sci;
+		err_tot += erri_2 / sci_2;
+		n += 1.0;
+	}
+	return std::sqrt( err_tot / n );
 }
+
+
 
 
 arma::vec integrator::construct_F( double t, const arma::vec &y,
@@ -261,17 +374,28 @@ arma::mat integrator::construct_J( double t, const arma::vec &y,
 
 
 
-double integrator::get_new_dt( double dt1, double dt0, double err, double err_old )
+double integrator::get_new_dt( double dts[3], double errs[3],
+                               int n_iters, int n_maxit )
 {
 	double min_order = std::min( sc.order, sc.order2 );
 	double expt = 1.0 / ( 1.0 + min_order );
-	double fac = 0.9;
-	err     = std::max( err, 1e-16 );
-	err_old = std::max( err, 1e-16 );
+
+	double newt_weight = (1.0 + 2*n_maxit) / ( n_iters + 2.0*n_maxit );
+	double fac = 0.9 * newt_weight;
+
+	double err     = std::max( errs[0], 3e-40 );
+	double err_old = std::max( errs[1], 3e-40 );
 
 	double inv_err = 1.0 / err;
-	// double err_frac = err_old / err;
+	double err_frac = err_old / err;
+
+
+
 	double scale_27 = fac * std::pow( inv_err, expt );
-	// double scale_28 = (dt0/dt1)*std::pow( err_frac, expt );
-	return dt1 * scale_27; // std::min( scale_27, scale_28 );
+	double scale_28 = scale_27*(dts[0]/dts[1])*std::pow( err_frac, expt );
+
+	// std::cerr  << "scales are " << scale_27 << ", " << scale_28 << "\n";
+
+	return dts[0] * std::min( scale_27, scale_28 );
+
 }

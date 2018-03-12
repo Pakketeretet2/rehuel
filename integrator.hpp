@@ -17,6 +17,7 @@
 #include "irk.hpp"
 #include "newton.hpp"
 
+
 /**
    \brief Integrator class for non-sparse Jacobian matrix.
 */
@@ -47,19 +48,28 @@ public:
 
 
 	int odeint( functor &func, const arma::vec &y0,
-	            double t0, double t1, double dt );
+	            double t0, double t1, double dt,
+	            std::vector<double> &tvals,
+	            std::vector<arma::vec> &yvals );
 
+	options &get_opts() { return int_opts; }
 
 private:
 	options int_opts;
 	irk::solver_coeffs sc;
 
-	double estimate_error( const arma::vec &y_new,
-	                       const arma::vec &y_alt,
+	double estimate_error( functor &func,
+	                       double t,
+	                       const arma::vec &y0,
+	                       const arma::vec &yn,
+	                       const arma::vec &yalt,
+	                       const arma::vec &Ks,
 	                       const arma::mat &J,
-	                       double gamma, double dt );
+	                       double gamma, double dt,
+	                       arma::vec &err_est, bool alt_formula );
 
-	double get_new_dt( double dt1, double dt0, double err, double err_old );
+	double get_new_dt( double dts[3], double errs[3],
+	                   int n_iters, int n_maxit );
 
 
 
