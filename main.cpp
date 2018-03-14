@@ -97,22 +97,10 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	irk::solver_options so = irk::default_solver_options();
 	irk::solver_coeffs  sc = irk::get_coefficients( method );
 
-	integrator_io::spaced_grid_info spaced_grid;
-	spaced_grid.t0 = t0;
-	spaced_grid.t1 = t1;
-	int Npts = 1001;
-	spaced_grid.dt = (t1 - t0) / (Npts - 1.0);
-	std::cerr << "Printing sol every " << spaced_grid.dt << " times.\n";
-
 	std::string fname = "ode_";
 	fname += irk::method_to_name( method );
 	fname += ".dat";
-	auto output_mode = integrator_io::integrator_output::SPACED_GRID;
 	std::ofstream out_file( fname );
-	integrator_io::integrator_output output( output_mode, &out_file,
-	                                         10, &std::cerr );
-	output.set_spaced_grid( t0, t1, (t1 - t0) / (Npts - 1.0) );
-	so.output = &output;
 
 	std::cerr << "Finding largest error for dt = " << dt << " on interval ["
 	          << t0 << ", " << t1 << "]\n";
@@ -125,8 +113,6 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
 
-	integrator_io::vector_output vec_out;
-	output.set_vector_output( 1, &vec_out );
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
 	newton_opts.max_step = 0.0;
@@ -145,18 +131,6 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	double m_abs_err = 0.0;
 	double m_rel_err = 0.0;
 
-	for( std::size_t i = 0; i < vec_out.t_vals.size(); ++i ){
-
-		double t = vec_out.t_vals[i];
-		double yn = vec_out.y_vals[i][0];
-		double ye = func.sol(t)[0];
-		double abs_err = std::fabs( yn - ye );
-		double rel_err = abs_err == 0 ? 0.0 :
-			abs_err / std::min( yn, ye );
-
-		if( abs_err > m_abs_err ) m_abs_err = abs_err;
-		if( rel_err > m_rel_err ) m_rel_err = rel_err;
-	}
 
 	std::cout << dt << " " << m_abs_err << " " << m_rel_err << "\n";
 }
@@ -246,24 +220,15 @@ void test_three_body( int method, double t0, double t1, double dt,
 		return;
 	}
 
-	integrator_io::integrator_output output;
-	integrator_io::vector_output vec_out;
-	output.set_vector_output( 100, &vec_out );
-	output.set_timestep_output( 100, &std::cerr );
-
-	so.output = &output;
-
-	std::vector<arma::vec> &ys = vec_out.y_vals;
-	std::vector<double> &times = vec_out.t_vals;
 
 	std::cerr << "Integrating three-body problem from "
 	          << t0 << " to " << t1 << "...\n";
 	irk::rk_output sol = irk::odeint( three_bod, t0, t1, y0, so, dt );
 	std::cerr << "status is " << sol.status << "!\n";
 
-	for( std::size_t i = 0; i < times.size(); ++i ){
-		double t = times[i];
-		arma::vec yi = ys[i];
+	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
+		double t = sol.t_vals[i];
+		arma::vec yi = sol.y_vals[i];
 		// Calculate potential and kinetic energy:
 
 		double T = three_bod.kin_energy( yi );

@@ -591,10 +591,6 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 			err_info << step << " " << t << " " << dt << " "
 			         << err << " " << newton_stats.iters << "\n";
 
-			// ***************   Estimate new stages:  *************
-
-
-
 		}
 
 		// **************      Actually set the new dt:    **********************
@@ -604,6 +600,10 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 		dts[1] = dts[0];
 		dts[0] = dt;
 
+		if( integrator_status == 0 ){
+
+			// ***************   Estimate new stages:  *************
+		}
 	}
 
 	double accept_rat = static_cast<double>(step) / n_attempt;

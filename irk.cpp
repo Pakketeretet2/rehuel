@@ -284,7 +284,7 @@ solver_coeffs get_coefficients( int method )
 		// case GAUSS_LEGENDRE_126:
 
 
-		case RADAU_IIA_53:
+		case RADAU_IIA_53:{
 
 			sc.A = { { (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
 			         { (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
@@ -306,8 +306,23 @@ solver_coeffs get_coefficients( int method )
 			sc.order = 5;
 			sc.order2 = 3;
 
-			break;
+			// Interpolates on a solution interval as
+			// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
+			//          + b_interp(j,2)*t^3 + ...
+			double c1 = sc.c[0];
+			double c2 = sc.c[1];
+			double c3 = sc.c[2];
 
+			double d1 = (c1-c2)*(c1-c3);
+			double d2 = (c2-c1)*(c2-c3);
+			double d3 = (c3-c1)*(c3-c2);
+
+			sc.b_interp = { { c2*c3/d1, -(c2+c3)/(2.0*d1), (1.0/3.0)/d1 },
+			                { c1*c3/d2, -(c1+c3)/(2.0*d2), (1.0/3.0)/d2 },
+			                { c1*c2/d3, -(c1+c2)/(2.0*d3), (1.0/3.0)/d3 } };
+
+			break;
+		}
 		// case RADAU_IIA_95
 		// case RADAU_IIA_137
 
