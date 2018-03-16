@@ -27,20 +27,42 @@
 #define TEST_EQUATIONS_HPP
 
 #include <armadillo>
-
 #include <cassert>
+
+#include "functor.hpp"
 
 namespace test_equations {
 
+
+// Exponential function:
+struct exponential : public functor
+{
+	typedef arma::mat jac_type;
+	explicit exponential( double l ) : l(l) {}
+
+	arma::vec fun( double t, const arma::vec &y )
+	{
+		return { l*y };
+	}
+
+	jac_type jac( double t, const arma::vec &y )
+	{
+		return { l };
+	}
+
+	double l;
+};
+
+
 // Van der Pol oscillator:
-struct vdpol
+struct vdpol : public functor
 {
 	typedef arma::mat jac_type;
 	vdpol( double mu ) : mu(mu){}
 
 	arma::vec fun( double t, const arma::vec &y )
 	{
-		return { y[1], mu * ( 1 - y[0]*y[0] ) * y[1] - y[0] };
+		return { y[1], (( 1 - y[0]*y[0] ) * y[1] - y[0]) / mu };
 	}
 
 	jac_type jac( double t, const arma::vec &y )
@@ -49,8 +71,8 @@ struct vdpol
 		J(0,0) = 0.0;
 		J(0,1) = 1.0;
 
-		J(1,0) = -2*mu*y[0]*y[1] - 1.0;
-		J(1,1) = mu*(1 - y[0]*y[0]);
+		J(1,0) = -(2.0 * y[0] * y[1] + 1.0) / mu;
+		J(1,1) = ( 1.0 - y[0]*y[0] ) / mu;
 
 		return J;
 	}
@@ -58,16 +80,48 @@ struct vdpol
 	double mu;
 };
 
+
+
+// Brusselator:
+struct bruss : public functor
+{
+	typedef arma::mat jac_type;
+	bruss( double a, double b ) : a(a), b(b) {}
+
+	arma::vec fun( double t, const arma::vec &y )
+	{
+		return { a + y[0]*y[0]*y[1] - b*y[0] - y[0],
+		         b*y[0] - y[0]*y[0]*y[1] };
+	}
+
+	jac_type jac( double t, const arma::vec &y )
+	{
+		jac_type J(2,2);
+		J(0,0) = 2*y[0]*y[1] - b - 1;
+		J(0,1) = y[0]*y[0];
+
+		J(1,0) = b - 2*y[0]*y[1];
+		J(1,1) = -y[0]*y[0];
+
+		return J;
+	}
+
+	double a, b;
+};
+
+
+
 // Robertson oscillator:
-struct rober {
+struct rober :  public functor {
 	typedef arma::mat jac_type;
 
 	arma::vec fun( double t, const arma::vec &y )
 	{
 		return { -0.04*y[0] + 1e4 * y[1]*y[2],
-		          0.04*y[0] - 1e4 * y[1]*y[2] - 3e7*y[2]*y[2],
-		          3e7*y[2]*y[2] };
+		          0.04*y[0] - 1e4 * y[1]*y[2] - 3e7*y[1]*y[1],
+		          3e7*y[1]*y[1] };
 	}
+
 
 	jac_type jac( double t, const arma::vec &y )
 	{
@@ -77,18 +131,18 @@ struct rober {
 		J(0,2) = 1e4*y[1];
 
 		J(1,0) = 0.04;
-		J(1,1) = -1e4*y[2];
-		J(1,2) = -1e4*y[1] - 6e7*y[2];
+		J(1,1) = -1e4*y[2] - 6e7*y[1];
+		J(1,2) = -1e4*y[1];
 
-		J(2,0) = J(2,1) = 0.0;
-		J(2,2) = 6e7*y[2];
+		J(2,0) = J(2,2) = 0.0;
+		J(2,1) = 6e7*y[1];
 		return J;
 	}
 };
 
 
 // Simple dimerization reaction:
-struct dimer {
+struct dimer :  public functor  {
 	typedef arma::mat jac_type;
 
 	explicit dimer( double rate ) : rate(rate), irate(1.0/rate) {}
@@ -103,10 +157,10 @@ struct dimer {
 	{
 		jac_type J(2,2);
 		J(0,0) = -4*rate*y[0];
-		J(0,1) = -4*rate*y[0];
+		J(0,1) =  2*irate;
 
-		J(1,0) = -4*rate*y[0];
-		J(1,1) = -4*rate*y[0];
+		J(1,0) =  2*rate*y[0];
+		J(1,1) =   -irate;
 		return J;
 	}
 
@@ -116,7 +170,7 @@ struct dimer {
 
 
 // 1-dimensional reaction-diffusion model on [x0,x1]
-struct reac_diff {
+struct reac_diff :  public functor_sparse_jac {
 	// This represents the equations
 	// dn1/dt = D1*laplace(n1) - 2*C*n1^2 + 2*n2/C
 	// dn2/dt = D2*laplace(n2) + C*n1^2 - n2/C
@@ -127,9 +181,9 @@ struct reac_diff {
 	// n1'(x=1) = 0
 	// n2(x=0)  = 0.5
 	// n2'(x=1) = 0
-	//
+
+	//typedef arma::sp_mat jac_type;
 	typedef arma::sp_mat jac_type;
-	// typedef arma::mat jac_type;
 
 
 	reac_diff( int Nx, double D1, double D2, double rate )
@@ -217,7 +271,7 @@ struct reac_diff {
 
 
 
-struct stiff_eq {
+struct stiff_eq  :  public functor {
 
 	// y'' + 1001 y' + 1000 x = 0,
 	// y'(0) = 0, y(0) = 1.0;
@@ -262,6 +316,220 @@ private:
 	jac_type A;
 
 };
+
+
+
+struct three_body : public functor
+{
+	typedef arma::mat jac_type;
+
+	three_body( double m1, double m2, double m3 )
+		: m1r(m1/m3), m2r(m2/m3), m1(m1), m2(m2), m3(m3) {}
+
+	virtual arma::vec fun( double t, const arma::vec &y )
+	{
+		// y contains ( q0, q1, q2, q3, q4, q5,
+		//            ( p0, p1, p2, p3, p4, p5 )
+		//
+		// (q0, q1, q2, q3, q4, q5) are (x0, y0, x1, y1, x2, y2)
+
+		arma::vec dydt(12);
+		dydt[0] =  y[6] / m1;
+		dydt[1] =  y[7] / m1;
+		dydt[2] =  y[8] / m2;
+		dydt[3] =  y[9] / m2;
+		dydt[4] = y[10] / m3;
+		dydt[5] = y[11] / m3;
+
+		double x2mx1 = y[2] - y[0];
+		double y2my1 = y[3] - y[1];
+		double x3mx1 = y[4] - y[0];
+		double y3my1 = y[5] - y[1];
+		double x3mx2 = y[4] - y[2];
+		double y3my2 = y[5] - y[3];
+
+		double r12_2 = x2mx1*x2mx1 + y2my1*y2my1;
+		double r13_2 = x3mx1*x3mx1 + y3my1*y3my1;
+		double r23_2 = x3mx2*x3mx2 + y3my2*y3my2;
+
+		double r12_1 = sqrt(r12_2);
+		double r13_1 = sqrt(r13_2);
+		double r23_1 = sqrt(r23_2);
+
+		double r12_3 = r12_2*r12_1;
+		double r13_3 = r13_2*r13_1;
+		double r23_3 = r23_2*r23_1;
+
+		dydt[ 6] =  m1*m3*x3mx1 / r13_3 + m1*m2*x2mx1 / r12_3;
+		dydt[ 7] =  m1*m3*y3my1 / r13_3 + m1*m2*y2my1 / r12_3;
+		dydt[ 8] = -m1*m2*x2mx1 / r12_3 + m2*m3*x3mx2 / r23_3;
+		dydt[ 9] = -m1*m2*y2my1 / r12_3 + m2*m3*x3mx2 / r23_3;
+		dydt[10] = -m2*m3*x3mx2 / r23_3 - m1*m3*x3mx1 / r13_3;
+		dydt[11] = -m2*m3*y3my2 / r23_3 - m1*m3*y3my1 / r13_3;
+
+		return dydt;
+	}
+
+	virtual jac_type jac( double t, const arma::vec &y )
+	{
+		arma::mat J(12,12);
+
+		double x2mx1 = y[2] - y[0];
+		double y2my1 = y[3] - y[1];
+		double x3mx1 = y[4] - y[0];
+		double y3my1 = y[5] - y[1];
+		double x3mx2 = y[4] - y[2];
+		double y3my2 = y[5] - y[3];
+
+		double x2mx1_2 = x2mx1*x2mx1;
+		double y2my1_2 = y2my1*y2my1;
+		double x3mx1_2 = x3mx1*x3mx1;
+		double y3my1_2 = y3my1*y3my1;
+		double x3mx2_2 = x3mx2*x3mx2;
+		double y3my2_2 = y3my2*y3my2;
+
+		double r12_2 = x2mx1_2 + y2my1_2;
+		double r13_2 = x3mx1_2 + y3my1_2;
+		double r23_2 = x3mx2_2 + y3my2_2;
+
+		double r12_1 = sqrt(r12_2);
+		double r13_1 = sqrt(r13_2);
+		double r23_1 = sqrt(r23_2);
+
+		double r12_3 = r12_2*r12_1;
+		double r13_3 = r13_2*r13_1;
+		double r23_3 = r23_2*r23_1;
+
+		double r12_5 = r12_3*r12_2;
+		double r13_5 = r13_3*r13_2;
+		double r23_5 = r23_3*r23_2;
+
+
+		J.zeros(12,12);
+
+		// [ 0..5 ] is p, [ 6..11 ] is x.
+		J( 6, 6)  = -m1*m3 / r13_3 + 3*m1*m3*x3mx1_2 / r13_5
+		          - m1*m2 / r12_3 + 3*m1*m2*x2mx1_2 / r12_5;
+
+		J( 8, 8) = -m2*m3 / r23_3 + 3*m2*m3*x3mx2_2 / r23_5
+		          - m1*m2 / r12_3 + 3*m1*m2*x2mx1_2 / r12_5;
+
+		J(10,10) = -m1*m3 / r13_3 + 3*m1*m3*x3mx1_2 / r13_5
+		          - m2*m3 / r23_3 + 3*m2*m3*x3mx2_2 / r23_5;
+
+		J( 7, 7) = -m1*m3 / r13_3 + 3*m1*m3*y3my1_2 / r13_5
+		          - m1*m2 / r12_3 + 3*m1*m2*y2my1_2 / r12_5;
+
+		J( 9, 9) = -m2*m3 / r23_3 + 3*m2*m3*y3my2_2 / r23_5
+		          - m1*m2 / r13_3 + 3*m1*m2*y2my1_2 / r12_5;
+
+		J(11,11) = -m1*m3 / r13_3 + 3*m1*m3*y3my1_2 / r13_5
+		          - m2*m3 / r23_3 + 3*m2*m3*y3my2_2 / r23_5;
+
+		// Cross terms:
+		J( 7, 6) = 3*m1*m3*x3mx1*y3my1 / r13_5
+		           +3*m1*m2*x2mx1*y2my1 / r12_5;
+		J( 8, 6) = m1*m2/r12_3 - 3*m1*m2*x2mx1_2 / r12_5;
+		J( 9, 6) = -3*m1*m2*x2mx1*y2my1 / r12_5;
+		J(10, 6) = m1*m3/r13_3 - 3*m1*m3*x3mx1_2 / r13_5;
+		J(11, 6) = -3*m1*m3*x3mx1*y3my1 / r13_5;
+
+		J( 8, 7) = -3*m1*m2*x2mx1*y2my1 / r12_5;
+		J( 9, 7) = m1*m2/r12_3 - 3*m1*m2*y2my1_2 / r12_5;
+		J(10, 7) = -3*m1*m3*x3mx1*y3my1 / r13_5;
+		J(11, 7) = m1*m3/r13_2 - 3*m1*m3*y3my1_2 / r13_5;
+
+		J( 9, 8) = 3*m2*m3*x3mx2*y3my2 / r23_5
+		           + 3*m1*m2*x2mx1*y2my1 / r12_5;
+		J(10, 8) = m2*m3 / r23_3 - 3*m2*m3*x3mx2_2 / r23_5;
+		J(11, 8) = -3*m2*m3*x3mx2*y3my2 / r23_5;
+
+		J(10, 9) = -3*m2*m3*x3mx2*y3my2 / r23_5;
+		J(11, 9) = m2*m3/r23_3 - 3*m2*m3*y3my2_2 / r23_5;
+
+		J(11,10) = 3*m2*m3*x3mx2*y3my2 / r23_5
+		         + 3*m1*m3*x3mx1*y3my1 / r13_5;
+
+		// symmetry:
+
+		J( 6, 7) = J( 7, 6);
+
+		J( 6, 8) = J( 8, 6);
+		J( 7, 8) = J( 8, 7);
+
+		J( 6, 9) = J( 9, 6);
+		J( 7, 9) = J( 9, 7);
+		J( 8, 9) = J( 9, 8);
+
+		J( 6,10) = J(10, 6);
+		J( 7,10) = J(10, 7);
+		J( 8,10) = J(10, 8);
+		J( 9,10) = J(10, 9);
+
+		J( 6,11) = J(11, 6);
+		J( 7,11) = J(11, 7);
+		J( 8,11) = J(11, 8);
+		J( 9,11) = J(11, 9);
+		J(10,11) = J(11,10);
+
+		// x to x:
+		J(0,0) = 1.0 / m1;
+		J(1,1) = 1.0 / m1;
+		J(2,2) = 1.0 / m2;
+		J(3,3) = 1.0 / m2;
+		J(4,4) = 1.0 / m3;
+		J(5,5) = 1.0 / m3;
+
+		// x to p and p to x are 0.
+
+
+		return -J;
+	}
+
+
+	double kin_energy( const arma::vec &y )
+	{
+		double px0 = y[6];
+		double py0 = y[7];
+		double px1 = y[8];
+		double py1 = y[9];
+		double px2 = y[10];
+		double py2 = y[11];
+
+		double T = px0*px0 + py0*py0;
+		T += px1*px1 + py1*py1;
+		T += px2*px2 + py2*py2;
+
+		return 0.5*T;
+	}
+
+	double pot_energy( const arma::vec &y )
+	{
+
+		double r12_x = y[2] - y[0];
+		double r12_y = y[3] - y[1];
+		double r13_x = y[4] - y[0];
+		double r13_y = y[5] - y[1];
+		double r23_x = y[4] - y[2];
+		double r23_y = y[5] - y[3];
+
+		double r12_2 = r12_x*r12_x + r12_y*r12_y;
+		double r13_2 = r13_x*r13_x + r13_y*r13_y;
+		double r23_2 = r23_x*r23_x + r23_y*r23_y;
+
+		double r12 = sqrt(r12_2);
+		double r13 = sqrt(r13_2);
+		double r23 = sqrt(r23_2);
+
+		double V = -m1*m2/r12 - m1*m3/r13 - m2*m3/r23;
+		return V;
+	}
+
+
+	double m1r, m2r;
+	double m1, m2, m3;
+};
+
 
 
 } // test_equations

@@ -9,38 +9,39 @@
 
 
 #define FOREACH_MULTISTEP_METHOD(METHOD) \
-	METHOD(ADAMS_BASHFORTH, 0) \
-	METHOD(ADAMS_MOULTON,1)    \
-	METHOD(BDF, 2)             \
+	METHOD(ADAMS_BASHFORTH, 10) \
+	METHOD(ADAMS_MOULTON,11)    \
+	METHOD(BDF, 20)             \
 
 
 // Some macro magic for enum to string and back.
 #define FOREACH_RK_METHOD(METHOD)         \
 	METHOD(EXPLICIT_EULER, 100)       \
-	METHOD(RUNGE_KUTTA_4,101)         \
-	METHOD(BOGACKI_SHAMPINE_32,102)	  \
-	METHOD(CASH_KARP_54,103)          \
-	METHOD(DORMAND_PRINCE_54,104)     \
-	METHOD(FEHLBERG_54,105)           \
+	METHOD(RUNGE_KUTTA_4,  110)       \
+	                                  \
+	METHOD(BOGACKI_SHAMPINE_32,120)	  \
+	                                  \
+	METHOD(CASH_KARP_54,130)          \
+	METHOD(DORMAND_PRINCE_54,131)     \
+	METHOD(FEHLBERG_54,132)           \
 	                                  \
 	METHOD(IMPLICIT_EULER,200)        \
-	METHOD(RADAU_IA_32,   201)        \
-	METHOD(RADAU_IIA_32,  202)	  \
-	METHOD(RADAU_IA_54,   203)        \
-	METHOD(RADAU_IIA_54,  204)        \
 	                                  \
-	METHOD(IMPLICIT_MIDPOINT, 210)    \
-	METHOD(GAUSS_LEGENDRE_42, 211)	  \
-	METHOD(GAUSS_LEGENDRE_63, 212)    \
+	METHOD(RADAU_IIA_53,  211)        \
+	METHOD(RADAU_IIA_95,  212)        \
+	METHOD(RADAU_IIA_137, 213)        \
 	                                  \
-	METHOD(LOBATTO_IIIA_21, 220)	  \
-	METHOD(LOBATTO_IIIC_21, 221)	  \
-	METHOD(LOBATTO_IIIA_43, 222)	  \
-	METHOD(LOBATTO_IIIC_43, 223)	  \
-	METHOD(LOBATTO_IIIA_65, 224)      \
-	METHOD(LOBATTO_IIIC_65, 225)      \
+	METHOD(LOBATTO_IIIA_43,  220)     \
+	METHOD(LOBATTO_IIIA_86,  221)     \
+	METHOD(LOBATTO_IIIA_129, 222)     \
 	                                  \
-//	METHOD(SDIRK_L_43, 230)
+	METHOD(LOBATTO_IIIC_43,  230)     \
+	METHOD(LOBATTO_IIIC_86,  231)     \
+	METHOD(LOBATTO_IIIC_129, 232)     \
+	                                  \
+	METHOD(GAUSS_LEGENDRE_42,  240)   \
+	METHOD(GAUSS_LEGENDRE_84,  241)   \
+	METHOD(GAUSS_LEGENDRE_126, 242)
 
 
 
@@ -59,12 +60,10 @@ enum ms_methods {
 	FOREACH_MULTISTEP_METHOD(GENERATE_ENUM)
 };
 
-
 } // namespace multistep
 
 
 namespace irk {
-
 
 /// \brief enumerates all implemented RK methods.
 enum rk_methods {
@@ -73,6 +72,7 @@ enum rk_methods {
 };
 
 
+} // namespace irk
 
 
 /// \brief enumerates possible return codes.
@@ -99,6 +99,6 @@ enum odeint_status_codes {
 	ERROR_LARGER_THAN_ABSTOL = 64
 };
 
-} // namespace irk
+static constexpr const double machine_precision = 1e-18;
 
 #endif // ENUMS_HPP

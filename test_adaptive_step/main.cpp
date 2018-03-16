@@ -1,75 +1,141 @@
 #include <iostream>
 
+#include "integrator.hpp"
 #include "rehuel.hpp"
 #include "test_equations.hpp"
 
 // Tests adaptive time step on various problems.
 
+template <typename T>
+void integrate( T &func, const arma::vec &y0, double t0, double t1, double dt,
+                int met, const std::string &ode_name, irk::solver_options &so )
+{
+	irk::solver_coeffs  sc = irk::get_coefficients( met );
+	irk::rk_output sol = irk::radau_IIA_53( func, t0, t1, y0, so, dt );
+	so.out_interval = 10000;
+
+	if( sol.status ){
+		std::cerr << "Error solving ODE with method "
+		          << irk::method_to_name( met ) << "!\n";
+		return;
+	}
+
+	std::string fname = ode_name + "_sol_";
+	fname += irk::method_to_name(met);
+	fname += ".dat";
+	std::ofstream out( fname );
+
+	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
+		double ti = sol.t_vals[i];
+		out << ti;
+		const arma::vec &yi = sol.y_vals[i];
+		for( std::size_t j = 0; j < yi.size(); ++j ){
+			out << " " << yi[j];
+		}
+		out << "\n";
+	}
+}
+
+
 
 int main( int argc, char **argv )
 {
 
-	test_equations::stiff_eq stiff;
-
 	irk::solver_options so = irk::default_solver_options();
-	arma::vec y0 = { 1.0, 0.0 };
-
-	double t0 = 0.0;
-	double t1 = 10.0;
-	double dt = 1e-1;
 
 	newton::options newt_opts;
 
 	so.internal_solver = irk::solver_options::NEWTON;
 	so.rel_tol = 1e-4;
-	so.abs_tol = 1e-3;
-	newt_opts.tol = 0.1*so.rel_tol;
-	newt_opts.maxit = 10000;
+	so.abs_tol = 1e-4;
+	newt_opts.tol = 0.7*so.rel_tol;
+	newt_opts.maxit = 10;
+	newt_opts.refresh_jac = true;
 	so.newton_opts = &newt_opts;
 
+	std::vector<int> methods = { irk::RADAU_IIA_53 };
 
-	std::vector<int> methods = { irk::BOGACKI_SHAMPINE_32,
-	                             irk::CASH_KARP_54,
-	                             irk::LOBATTO_IIIA_65,
-	                             irk::LOBATTO_IIIC_65,
-	                             irk::GAUSS_LEGENDRE_63,
-	                             irk::RADAU_IIA_32 };
+	arma::vec y0 = { 1.0 };
 
+	double t0 = 0.0;
+	double t1 = 20.0;
+	double dt = 1e-4;
+
+	test_equations::exponential exponen( -0.2 );
+	for( int method : methods ){
+		integrate( exponen, y0, t0, t1, dt, method, "exponential", so );
+	}
+
+	y0 = { 1.0, 0.0 };
+
+	t0 = 0.0;
+	t1 = 100.0;
+	dt = 1e-4;
+
+	test_equations::stiff_eq stiff;
+
+	std::cerr << "\n****   Stiff equation coming up!  ****\n\n";
+	for( int method : methods ){
+		integrate( stiff, y0, t0, t1, dt, method, "stiff", so );
+	}
+
+
+	test_equations::vdpol vdp( 1e-5 );
+	y0 = { 2.0, -0.6 };
+
+	t0 = 0.0;
+	t1 = 2.0;
+	dt = 1.0;
+
+	std::cerr << "\n****   Van der Pol coming up!  ****\n\n";
 	for( int method : methods ){
 
-		irk::solver_coeffs  sc = irk::get_coefficients( method );
-		integrator_io::vector_output vec_out;
-		integrator_io::integrator_output output;
-		int interval = 1;
-		if( method == irk::BOGACKI_SHAMPINE_32 ){
-			interval = 500;
-		}
-		output.set_vector_output( interval, &vec_out );
+		integrate( vdp, y0, t0, t1, dt, method, "vdpol", so );
+	}
 
-		so.output = &output;
 
-		sc.dt = dt;
-		int status = irk::odeint( t0, t1, sc, so, y0, stiff );
-		if( status ){
-			std::cerr << "Error solving ODE with method "
-			          << irk::method_to_name( method ) << "!\n";
-			continue;
-		}
+	y0 = { 1.0, 0.0, 0.0 };
+	dt = 1e-6;
+	t0 = 0.0;
+	t1 = 1e7;
+	methods = { irk::RADAU_IIA_53 };
+	test_equations::rober rob;
+	std::cerr << "\n****   Robertson coming up!  ****\n\n";
+	for( int method : methods ){
+		integrate( rob, y0, t0, t1, dt, method, "rober", so );
+	}
 
-		std::string fname = "stiff_sol_";
-		fname += irk::method_to_name(method);
-		fname += ".dat";
-		std::ofstream out( fname );
+	test_equations::bruss brs( 1.0, 2.0 );
+	test_equations::bruss brs2( 1.0, 3.5 );
 
-		for( std::size_t i = 0; i < vec_out.t_vals.size(); ++i ){
-			double ti = vec_out.t_vals[i];
-			out << ti << " ";
-			const arma::vec &yi = vec_out.y_vals[i];
-			out << yi[0] << " " << yi[1] << " ";
-			arma::vec ye = stiff.sol( ti );
-			out << ye[0] << " " << ye[1];
-			out << "\n";
-		}
+	y0 = { 6.0, 3.0 };
+	t0 = 0.0;
+	t1 = 1e4;
+	dt = 0.1;
+
+	methods = { irk::RADAU_IIA_53 };
+	std::cerr << "\n****   Brusselator coming up!  ****\n\n";
+	for( int method : methods ){
+		integrate( brs, y0, t0, t1, dt, method, "bruss", so );
+	}
+	std::cerr << "\n****   Brusselator2 coming up!  ****\n\n";
+	for( int method : methods ){
+		integrate( brs2, y0, t0, t1, dt, method, "bruss2", so );
+	}
+
+	y0 = { 0.0, 0.0, 1.0, 0.0, 0.0, 4.0,
+	       0.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
+
+	t0 = 0.0;
+	t1 = 10.0;
+	dt = 0.1;
+
+	std::cerr << "\n****   Heads up! Tree body time!  ****\n\n";
+
+	test_equations::three_body three_b( 1.0, 1.0, 1.0 );
+	methods = { irk::RADAU_IIA_53 };
+	for( int method : methods ){
+		integrate( three_b, y0, t0, t1, dt, method, "threeb", so );
 	}
 
 
