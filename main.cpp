@@ -25,7 +25,7 @@
 #include "integrator_io.hpp"
 #include "rehuel.hpp"
 #include "odes.hpp"
-
+#include "test_equations.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -56,210 +56,6 @@ struct exponential
 	}
 };
 
-
-struct three_body
-{
-	typedef arma::mat jac_type;
-
-	three_body( double m1, double m2, double m3 )
-		: m1r(m1/m3), m2r(m2/m3), m1(m1), m2(m2), m3(m3) {}
-
-	virtual arma::vec fun( double t, const arma::vec &y )
-	{
-		// y contains ( q0, q1, q2, q3, q4, q5,
-		//            ( p0, p1, p2, p3, p4, p5 )
-		//
-		// (q0, q1, q2, q3, q4, q5) are (x0, y0, x1, y1, x2, y2)
-
-		arma::vec dydt(12);
-		dydt[0] =  y[6] / m1;
-		dydt[1] =  y[7] / m1;
-		dydt[2] =  y[8] / m2;
-		dydt[3] =  y[9] / m2;
-		dydt[4] = y[10] / m3;
-		dydt[5] = y[11] / m3;
-
-		double x2mx1 = y[2] - y[0];
-		double y2my1 = y[3] - y[1];
-		double x3mx1 = y[4] - y[0];
-		double y3my1 = y[5] - y[1];
-		double x3mx2 = y[4] - y[2];
-		double y3my2 = y[5] - y[3];
-
-		double r12_2 = x2mx1*x2mx1 + y2my1*y2my1;
-		double r13_2 = x3mx1*x3mx1 + y3my1*y3my1;
-		double r23_2 = x3mx2*x3mx2 + y3my2*y3my2;
-
-		double r12_1 = sqrt(r12_2);
-		double r13_1 = sqrt(r13_2);
-		double r23_1 = sqrt(r23_2);
-
-		double r12_3 = r12_2*r12_1;
-		double r13_3 = r13_2*r13_1;
-		double r23_3 = r23_2*r23_1;
-
-		dydt[ 6] =  m1*m3*x3mx1 / r13_3 + m1*m2*x2mx1 / r12_3;
-		dydt[ 7] =  m1*m3*y3my1 / r13_3 + m1*m2*y2my1 / r12_3;
-		dydt[ 8] = -m1*m2*x2mx1 / r12_3 + m2*m3*x3mx2 / r23_3;
-		dydt[ 9] = -m1*m2*y2my1 / r12_3 + m2*m3*x3mx2 / r23_3;
-		dydt[10] = -m2*m3*x3mx2 / r23_3 - m1*m3*x3mx1 / r13_3;
-		dydt[11] = -m2*m3*y3my2 / r23_3 - m1*m3*y3my1 / r13_3;
-
-		return dydt;
-	}
-
-	virtual jac_type jac( double t, const arma::vec &y )
-	{
-		arma::mat J(12,12);
-
-		double x2mx1 = y[2] - y[0];
-		double y2my1 = y[3] - y[1];
-		double x3mx1 = y[4] - y[0];
-		double y3my1 = y[5] - y[1];
-		double x3mx2 = y[4] - y[2];
-		double y3my2 = y[5] - y[3];
-
-		double x2mx1_2 = x2mx1*x2mx1;
-		double y2my1_2 = y2my1*y2my1;
-		double x3mx1_2 = x3mx1*x3mx1;
-		double y3my1_2 = y3my1*y3my1;
-		double x3mx2_2 = x3mx2*x3mx2;
-		double y3my2_2 = y3my2*y3my2;
-
-		double r12_2 = x2mx1_2 + y2my1_2;
-		double r13_2 = x3mx1_2 + y3my1_2;
-		double r23_2 = x3mx2_2 + y3my2_2;
-
-		double r12_1 = sqrt(r12_2);
-		double r13_1 = sqrt(r13_2);
-		double r23_1 = sqrt(r23_2);
-
-		double r12_3 = r12_2*r12_1;
-		double r13_3 = r13_2*r13_1;
-		double r23_3 = r23_2*r23_1;
-
-		double r12_5 = r12_3*r12_2;
-		double r13_5 = r13_3*r13_2;
-		double r23_5 = r23_3*r23_2;
-
-
-		J.zeros(12,12);
-
-		// [ 0..5 ] is p, [ 6..11 ] is x.
-		J(6,6) = -m1*m3 / r13_3 + 3*m1*m3*x3mx1_2 / r13_5
-			- m1*m2 / r12_3 + 3*m1*m2*x2mx1_2 / r12_5;
-
-		J(8,8) = -m2*m3 / r23_3 + 3*m2*m3*x3mx2_2 / r12_5
-			- m1*m2 / r12_3 + 3*m1*m2*x2mx1_2 / r12_5;
-
-		J(10,10) = -m2*m3 / r23_3 + 3*m2*m3*x3mx2_2 / r23_5
-			- m1*m3 / r13_3 + 3*m1*m3*x3mx1_2 / r13_5;
-
-		J(7,7) = -m1*m3 / r13_3 + 3*m1*m3*y3my1_2 / r13_5
-			- m1*m2 / r12_3 + 3*m1*m2*y2my1_2 / r12_5;
-
-		J(9,9) = -m2*m3 / r23_3 + 3*m2*m3*y3my2_2 / r12_5
-			- m1*m2 / r12_3 + 3*m1*m2*y2my1_2 / r12_5;
-
-		J(11,11) = -m2*m3 / r23_3 + 3*m2*m3*y3my2_2 / r23_5
-			- m1*m3 / r13_3 + 3*m1*m3*y3my1_2 / r13_5;
-
-		// Cross terms:
-		J(6,7)  =  3*m1*m3*( x3mx1*y3my1 + x2mx1*y2my1 );
-		J(6,8)  = m1*m2 / r12_3 - 3*m1*m2*x2mx1_2 / r12_5;
-		J(6,9)  = -3*m1*m2*x2mx1*y2my1 / r12_5;
-		J(6,10) = m1*m3 / r13_3 - 3*m1*m3*x3mx1_2 / r13_5;
-		J(6,11) = -3*m1*m3*x3mx1 * y3my1;
-
-		J(7, 6) = J(6, 7);
-		J(7, 8) = -3.0*m1*m2*x2mx1*y2my1 / r12_5;
-		J(7, 9) = m1*m2 / r12_3 - 3*m1*m2*y2my1_2 / r12_5;
-		J(7,10) = -3.0*m1*m3*x3mx1*y3my1 / r13_5;
-		J(7,11) = m1*m3 / r13_3 - 3*m1*m3*y3my1_2 / r13_5;
-
-		J(8, 6) = J(6,8);
-		J(8, 7) = J(7,8);
-		J(8, 9) = 3*m1*m2*x2mx1*y2my1 / r12_5 + 3*m2*m3*x3mx2*y3my2 / r23_5;
-		J(8,10) = m2*m3 / r23_3 - 3*m2*m3*x3mx2_2 / r23_5;
-		J(8,11) = -3*m2*m3*x3mx2*y3my2 / r23_5;
-
-		J(9, 6) = J(6,9);
-		J(9, 7) = J(7,9);
-		J(9, 8) = J(8,9);
-		J(9,10) = -3*m2*m3*x3mx2*y3my2 / r23_5;
-		J(9,11) = m2*m3 / r23_3 - 3*m2*m3*y3my2_2 / r23_5;
-
-
-		J(10, 6) = J(6,10);
-		J(10, 7) = J(7,10);
-		J(10, 8) = J(8,10);
-		J(10, 9) = J(9,10);
-		J(10,11) = 3*m2*m3*x3mx2*y3my2 / r23_5 + 3*m1*m3*x3mx1*y3my1 / r13_5;
-
-
-		J(11, 6) = J( 6,11);
-		J(11, 7) = J( 7,11);
-		J(11, 8) = J( 8,11);
-		J(11, 9) = J( 9,11);
-		J(11,10) = J(10,11);
-
-		// x to x:
-		J(0,0) = 1.0 / m1;
-		J(1,1) = 1.0 / m1;
-		J(2,2) = 1.0 / m2;
-		J(3,3) = 1.0 / m2;
-		J(4,4) = 1.0 / m3;
-		J(5,5) = 1.0 / m3;
-
-		// x to p and p to x are 0.
-
-
-		return J;
-	}
-
-
-	double kin_energy( const arma::vec &y )
-	{
-		double px0 = y[6];
-		double py0 = y[7];
-		double px1 = y[8];
-		double py1 = y[9];
-		double px2 = y[10];
-		double py2 = y[11];
-
-		double T = px0*px0 + py0*py0;
-		T += px1*px1 + py1*py1;
-		T += px2*px2 + py2*py2;
-
-		return 0.5*T;
-	}
-
-	double pot_energy( const arma::vec &y )
-	{
-
-		double r12_x = y[2] - y[0];
-		double r12_y = y[3] - y[1];
-		double r13_x = y[4] - y[0];
-		double r13_y = y[5] - y[1];
-		double r23_x = y[4] - y[2];
-		double r23_y = y[5] - y[3];
-
-		double r12_2 = r12_x*r12_x + r12_y*r12_y;
-		double r13_2 = r13_x*r13_x + r13_y*r13_y;
-		double r23_2 = r23_x*r23_x + r23_y*r23_y;
-
-		double r12 = sqrt(r12_2);
-		double r13 = sqrt(r13_2);
-		double r23 = sqrt(r23_2);
-
-		double V = -m1*m2/r12 - m1*m3/r13 - m2*m3/r23;
-		return V;
-	}
-
-
-	double m1r, m2r;
-	double m1, m2, m3;
-};
 
 template <typename functor>
 struct newton_dummy
@@ -301,28 +97,15 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	irk::solver_options so = irk::default_solver_options();
 	irk::solver_coeffs  sc = irk::get_coefficients( method );
 
-	integrator_io::spaced_grid_info spaced_grid;
-	spaced_grid.t0 = t0;
-	spaced_grid.t1 = t1;
-	int Npts = 1001;
-	spaced_grid.dt = (t1 - t0) / (Npts - 1.0);
-	std::cerr << "Printing sol every " << spaced_grid.dt << " times.\n";
-
 	std::string fname = "ode_";
 	fname += irk::method_to_name( method );
 	fname += ".dat";
-	auto output_mode = integrator_io::integrator_output::SPACED_GRID;
 	std::ofstream out_file( fname );
-	integrator_io::integrator_output output( output_mode, &out_file,
-	                                         10, &std::cerr );
-	output.set_spaced_grid( t0, t1, (t1 - t0) / (Npts - 1.0) );
-	so.output = &output;
 
 	std::cerr << "Finding largest error for dt = " << dt << " on interval ["
 	          << t0 << ", " << t1 << "]\n";
 
 	so.newton_opts = &newton_opts;
-	sc.dt = dt;
 
 	so.internal_solver = irk::solver_options::NEWTON;
 	so.internal_solver = irk::solver_options::NEWTON;
@@ -330,8 +113,6 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	so.rel_tol = 1e-12;
 	so.abs_tol = 1e-10;
 
-	integrator_io::vector_output vec_out;
-	output.set_vector_output( 1, &vec_out );
 
 	newton_opts.tol = 1e-1 * so.rel_tol;
 	newton_opts.max_step = 0.0;
@@ -340,8 +121,8 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 
 	exponential func( 1.0 );
 	arma::vec y0 = func.sol( t0 );
-	int status = irk::odeint( t0, t1, sc, so, y0, func );
-	if( status ){
+	irk::rk_output sol  = irk::odeint( func, t0, t1, y0, so, dt );
+	if( sol.status ){
 		std::cerr << "Error solving ODE!\n";
 		return;
 	}
@@ -350,18 +131,6 @@ void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
 	double m_abs_err = 0.0;
 	double m_rel_err = 0.0;
 
-	for( std::size_t i = 0; i < vec_out.t_vals.size(); ++i ){
-
-		double t = vec_out.t_vals[i];
-		double yn = vec_out.y_vals[i][0];
-		double ye = func.sol(t)[0];
-		double abs_err = std::fabs( yn - ye );
-		double rel_err = abs_err == 0 ? 0.0 :
-			abs_err / std::min( yn, ye );
-
-		if( abs_err > m_abs_err ) m_abs_err = abs_err;
-		if( rel_err > m_rel_err ) m_rel_err = rel_err;
-	}
 
 	std::cout << dt << " " << m_abs_err << " " << m_rel_err << "\n";
 }
@@ -424,35 +193,25 @@ void test_three_body( int method, double t0, double t1, double dt,
                       double m1, double m2, double m3,
                       bool adapt_dt, bool use_newton )
 {
-	three_body three_bod(m1, m2, m3);
+	test_equations::three_body three_bod(m1, m2, m3);
 	// y0 = { x0, y0, x1, y1, x2, y2, px0, py0, px1, py1, px2, py2 }.
 	arma::vec y0 = { 0.0, 0.0, 1.0, 0.0, 0.0, 4.0,
 	                 0.0, 0.0, 0.0, 1.0, 0.0, 0.0 };
 
 	std::cerr << "dt = " << dt << "\n";
-	newton_dummy<three_body> dummy_3b(three_bod, 0.0);
+	newton_dummy<test_equations::three_body> dummy_3b(three_bod, 0.0);
 
 	irk::solver_coeffs  sc = irk::get_coefficients( method );
 	irk::solver_options so = irk::default_solver_options();
 	newton::options no;
 
 	so.internal_solver = irk::solver_options::NEWTON;
-	so.adaptive_step_size = adapt_dt;
 	so.rel_tol = 1e-4;
 	so.abs_tol = 1e-3;
 
 	so.verbosity = 0;
-	so.use_newton_iters_adaptive_step = true;
-	so.max_dt = 5.0;
-
-	no.maxit = 25;
-	no.precondition = true;
-	no.tol = 1e-2*so.rel_tol;
-	no.limit_step = true;
-	no.refresh_jac = true;
-
-	sc.dt = dt;
-
+	no.maxit = 100;
+	no.tol = 0.7*so.rel_tol;
 
 	so.newton_opts = &no;
 
@@ -461,24 +220,15 @@ void test_three_body( int method, double t0, double t1, double dt,
 		return;
 	}
 
-	integrator_io::integrator_output output;
-	integrator_io::vector_output vec_out;
-	output.set_vector_output( 100, &vec_out );
-	output.set_timestep_output( 100, &std::cerr );
-
-	so.output = &output;
-
-	std::vector<arma::vec> &ys = vec_out.y_vals;
-	std::vector<double> &times = vec_out.t_vals;
 
 	std::cerr << "Integrating three-body problem from "
 	          << t0 << " to " << t1 << "...\n";
-	int status = irk::odeint( t0, t1, sc, so, y0, three_bod );
-	std::cerr << "status is " << status << "!\n";
+	irk::rk_output sol = irk::odeint( three_bod, t0, t1, y0, so, dt );
+	std::cerr << "status is " << sol.status << "!\n";
 
-	for( std::size_t i = 0; i < times.size(); ++i ){
-		double t = times[i];
-		arma::vec yi = ys[i];
+	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
+		double t = sol.t_vals[i];
+		arma::vec yi = sol.y_vals[i];
 		// Calculate potential and kinetic energy:
 
 		double T = three_bod.kin_energy( yi );

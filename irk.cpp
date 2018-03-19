@@ -26,13 +26,18 @@ solver_coeffs get_coefficients( int method )
 	double one_six = 1.0/6.0;
 
 	double sqrt3 = sqrt(3.0);
-	double sqrt5 = sqrt(5.0);
+	// double sqrt5 = sqrt(5.0);
 	double sqrt6 = sqrt(6.0);
-	double sqrt15 = sqrt(15.0);
+	// double sqrt15 = sqrt(15.0);
 
+	// Methods that need adding:
+	// RADAU_IIA_95, RADAU_137, LOBATTO_IIA_{43,86,129},
+	// LOBATTO_IIIC_{43,86,129}, GAUSS_LEGENDRE_{42,84,126}
 
 	sc.FSAL = false;
 	sc.name = method_to_name( method );
+	sc.gamma = 0.0;
+
 
 	switch(method){
 		default:
@@ -229,65 +234,7 @@ solver_coeffs get_coefficients( int method )
 			sc.order2 = 0;
 			break;
 
-		case IMPLICIT_MIDPOINT:
-			sc.A = { 0.5 };
-			sc.b = { 1.0 };
-			sc.c = { 0.5 };
-			sc.order  = 2;
-			sc.order2 = 0;
-			break;
-
-		case LOBATTO_IIIA_21:
-			sc.A = { {0.0, 0.0 },
-			         {0.5, 0.5 } };
-			sc.b = { 0.5, 0.5 };
-			sc.c = { 1.0, 0.0 };
-			sc.b2 = { 0.25, 0.75 };
-			sc.order  = 2;
-			sc.order2 = 1;
-			break;
-
-		case LOBATTO_IIIC_21:
-			sc.A  = { {0.5, -0.5},
-			          {0.5,  0.5 } };
-			sc.b  = { 0.5, 0.5 };
-			sc.b2 = { 3.0/4.0, 1.0/4.0 };
-			sc.c  = { 0.0, 1.0 };
-			sc.order = 2;
-			sc.order2 = 1;
-
-			break;
-
-			/*
-		case RADAU_IA_31:
-			sc.A = { { 1.0 / 4.0, -1.0 / 4.0  },
-			         { 1.0 / 4.0,  5.0 / 12.0 } };
-
-			sc.c = { 0.0, 2.0/3.0 };
-			sc.b = { 1.0/4.0, 3.0/4.0 };
-			sc.b2 = { 0.5, 0.5 };
-
-
-			sc.order = 3;
-			sc.order2 = 1;
-
-			break;
-			*/
-		case RADAU_IIA_32:
-
-			sc.A = { { 0.0, 0.0, 0.0 },
-			         { 0.0, 5.0 / 12.0, -1.0 / 12.0 },
-			         { 0.0, 3.0 / 4.0,   1.0 / 4.0 } };
-			sc.c = { 0.0, 1.0/3.0, 1.0 };
-			sc.b = { 0.0, 3.0/4.0, 1.0/4.0 };
-			sc.b2 = { -1.0/2.0, 3.0/2.0, 0.0 };
-
-			sc.order = 3;
-			sc.order2 = 2;
-			break;
-
-
-		case LOBATTO_IIIA_42:
+		case LOBATTO_IIIA_43:
 
 			sc.A = { {      0.0,     0.0,       0.0 },
 			         { 5.0/24.0, 1.0/3.0, -1.0/24.0 },
@@ -299,10 +246,13 @@ solver_coeffs get_coefficients( int method )
 			sc.order = 4;
 			sc.order2 = 2;
 			sc.FSAL = true;
-
 			break;
 
-		case LOBATTO_IIIC_42:
+		// case LOBATTO_IIIA_86:
+		// case LOBATTO_IIIA_129:
+
+
+		case LOBATTO_IIIC_43:
 
 			sc.A = { { 1.0/6.0, -1.0/3.0, 1.0/6.0 },
 			         { 1.0/6.0, 5.0/12.0, -1.0/12.0 },
@@ -315,6 +265,8 @@ solver_coeffs get_coefficients( int method )
 
 			break;
 
+		// case LOBATTO_IIIC_86:
+		// case LOBATTO_IIIC_129:
 
 		case GAUSS_LEGENDRE_42:
 
@@ -328,73 +280,51 @@ solver_coeffs get_coefficients( int method )
 			sc.order2 = 2;
 			break;
 
+		// case GAUSS_LEGENDRE_84:
+		// case GAUSS_LEGENDRE_126:
 
-		case RADAU_IA_53:
 
-			sc.A = { { 0, 0, 0, 0 },
-			         { 0, 1.0/9.0, (-1 - sqrt6)/18.0, (-1 + sqrt6)/18.0},
-			         { 0, 1.0/9.0, (88.0 + 7*sqrt6)/360.0, (88 - 43*sqrt6)/360.0 },
-			         { 0, 1.0/9.0, (88 + 43*sqrt6)/360.0, (88.0 - 7*sqrt6)/360.0 } };
-			sc.c  = { 0.0, 0.0, (6.0 - sqrt6)/10.0, (6.0 + sqrt6)/10.0 };
-			sc.b  = { 0, 1.0/9.0, (16.0 + sqrt6)/36.0, (16.0 - sqrt6)/36.0 };
-			sc.b2 = { 5.0/2.0, -43/18.0, (sqrt(6)+16.0)/36.0, (16-sqrt(6))/36.0 };
+		case RADAU_IIA_53:{
+
+			sc.A = { { (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
+			         { (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
+			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
+			// gamma is the real eigenvalue of A.
+			sc.gamma = 2.74888829595677e-01;
+			// sc.gamma = 1.0 / 9.0;
+			// sc.gamma = 0.5270441163339914;
+
+			sc.c  = {  (4.0-sqrt6)/10.0,  (4.0+sqrt6) / 10.0, 1.0 };
+			sc.b  = {  (16 - sqrt6)/36.0,
+			           (16 + sqrt6)/36.0,
+			           1.0 / 9.0 };
+
+			sc.b2 = { -((18*sqrt6 + 12)*sc.gamma - 16 + sqrt6)/36.0,
+			           ((18*sqrt6 - 12)*sc.gamma + 16 + sqrt6)/36.0,
+			          -(3*sc.gamma - 1) / 9.0 };
 
 			sc.order = 5;
 			sc.order2 = 3;
 
-			break;
+			// Interpolates on a solution interval as
+			// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
+			//          + b_interp(j,2)*t^3 + ...
+			double c1 = sc.c[0];
+			double c2 = sc.c[1];
+			double c3 = sc.c[2];
 
-		case RADAU_IIA_53:
+			double d1 = (c1-c2)*(c1-c3);
+			double d2 = (c2-c1)*(c2-c3);
+			double d3 = (c3-c1)*(c3-c2);
 
-			sc.A = { { 0, 0, 0, 0 },
-			         { 0, (88 - 7*sqrt6)/360.0, (296 - 169*sqrt6)/1800.0, (-2+3*sqrt6)/225.0 },
-			         { 0, (296 + 169*sqrt6)/1800.0, (88 + 7*sqrt6)/360.0, (-2-3*sqrt6)/225.0 },
-			         { 0, (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
-			sc.c  = {  0, (4.0-sqrt6)/10.0, (4.0+sqrt6) / 10.0, 1.0 };
-			sc.b  = {  0, (16 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 };
-			sc.b2 = { 5/2.0, -(23*sqrt(6) + 7)/18.0, (23*sqrt(6) - 7)/18.0, -13/18.0 };
-			sc.order = 5;
-			sc.order2 = 3;
-
-			break;
-
-			// Up to here everything is nicely paired/embedded.
-		case GAUSS_LEGENDRE_62:
-			sc.A = { { 5.0/36.0, 2.0/9.0 - sqrt15 / 15.0, 5.0/36.0 - sqrt15 / 30.0, 0 },
-			         { 5.0/36.0 + sqrt15 / 24.0, 2.0/9.0, 5.0/36.0 - sqrt15 / 24.0, 0 },
-			         { 5.0/36.0 + sqrt15 / 30.0, 2.0/9.0 + sqrt15 / 15.0, 5.0/36.0, 0 },
-			         { 0, 0, 0, 0 } };
-			sc.b = { 5.0/18.0, 4.0/9.0, 5.0/18.0, 0 };
-			sc.c = { 0.5 - sqrt15/10.0, 0.5, 0.5 + sqrt15/10.0, 0.0 };
-
-			sc.b2 = {2/9.0, 5/9.0, 2/9.0, 0.0 };
-			sc.order = 6;
-			sc.order2 = 2;
-
-			break;
-
-
-			// Up to here everything is nicely paired/embedded.
-		case LOBATTO_IIIC_63:{
-			double a1 = 1.0 / 12.0;
-			double a2 = sqrt5/12.0;
-			double a3 = 0.25;
-			double a4 = 1.0/6.0;
-			double a5 = sqrt5/60.0;
-			sc.A = { { a1, -a2, a2, -a1 },
-			         { a1, a3, a4 - 7*a5, a5 },
-			         { a1, a4 + 7*a5, a3, -a5 },
-			         { a1, 5*a1, 5*a1, a1 } };
-			sc.b = { a1, 5*a1, 5*a1, a1 };
-			sc.b2 = { 4.0/3.0, (5 - 15*sqrt5)/12.0, (5 + 15*sqrt5)/12.0, -7.0/6.0 };
-
-			sc.c = { 0.0, a1 + a3 + a4 - 7*a5 + a5,
-			         a1 + a4 + 7*a5  + a3 - a5, 1.0 };
-			sc.order = 6;
-			sc.order2 = 3;
+			sc.b_interp = { { c2*c3/d1, -(c2+c3)/(2.0*d1), (1.0/3.0)/d1 },
+			                { c1*c3/d2, -(c1+c3)/(2.0*d2), (1.0/3.0)/d2 },
+			                { c1*c2/d3, -(c1+c2)/(2.0*d3), (1.0/3.0)/d3 } };
 
 			break;
 		}
+		// case RADAU_IIA_95
+		// case RADAU_IIA_137
 
 
 	}
@@ -413,7 +343,6 @@ solver_coeffs get_coefficients( int method )
 		}
 	}
 
-	sc.dt = 0.05;
 	return sc;
 }
 
@@ -424,50 +353,6 @@ solver_options default_solver_options()
 	return s;
 }
 
-
-
-double get_better_time_step( double dt_n, double dt_nm, double err,
-                             double old_err, double tol,
-                             int newton_iters, int maxit,
-                             const solver_options &opts,
-                             const solver_coeffs &sc, double max_dt )
-{
-	// From "Stiff differential equations solved by Radau methods.
-	// err is now normalized, so an error < 1.0 is good.
-	double newton_fac = (1.0 + 2.0*maxit) / (newton_iters + 2.0*maxit);
-	double fac  = std::min( 0.9, 0.9 * newton_fac );
-	double facr = 1.0/8.0;
-	double facl = 5.0;
-	double min_order = std::min( sc.order, sc.order2 );
-	double expt = 1.0 / ( min_order + 1.0 );
-	double err_pow = std::pow( err, expt );
-	double quot = std::max( facr, std::min( facl, err_pow / fac ) );
-
-	double dt_new = dt_n / quot;
-
-	if( err < 1.0 ){
-		// If the step is accepted you can apply the controller
-		// of Gustafsson:
-
-		double dt_frac = dt_nm / dt_n;
-		double err_frac = err / old_err;
-
-		double scale_27 = std::pow( err_frac, expt ) / 0.9;
-		double scale_28 = dt_frac * scale_27;
-
-		double fac_g = std::max( facr, std::min( facl, scale_28 ) );
-		quot = std::max( quot, fac_g );
-	}
-	dt_new = std::min( dt_new, max_dt );
-
-	if( err >= 1.0 ){
-		dt_new = std::min( dt_new, dt_n );
-	}
-
-
-	return dt_new;
-
-}
 
 
 bool verify_solver_options( solver_options &opts )
@@ -501,47 +386,6 @@ std::vector<std::string> all_method_names()
 }
 
 
-bool is_method_explicit( const solver_coeffs &sc )
-{
-	for( std::size_t i = 0; i < sc.b.size(); ++i ){
-		if( sc.A(i,i) != 0.0 ){
-			return false;
-		}
-	}
-	return true;
-}
-
-
-bool is_method_dirk( const solver_coeffs &sc )
-{
-	bool is_explicit = is_method_explicit(sc);
-	if( is_explicit ) return false;
-
-	for( std::size_t i = 0; i < sc.b.size(); ++i ){
-		// The diagonal is already determined to not be 0.
-		for( std::size_t j = i+1; j < sc.b.size(); ++j ){
-			if( sc.A(i,j) != 0 ){
-				return false;
-			}
-		}
-	}
-
-	return true;
-}
-
-
-bool is_method_sdirk( const solver_coeffs &sc )
-{
-	bool is_dirk = is_method_dirk( sc );
-	if( !is_dirk ) return false;
-
-	// Check that all diagonal elements are equal:
-	for( std::size_t i = 0; i < sc.b.size()-1; ++i ){
-		if( sc.A(i,i) != sc.A(i+1,i+1) ) return false;
-	}
-
-	return true;
-}
 
 
 } // namespace irk

@@ -32,8 +32,8 @@ struct common_solver_options
 		  abs_tol(10*rel_tol),
 		  max_dt( 100.0 ),
 		  newton_opts( nullptr ),
-		  output( nullptr ),
 		  verbosity( 0 ),
+		  out_interval( 0 ),
 		  abort_on_solver_fail( false )
 	{ }
 
@@ -54,11 +54,11 @@ struct common_solver_options
 	/// Options for the internal solver.
 	const newton::options *newton_opts;
 
-	/// To output solutions.
-	integrator_io::integrator_output *output;
-
 	/// if > 0, print some output.
 	int verbosity;
+
+	/// Output interval for error and step:
+	int out_interval;
 
 	/// If true, abort if the internal solver failed.
 	bool abort_on_solver_fail;
