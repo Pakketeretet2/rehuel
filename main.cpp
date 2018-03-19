@@ -220,15 +220,13 @@ void test_three_body( int method, double t0, double t1, double dt,
 		return;
 	}
 
+	irk::rk_output sol = irk::radau_IIA_53( three_bod, t0, t1, y0, so );
 
-	std::cerr << "Integrating three-body problem from "
-	          << t0 << " to " << t1 << "...\n";
-	irk::rk_output sol = irk::odeint( three_bod, t0, t1, y0, so, dt );
 	std::cerr << "status is " << sol.status << "!\n";
-
 	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
 		double t = sol.t_vals[i];
 		arma::vec yi = sol.y_vals[i];
+
 		// Calculate potential and kinetic energy:
 
 		double T = three_bod.kin_energy( yi );

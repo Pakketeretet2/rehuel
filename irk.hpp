@@ -586,19 +586,12 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 			sol.err.push_back( err );
 
 			alternative_error_formula = false;
-
-			if( err < 0.01 ){
-				change_dt = true;
-			}else if( err >= 1.0 ){
-				change_dt = true;
-			}
 		}
 
 
-			err_info << step << " " << t << " " << dt << " "
-			         << err << " " << newton_stats.iters << "\n";
+		err_info << step << " " << t << " " << dt << " "
+		         << err << " " << newton_stats.iters << "\n";
 
-		}
 
 		// **************      Actually set the new dt:    **********************
 
