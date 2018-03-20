@@ -300,6 +300,16 @@ solver_coeffs get_coefficients( int method )
 			sc.order = 3;
 			sc.order2 = 2;
 
+			double c1 = sc.c[0];
+			double c2 = sc.c[1];
+
+			double d1 = (c1-c2);
+			double d2 = (c2-c1);
+
+			sc.b_interp = {
+			                };
+
+
 			break;
 		}
 
