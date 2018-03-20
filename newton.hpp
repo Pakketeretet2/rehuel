@@ -154,7 +154,7 @@ struct newton_functor_wrapper
 */
 inline arma::vec solve_impl( const arma::mat &A, const arma::vec &b )
 {
-	return arma::solve(A,b, arma::solve_opts::no_approx);
+	return arma::solve(A,b);
 }
 
 /**
@@ -368,8 +368,8 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	double tol2 = opts.tol*opts.tol;
 	arma::vec r = func.fun(x);
 	double res2 = arma::dot( r, r );
-	// double old_res2 = res2;
-	stats.iters = 1;
+	double old_res2 = res2;
+	stats.iters = 0;
 
 	std::size_t N = x.size();
 	arma::vec x0 = x;
@@ -394,22 +394,30 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	typename functor_type::jac_type P;
 	P.eye(N,N);
 
-	while( (res2 > tol2) && (stats.iters < opts.maxit) ){
+	do{
 		double lambda = 1.0;
 		if( limit_step ){
 			lambda = (1.0 + opts.tol*res2)  / (1.0 + res2);
 		}
 
-		if( precondition ){
-			for( std::size_t i = 0; i < N; ++i ){
-				if( J(i,i) != 0.0 ){
-					P(i,i) = 1.0 / J(i,i);
+		// solve_impl might throw.
+		try{
+			if( precondition ){
+				for( std::size_t i = 0; i < N; ++i ){
+					if( J(i,i) != 0.0 ){
+						P(i,i) = 1.0 / J(i,i);
+					}else{
+						P(i,i) = 1.0;
+					}
 				}
-			}
-			direction = -solve_impl(P*J, P*r);
+				direction = -solve_impl(P*J, P*r);
 
-		}else{
-			direction = -solve_impl(J, r);
+			}else{
+				direction = -solve_impl(J, r);
+			}
+		}catch( std::exception &e ){
+			stats.conv_status = NOT_CONVERGED;
+			return x;
 		}
 
 		if( max_step2 > 0 ){
@@ -427,6 +435,14 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		r = func.fun(x);
 		res2 = arma::dot( r, r );
 
+		if( res2 > old_res2 ){
+			// Some type of divergence going on.
+			stats.conv_status = NOT_CONVERGED;
+			return x;
+		}
+
+		old_res2 = res2;
+
 		++stats.iters;
 		f0 = r;
 		x0 = x;
@@ -436,8 +452,8 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 			          << opts.maxit << " " << res2 << "\n";
 		}
 
+	}while( (res2 > tol2) && (stats.iters < opts.maxit) );
 
-	}
 	if( stats.iters == opts.maxit && res2 > tol2 ){
 		stats.conv_status = NOT_CONVERGED;
 	}else{
@@ -601,6 +617,10 @@ struct rosenbrock_func
 
 	double a, b;
 };
+
+
+
+
 
 } // namespace test_functions
 
