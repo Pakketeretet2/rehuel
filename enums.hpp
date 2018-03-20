@@ -27,6 +27,7 @@
 	                                  \
 	METHOD(IMPLICIT_EULER,200)        \
 	                                  \
+	METHOD(RADAU_IIA_32,  210)        \
 	METHOD(RADAU_IIA_53,  211)        \
 	METHOD(RADAU_IIA_95,  212)        \
 	METHOD(RADAU_IIA_137, 213)        \
