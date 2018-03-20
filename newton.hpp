@@ -40,8 +40,11 @@ namespace newton {
 
 /// \brief Return codes for newton_solve.
 enum newton_solve_ret_codes {
-	SUCCESS = 0,       ///< Converged to tolerance
-	NOT_CONVERGED = 1  ///< Did not converge to tolerance within maxit
+	SUCCESS = 0,                ///< Converged to tolerance
+	INCREMENT_DIVERGE,          ///< Increment in x increased
+	ITERATION_ERROR_TOO_LARGE,  ///< Estimated iteration error is too large
+	MAXIT_EXCEEDED,             ///< Number of iterations too large
+	GENERIC_ERROR               ///< Generic failure
 };
 
 
@@ -73,16 +76,12 @@ struct options {
    \brief contains status for the solver.
 */
 struct status {
-	status() : conv_status(SUCCESS), res(0.0), iters(0),
-	           store_final_F(false), store_final_J(false){}
+	status() : conv_status(SUCCESS), res(0.0), iters(0){}
 
 
 	int conv_status;  ///< Status code, see \ref newton_solve_ret_codes
 	double res;       ///< Final residual (F(x_root)^2)
 	int iters;        ///< Number of iterations actually used
-
-	bool store_final_F;  ///< If true, the final value of F(x) is stored
-	bool store_final_J;  ///< If true, the final value of J(x) is stored
 };
 
 
@@ -308,11 +307,7 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		f0 = r;
 		x0 = x;
 	}
-	if( stats.iters == opts.maxit && res2 > tol2 ){
-		stats.conv_status = NOT_CONVERGED;
-	}else{
-		stats.conv_status = SUCCESS;
-	}
+
 	stats.res = std::sqrt( res2 );
 	return x;
 }
@@ -365,11 +360,8 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
                                const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
-	double tol2 = opts.tol*opts.tol;
 	arma::vec r = func.fun(x);
 	double res2 = arma::dot( r, r );
-	double old_res2 = res2;
-	stats.iters = 0;
 
 	std::size_t N = x.size();
 	arma::vec x0 = x;
@@ -394,7 +386,13 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	typename functor_type::jac_type P;
 	P.eye(N,N);
 
-	do{
+	double incr1 = 0;
+	double incr0 = 0;
+
+	// Estimated convergence rate:
+	double theta_k = 1.0;
+
+	for( stats.iters = 0; stats.iters < opts.maxit; ++stats.iters ){
 		double lambda = 1.0;
 		if( limit_step ){
 			lambda = (1.0 + opts.tol*res2)  / (1.0 + res2);
@@ -416,7 +414,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 				direction = -solve_impl(J, r);
 			}
 		}catch( std::exception &e ){
-			stats.conv_status = NOT_CONVERGED;
+			stats.conv_status = GENERIC_ERROR;
 			return x;
 		}
 
@@ -435,35 +433,54 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		r = func.fun(x);
 		res2 = arma::dot( r, r );
 
-		if( res2 > old_res2 ){
-			// Some type of divergence going on.
-			stats.conv_status = NOT_CONVERGED;
-			return x;
-		}
-
-		old_res2 = res2;
-
 		++stats.iters;
 		f0 = r;
 		x0 = x;
+
+		incr0 = incr1;
+		incr1 = arma::norm( direction, "inf" );
+		if( stats.iters > 1 ){
+			theta_k = incr1 / incr0;
+			double eta_k = theta_k / ( 1.0 - theta_k );
+			if( eta_k * incr1 < opts.tol ){
+				//std::cerr << "    Newton: eta_k was "
+				//          << eta_k << " so terminating at step "
+				//          << stats.iters << "...\n";
+				stats.conv_status = SUCCESS;
+				break;
+			}
+
+			if( theta_k > 1.0 ){
+				//std::cerr << "    Newton: Divergence at step "
+				//          << stats.iters << "!\n";
+				stats.conv_status = INCREMENT_DIVERGE;
+				break;
+			}
+			double expt = opts.maxit - stats.iters;
+			double nom = std::pow( theta_k, expt ) * incr1;
+			if( nom / ( 1.0 - theta_k ) > opts.tol ){
+				//std::cerr << "    Newton: Divergence at step "
+				//          << stats.iters << "!\n";
+				stats.conv_status = ITERATION_ERROR_TOO_LARGE;
+				break;
+			}
+		}
 
 		if( !quiet ){
 			std::cerr << "    Newton: " << stats.iters << "/"
 			          << opts.maxit << " " << res2 << "\n";
 		}
 
-	}while( (res2 > tol2) && (stats.iters < opts.maxit) );
+	}
 
-	if( stats.iters == opts.maxit && res2 > tol2 ){
-		stats.conv_status = NOT_CONVERGED;
-	}else{
-		stats.conv_status = SUCCESS;
+	if( stats.iters == opts.maxit ){
+		stats.conv_status = MAXIT_EXCEEDED;
 	}
 	stats.res = std::sqrt( res2 );
 
 	// Check whether or not res is NaN or inf or somesuch.
 	if( !std::isfinite( stats.res ) ){
-		stats.conv_status = NOT_CONVERGED;
+		stats.conv_status = GENERIC_ERROR;
 	}
 
 	return x;

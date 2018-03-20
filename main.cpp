@@ -209,7 +209,7 @@ void test_three_body( int method, double t0, double t1, double dt,
 	so.rel_tol = 1e-4;
 	so.abs_tol = 1e-3;
 
-	so.verbosity = 0;
+	so.out_interval = 10;
 	no.maxit = 100;
 	no.tol = 0.7*so.rel_tol;
 

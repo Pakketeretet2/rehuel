@@ -444,10 +444,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 	std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
 
-	std::size_t n_attempt = 0;
-	std::size_t n_reject_newton = 0;
-	std::size_t n_reject_err    = 0;
-
 	arma::vec err_est;
 	err_est.zeros( y.size() );
 
@@ -457,8 +453,16 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	sol.err_est.push_back( err_est );
 	sol.err.push_back( 0.0 );
 
-
 	bool alternative_error_formula = true;
+
+	std::size_t n_attempt = 0;
+	std::size_t n_reject_newton = 0;
+	std::size_t n_reject_err    = 0;
+
+	std::size_t newton_success = 0;
+	std::size_t newton_incr_diverge = 0;
+	std::size_t newton_iter_error_too_large = 0;
+	std::size_t newton_maxit_exceed = 0;
 
 	// Make sure you stop exactly at t = t1.
 	while( t < t1 ){
@@ -493,9 +497,18 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		if( newton_status != newton::SUCCESS ){
 			//std::cerr << "    Rehuel: Newton iteration failed! "
 			//          << "Retrying with dt = " << dt << "\n";
-			dt *= 0.1;
+			dt *= 0.5;
 			++n_reject_newton;
+			if( newton_status == newton::INCREMENT_DIVERGE ){
+				newton_incr_diverge++;
+			}else if( newton_status == newton::ITERATION_ERROR_TOO_LARGE ){
+				newton_iter_error_too_large++;
+			}else if( newton_status == newton::MAXIT_EXCEEDED ){
+				newton_maxit_exceed++;
+			}
 			continue;
+		}else{
+			++newton_success;
 		}
 
 
@@ -653,10 +666,15 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	std::cerr << "    Rehuel: Done integrating ODE over [ " << t0 << ", "
 	          << t1 << " ].\n";
 	std::cerr << "            Number of succesful steps: " << step
-	          << " / " << n_attempt
-	          << ". Accept ratio = " << accept_rat
-	          << ", rejected due to newton: " << n_reject_newton
-	          << ", rejected due to err: " << n_reject_err << "\n";
+	          << " / " << n_attempt << "\n"
+	          << "            Accept ratio:           " << accept_rat << "\n"
+	          << "            Rejected due to newton: " << n_reject_newton << "\n"
+	          << "            Rejected due to err:    " << n_reject_err << "\n";
+	std::cerr << "          Newton statistics: \n"
+	          << "            # succesful iterations: " << newton_success << "\n"
+	          << "            # diverging incrs:      " << newton_incr_diverge << "\n"
+	          << "            # iter errors > tol:    " << newton_iter_error_too_large << "\n"
+	          << "            # maxit exceeded:       " << newton_maxit_exceed << "\n";
 
 	return sol;
 }
@@ -678,9 +696,19 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 */
 template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
-                  const solver_options &solver_opts, double dt = 1e-6 )
+                  const solver_options &solver_opts,
+                  int method = irk::RADAU_IIA_53, double dt = 1e-6 )
 {
-	return radau_IIA_53( func, t0, t1, y0, solver_opts );
+	switch(method){
+		case RADAU_IIA_53:
+			return radau_IIA_53( func, t0, t1, y0, solver_opts );
+		case RADAU_IIA_32:
+			return radau_IIA_32( func, t0, t1, y0, solver_opts );
+		default:
+			std::cerr << "    Rehuel: method code " << method
+			          << " is not used!\n";
+			return rk_output();
+	}
 }
 
 
