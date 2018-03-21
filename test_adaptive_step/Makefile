@@ -1,5 +1,5 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -march=native \
+FLAGS = -std=c++11 -pedantic -g -O3 -march=native -ffinite-math-only \
         -Werror=return-type -Werror=uninitialized -Wall
 
 LNK = -L./ -L../ -larmadillo -lrehuel

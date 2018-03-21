@@ -84,7 +84,8 @@ struct solver_options : common_solver_options {
 
 	/// \brief Constructor with default values.
 	solver_options() : adaptive_step_size(true),
-	                   use_newton_iters_adaptive_step( false )
+	                   use_newton_iters_adaptive_step( false ),
+	                   verbose_newton( false )
 	{ }
 
 	~solver_options()
@@ -96,6 +97,9 @@ struct solver_options : common_solver_options {
 
 	/// If true, use newton iteration info in determining adaptive step size
 	bool use_newton_iters_adaptive_step;
+
+	/// If true, make the Newton iterator print output.
+	bool verbose_newton;
 };
 
 
@@ -220,6 +224,16 @@ int name_to_method( const std::string &name );
 const char *method_to_name( int method );
 
 
+
+/**
+   \brief evaluates the inter/extrapolated weight functions to given theta.
+
+   \param theta    The value to inter/extrapolate to.
+   \param sc       The coefficients to use to inter/extrapolate
+
+   \returns A vector containing the values { b1(theta), b2(theta)... }.
+*/
+arma::vec project_b( double theta, const irk::solver_coeffs &sc );
 
 
 
@@ -429,7 +443,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
 
-	arma::vec y = y0;
+	arma::vec y  = y0;
+	arma::vec yo = y;
 	arma::vec K_np, K_n;
 	K_np.zeros( N );
 	K_n.zeros( N );
@@ -490,7 +505,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 			nw( stages_func, stages_jac );
 
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
-		                               newton_stats, true );
+		                               newton_stats,
+		                               !solver_opts.verbose_newton );
 		int newton_status = newton_stats.conv_status;
 
 		// *********** Verify Newton iteration convergence ************
@@ -635,7 +651,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 
 		if( integrator_status == 0 ){
-			y = y_n;
+			yo = y;
+			y  = y_n;
 			t += dt;
 			++step;
 
@@ -657,7 +674,34 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 		if( integrator_status == 0 ){
 			// ***************   Estimate new stages:  *************
+			// NOTE: This depends on the definition of the variables
+			// that are the stages. If the code is later changed to
+			// solve the stages according to Hairer & Wanner, this
+			// too needs to change.
+			double dt_frac = dts[0]/dts[1];
+			for( std::size_t i = 0; i < Ns; ++i ){
+				double ci = sc.c(i);
 
+				double theta = 1.0 + dt_frac * ci;
+				arma::vec bs = project_b( theta, sc );
+
+				arma::vec Yi = yo;
+				for( std::size_t j = 0; j < Ns; ++j ){
+					std::size_t j0 = j*Neq;
+					std::size_t j1 = (j+1)*Neq - 1;
+					auto Kj = K_np.subvec( j0, j1 );
+					Yi += dt * bs[j] * Kj;
+				}
+
+				// Now you have an approximation for the time
+				// point at t + ci*dt. Use the rhs evaluated
+				// at this point as an approximation for the
+				// next stage.
+				std::size_t i0 = i*Neq;
+				std::size_t i1 = (i+1)*Neq - 1;
+				double ti = t + dt*ci;
+				K_n.subvec( i0, i1 ) = func.fun( ti, Yi );
+			}
 		}
 	}
 

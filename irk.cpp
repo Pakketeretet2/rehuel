@@ -300,14 +300,8 @@ solver_coeffs get_coefficients( int method )
 			sc.order = 3;
 			sc.order2 = 2;
 
-			double c1 = sc.c[0];
-			double c2 = sc.c[1];
-
-			double d1 = (c1-c2);
-			double d2 = (c2-c1);
-
-			sc.b_interp = {
-			                };
+			sc.b_interp = { { 3.0/2.0, -3.0/4.0},
+			                {-1.0/2.0,  3.0/4.0} };
 
 
 			break;
@@ -411,6 +405,25 @@ std::vector<std::string> all_method_names()
 		methods.push_back( pair.first );
 	}
 	return methods;
+}
+
+arma::vec project_b( double theta, const irk::solver_coeffs &sc )
+{
+	std::size_t Ns = sc.b.size();
+	const arma::mat &bcs = sc.b_interp;
+	assert( bcs.size() > 0 && "Chosen method does not have dense output!" );
+
+	arma::vec bs(Ns), ts(Ns);
+
+	// ts will contain { t, t^2, t^3, ..., t^{Ns} }
+	double tt = theta;
+	for( std::size_t i = 0; i < Ns; ++i ){
+		ts[i] = tt;
+		tt *= theta;
+	}
+
+	// Now bs = sc.b_interp * ts;
+	return sc.b_interp * ts;
 }
 
 

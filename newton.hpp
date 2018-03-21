@@ -30,7 +30,9 @@
 #define ARMA_USE_CXX11
 
 #include <armadillo>
+#include <iomanip>
 #include <fstream>
+
 
 #include "my_timer.hpp"
 
@@ -360,6 +362,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
                                const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
+	stats.iters = 0;
 	arma::vec r = func.fun(x);
 	double res2 = arma::dot( r, r );
 
@@ -369,6 +372,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 	arma::vec direction;
 
+
 	typename functor_type::jac_type L(N, N), U(N,N);
 
 
@@ -377,10 +381,12 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	else max_step2 = -1;
 
 	auto J = func.jac(x);
-
-	if( !quiet ){
-		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
-		          << " " << res2 << "\n";
+	double rcond = arma::rcond(J);
+	if( rcond < 1e-14 ){
+		double xnorm = arma::norm( x, "inf" );
+		std::cerr << "    Newton: Jacobi matrix condition number is "
+		          << rcond << ". For this x, |x| = " << xnorm
+		          << " and r^2 = " << std::sqrt(res2) << "...\n";
 	}
 
 	typename functor_type::jac_type P;
@@ -391,8 +397,23 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 	// Estimated convergence rate:
 	double theta_k = 1.0;
+	double eta_k = 1.0;
 
-	for( stats.iters = 0; stats.iters < opts.maxit; ++stats.iters ){
+	auto print_stats =
+		[&opts, &stats, &res2, &incr1, &incr0, &theta_k, &eta_k](){
+		std::cerr << std::setw(16);
+		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
+		          << "\t" << res2 << "\t" << incr1 << "\t" << incr0
+		          << "\t" << theta_k << "\t" << eta_k << "\t"
+		          << eta_k * incr1 << "/" << opts.tol << "\n";
+	};
+
+	bool terminate = false;
+
+
+	while( !terminate && (stats.iters < opts.maxit) ){
+		if( !quiet ) print_stats();
+
 		double lambda = 1.0;
 		if( limit_step ){
 			lambda = (1.0 + opts.tol*res2)  / (1.0 + res2);
@@ -433,7 +454,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		r = func.fun(x);
 		res2 = arma::dot( r, r );
 
-		++stats.iters;
 		f0 = r;
 		x0 = x;
 
@@ -441,20 +461,20 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		incr1 = arma::norm( direction, "inf" );
 		if( stats.iters > 1 ){
 			theta_k = incr1 / incr0;
-			double eta_k = theta_k / ( 1.0 - theta_k );
+			eta_k = theta_k / ( 1.0 - theta_k );
 			if( eta_k * incr1 < opts.tol ){
 				//std::cerr << "    Newton: eta_k was "
 				//          << eta_k << " so terminating at step "
 				//          << stats.iters << "...\n";
 				stats.conv_status = SUCCESS;
-				break;
+				terminate = true;
 			}
 
 			if( theta_k > 1.0 ){
 				//std::cerr << "    Newton: Divergence at step "
 				//          << stats.iters << "!\n";
 				stats.conv_status = INCREMENT_DIVERGE;
-				break;
+				terminate = true;
 			}
 			double expt = opts.maxit - stats.iters;
 			double nom = std::pow( theta_k, expt ) * incr1;
@@ -462,15 +482,11 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 				//std::cerr << "    Newton: Divergence at step "
 				//          << stats.iters << "!\n";
 				stats.conv_status = ITERATION_ERROR_TOO_LARGE;
-				break;
+				terminate = true;
 			}
 		}
 
-		if( !quiet ){
-			std::cerr << "    Newton: " << stats.iters << "/"
-			          << opts.maxit << " " << res2 << "\n";
-		}
-
+		++stats.iters;
 	}
 
 	if( stats.iters == opts.maxit ){
@@ -481,6 +497,12 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 	// Check whether or not res is NaN or inf or somesuch.
 	if( !std::isfinite( stats.res ) ){
 		stats.conv_status = GENERIC_ERROR;
+	}
+
+	if( !quiet ){
+		std::cerr << "    Newton: Stats on termination with code "
+		          << stats.conv_status << ":\n";
+		print_stats();
 	}
 
 	return x;
