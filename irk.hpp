@@ -29,6 +29,9 @@
 #define IRK_HPP
 
 #define ARMA_USE_CXX11
+#define ARMA_USE_BLAS
+#define ARMA_DONT_PRINT_ERRORS
+
 #include <armadillo>
 #include <cassert>
 #include <limits>
@@ -118,6 +121,18 @@ static std::map<std::string,int> rk_string_to_method = {
 */
 struct rk_output
 {
+	struct counters {
+		counters() : attempt(0), reject_newton(0), reject_err(0),
+		             newton_success(0), newton_incr_diverge(0),
+		             newton_iter_error_too_large(0),
+		             newton_maxit_exceed(0) {}
+
+		std::size_t attempt, reject_newton, reject_err;
+
+		std::size_t newton_success, newton_incr_diverge,
+			newton_iter_error_too_large, newton_maxit_exceed;
+	};
+
 	int status;
 
 	std::vector<double> t_vals;
@@ -128,6 +143,11 @@ struct rk_output
 	std::vector<double>    err;
 
 	std::size_t n_jac_evals, n_func_evals;
+
+	double elapsed_time, accept_frac;
+
+	counters count;
+
 };
 
 
@@ -427,12 +447,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	          << t0 << ", " << t1 << " ]...\n"
 	          << "            Method = " << sc.name << "\n";
 
+	my_timer timer;
+
 	double t = t0;
 	rk_output sol;
 	sol.status = SUCCESS;
-
-	sol.t_vals.push_back(t);
-	sol.y_vals.push_back(y0);
 
 	assert( solver_opts.newton_opts && "Newton solver options not set!" );
 	assert( dt > 0 && "Cannot use time step size <= 0!" );
@@ -457,7 +476,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	dts[0] = dts[1] = dts[2] = dt;
 	errs[0] = errs[1] = errs[2] = 0.9;
 
-	std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+	if( solver_opts.out_interval > 0 ){
+		std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+	}
 
 	arma::vec err_est;
 	err_est.zeros( y.size() );
@@ -470,15 +491,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 	bool alternative_error_formula = true;
 
-	std::size_t n_attempt = 0;
-	std::size_t n_reject_newton = 0;
-	std::size_t n_reject_err    = 0;
-
-	std::size_t newton_success = 0;
-	std::size_t newton_incr_diverge = 0;
-	std::size_t newton_iter_error_too_large = 0;
-	std::size_t newton_maxit_exceed = 0;
-
 	// Make sure you stop exactly at t = t1.
 	while( t < t1 ){
 
@@ -486,7 +498,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		if( t + dt > t1 ){
 			dt = t1 - t;
 		}
-		++n_attempt;
+		sol.count.attempt++;
 
 		int integrator_status = 0;
 
@@ -507,6 +519,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
 		                               newton_stats,
 		                               !solver_opts.verbose_newton );
+		//K_np = newton::broyden_iterate( nw, K_n, newton_opts,
+		//                                newton_stats );
 		int newton_status = newton_stats.conv_status;
 
 		// *********** Verify Newton iteration convergence ************
@@ -514,17 +528,17 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 			//std::cerr << "    Rehuel: Newton iteration failed! "
 			//          << "Retrying with dt = " << dt << "\n";
 			dt *= 0.5;
-			++n_reject_newton;
+			sol.count.reject_newton++;
 			if( newton_status == newton::INCREMENT_DIVERGE ){
-				newton_incr_diverge++;
+				sol.count.newton_incr_diverge++;
 			}else if( newton_status == newton::ITERATION_ERROR_TOO_LARGE ){
-				newton_iter_error_too_large++;
+				sol.count.newton_iter_error_too_large++;
 			}else if( newton_status == newton::MAXIT_EXCEEDED ){
-				newton_maxit_exceed++;
+				sol.count.newton_maxit_exceed++;
 			}
 			continue;
 		}else{
-			++newton_success;
+			sol.count.newton_success++;
 		}
 
 
@@ -601,7 +615,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 			// This is bad.
 			alternative_error_formula = true;
 			integrator_status = 1;
-			++n_reject_err;
+			sol.count.reject_err++;
 
 		}
 
@@ -672,7 +686,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		dts[1] = dts[0];
 		dts[0] = dt;
 
-		if( integrator_status == 0 ){
+		if( false && (integrator_status == 0) ){
 			// ***************   Estimate new stages:  *************
 			// NOTE: This depends on the definition of the variables
 			// that are the stages. If the code is later changed to
@@ -705,20 +719,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		}
 	}
 
-	double accept_rat = static_cast<double>(step) / n_attempt;
-
-	std::cerr << "    Rehuel: Done integrating ODE over [ " << t0 << ", "
-	          << t1 << " ].\n";
-	std::cerr << "            Number of succesful steps: " << step
-	          << " / " << n_attempt << "\n"
-	          << "            Accept ratio:           " << accept_rat << "\n"
-	          << "            Rejected due to newton: " << n_reject_newton << "\n"
-	          << "            Rejected due to err:    " << n_reject_err << "\n";
-	std::cerr << "          Newton statistics: \n"
-	          << "            # succesful iterations: " << newton_success << "\n"
-	          << "            # diverging incrs:      " << newton_incr_diverge << "\n"
-	          << "            # iter errors > tol:    " << newton_iter_error_too_large << "\n"
-	          << "            # maxit exceeded:       " << newton_maxit_exceed << "\n";
+	double elapsed = timer.toc();
+	sol.elapsed_time = elapsed;
+	sol.accept_frac = static_cast<double>(step) / sol.count.attempt;
 
 	return sol;
 }
