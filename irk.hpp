@@ -38,7 +38,6 @@
 #include <iomanip>
 
 #include "enums.hpp"
-#include "integrator_io.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
