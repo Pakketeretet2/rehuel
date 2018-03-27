@@ -29,7 +29,6 @@
 
 #include <iosfwd>
 
-#include "integrator_io.hpp"
 
 namespace newton {
 struct options;
