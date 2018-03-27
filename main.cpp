@@ -62,7 +62,7 @@ struct newton_dummy
 {
 	typedef typename functor::jac_type jac_type;
 
-	newton_dummy( functor &f, double t ) : func(f), t(t) {}
+	newton_dummy( functor &f, double t ) : t(t), func(f) {}
 
 	arma::vec fun( const arma::vec x )
 	{ return func.fun(t,x); }
@@ -74,20 +74,6 @@ struct newton_dummy
 	functor &func;
 };
 
-
-void test_newton()
-{
-	newton::test_functions::rosenbrock_func r( 1.0, 100.0 );
-	arma::vec x0 = { 0.0, 0.0 };
-	newton::options opts;
-	newton::status stats;
-	opts.maxit = 1000000;
-	arma::vec root = newton::broyden_iterate( r, x0, opts, stats );
-	std::cerr << "Broyden root is " << root << "\n";
-	root = newton::newton_iterate( r, x0, opts, stats );
-	std::cerr << "Newton root is " << root << "\n";
-
-}
 
 
 void test_ode_rk( int method, double t0, double t1, double dt, bool const_jac )
@@ -274,7 +260,6 @@ int main( int argc, char **argv )
 	double t1 = 10.0;
 
 	bool test_exp = false;
-	bool test_newt = false;
 	bool show_all_methods = false;
 	bool test_three_bod = false;
 
@@ -338,7 +323,6 @@ int main( int argc, char **argv )
 	parser_status |= parser.option_by_long( "t1", t1 );
 	parser_status |= parser.option_by_long( "method", method_str );
 	parser_status |= parser.option_by_long( "test-exponential", test_exp );
-	parser_status |= parser.option_by_long( "test-newton", test_newt );
 	parser_status |= parser.option_by_long( "print-all-methods", show_all_methods );
 
 	parser_status |= parser.option_by_long( "adaptive-step", adaptive_step );
@@ -369,8 +353,6 @@ int main( int argc, char **argv )
 	}else{
 		std::cerr << "Not using adaptive step!\n";
 	}
-
-	if( test_newt ) test_newton();
 
 	if( test_exp ){
 		int method = irk::name_to_method( method_str );
