@@ -1,4 +1,3 @@
-#include <armadillo>
 #include <iostream>
 #include <string>
 
@@ -6,6 +5,27 @@
 
 
 namespace irk {
+
+/**
+   \brief Combine all "cross-terms". That is, if
+   v1 = { [1], [2] } and v2 = 3
+   it should return
+   { [1, 2], [1, 3] }
+   if
+   v1 = { [ 1, 2 ], [ 1, 3 ] }, v2 = 4, then it should return
+   { [ 1, 2, 4 ], [ 1, 3, 4 ] }
+*/
+typedef std::vector<std::vector<int> > coeff_list;
+coeff_list cross_term_add( const coeff_list &v1, int v2 )
+{
+	coeff_list v3( v1.begin(), v1.end() );
+	for( std::size_t i = 0; i < v1.size(); ++i ){
+		v3[i].push_back(v2);
+	}
+	return v3;
+}
+
+
 
 bool verify_solver_coeffs( const solver_coeffs &sc )
 {
@@ -16,6 +36,37 @@ bool verify_solver_coeffs( const solver_coeffs &sc )
 	if( N == 0 ) return false;
 
 	return true;
+}
+
+
+arma::mat collocation_interpolate_coeffs( const arma::vec &c )
+{
+	// Interpolates on a solution interval as
+	// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
+	//          + b_interp(j,2)*t^3 + ...
+
+	std::size_t Ns = c.size();
+	arma::vec d( Ns );
+	for( std::size_t i = 0; i < Ns; ++i ){
+		double cfacs = 1.0;
+		for( std::size_t j = 0; j < Ns; ++j ){
+			if( j == i ) continue;
+			cfacs *= c(i) - c(j);
+		}
+		d(i) = cfacs;
+	}
+
+	arma::mat b_interp( Ns, Ns );
+
+	arma::vec c_terms;
+
+	std::vector<std::vector<int> > tuplets;
+
+	// Brilliant idea.
+
+
+
+	return b_interp;
 }
 
 
@@ -31,7 +82,7 @@ solver_coeffs get_coefficients( int method )
 	// double sqrt15 = sqrt(15.0);
 
 	// Methods that need adding:
-	// RADAU_IIA_95, RADAU_137, LOBATTO_IIA_{43,86,129},
+	// RADAU_137, LOBATTO_IIA_{43,86,129},
 	// LOBATTO_IIIC_{43,86,129}, GAUSS_LEGENDRE_{42,84,126}
 
 	sc.FSAL = false;
@@ -329,9 +380,53 @@ solver_coeffs get_coefficients( int method )
 			sc.order = 5;
 			sc.order2 = 3;
 
+
+			break;
+		}
+
+		case RADAU_IIA_95:{
+			sc.A = {{ 0.0729988643179033243, -0.0267353311079455719,
+			          0.0186769297639843544, -0.0128791060933064399,
+			          0.00504283923388201521 },
+			        { 0.153775231479182469, 0.146214867847493507,
+			          -0.036444568905128090, 0.021233063119304719,
+			          -0.007935579902728778 },
+			        { 0.14006304568480987, 0.29896712949128348,
+			          0.16758507013524896, -0.03396910168661775,
+			          0.01094428874419225 },
+			        { 0.14489430810953476, 0.2765000687601592,
+			          0.3257979229104210, 0.1287567532549098,
+			          -0.01570891737880533 },
+			        { 0.1437135607912259, 0.2813560151494621,
+			          0.3118265229757413, 0.2231039010835707,
+			          0.04 } };
+
+			sc.c = { 0.05710419611451768219312119255411562124,
+			         0.27684301363812382768004599768562514112,
+			         0.58359043236891682005669766866291724869,
+			         0.86024013565621944784791291887511976674,
+			         1.0 };
+
+			sc.b = { 0.1437135607912259,
+			         0.2813560151494621,
+			         0.3118265229757413,
+			         0.2231039010835707,
+			         0.04 };
+
+			// gamma is the real eigenvalue of A.
+			sc.gamma = 0.1590658444274690;
+
+
+
+			sc.b2 = { };
+
+			sc.order  = 9;
+			sc.order2 = 5;
+
 			// Interpolates on a solution interval as
 			// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
 			//          + b_interp(j,2)*t^3 + ...
+			/*
 			double c1 = sc.c[0];
 			double c2 = sc.c[1];
 			double c3 = sc.c[2];
@@ -343,10 +438,10 @@ solver_coeffs get_coefficients( int method )
 			sc.b_interp = { { c2*c3/d1, -(c2+c3)/(2.0*d1), (1.0/3.0)/d1 },
 			                { c1*c3/d2, -(c1+c3)/(2.0*d2), (1.0/3.0)/d2 },
 			                { c1*c2/d3, -(c1+c2)/(2.0*d3), (1.0/3.0)/d3 } };
+			*/
 
-			break;
+			         break;
 		}
-		// case RADAU_IIA_95
 		// case RADAU_IIA_137
 
 	}

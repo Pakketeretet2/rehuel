@@ -28,15 +28,13 @@
 #ifndef IRK_HPP
 #define IRK_HPP
 
-#define ARMA_USE_CXX11
-#define ARMA_USE_BLAS
-#define ARMA_DONT_PRINT_ERRORS
 
-#include <armadillo>
+
 #include <cassert>
 #include <limits>
 #include <iomanip>
 
+#include "arma_include.hpp"
 #include "enums.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
@@ -253,6 +251,18 @@ const char *method_to_name( int method );
    \returns A vector containing the values { b1(theta), b2(theta)... }.
 */
 arma::vec project_b( double theta, const irk::solver_coeffs &sc );
+
+
+/**
+   \brief Generates the interpolation polynomial coefficients
+          for collocation methods
+
+   \param c    The collocation points of the method.
+
+   \returns The interpolation coefficient matrix.
+*/
+arma::mat collocation_interpolate_coeffs( const arma::vec &c );
+
 
 
 
@@ -557,10 +567,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		}
 
 		arma::vec dy_alt = gamma * func.fun( t, y ) + delta_alt;
-		double K_np_norm      = arma::norm( K_np, "inf" );
-		double delta_y_norm   = arma::norm( delta_y, "inf" );
-		double delta_alt_norm = arma::norm( delta_alt, "inf" );
-
 		arma::vec y_n    = y + dt*delta_y;
 		arma::vec yp     = y + dt*dy_alt;
 		arma::vec delta_delta = dy_alt - delta_y;
@@ -747,9 +753,9 @@ rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
 {
 	switch(method){
 		case RADAU_IIA_53:
-			return radau_IIA_53( func, t0, t1, y0, solver_opts );
+			return radau_IIA_53(func, t0, t1, y0, solver_opts, dt);
 		case RADAU_IIA_32:
-			return radau_IIA_32( func, t0, t1, y0, solver_opts );
+			return radau_IIA_32(func, t0, t1, y0, solver_opts, dt);
 		default:
 			std::cerr << "    Rehuel: method code " << method
 			          << " is not used!\n";
