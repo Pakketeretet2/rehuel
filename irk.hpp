@@ -29,13 +29,15 @@
 #define IRK_HPP
 
 #define ARMA_USE_CXX11
+#define ARMA_USE_BLAS
+#define ARMA_DONT_PRINT_ERRORS
+
 #include <armadillo>
 #include <cassert>
 #include <limits>
 #include <iomanip>
 
 #include "enums.hpp"
-#include "integrator_io.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
@@ -84,7 +86,8 @@ struct solver_options : common_solver_options {
 
 	/// \brief Constructor with default values.
 	solver_options() : adaptive_step_size(true),
-	                   use_newton_iters_adaptive_step( false )
+	                   use_newton_iters_adaptive_step( false ),
+	                   verbose_newton( false )
 	{ }
 
 	~solver_options()
@@ -96,6 +99,9 @@ struct solver_options : common_solver_options {
 
 	/// If true, use newton iteration info in determining adaptive step size
 	bool use_newton_iters_adaptive_step;
+
+	/// If true, make the Newton iterator print output.
+	bool verbose_newton;
 };
 
 
@@ -114,6 +120,18 @@ static std::map<std::string,int> rk_string_to_method = {
 */
 struct rk_output
 {
+	struct counters {
+		counters() : attempt(0), reject_newton(0), reject_err(0),
+		             newton_success(0), newton_incr_diverge(0),
+		             newton_iter_error_too_large(0),
+		             newton_maxit_exceed(0) {}
+
+		std::size_t attempt, reject_newton, reject_err;
+
+		std::size_t newton_success, newton_incr_diverge,
+			newton_iter_error_too_large, newton_maxit_exceed;
+	};
+
 	int status;
 
 	std::vector<double> t_vals;
@@ -124,6 +142,11 @@ struct rk_output
 	std::vector<double>    err;
 
 	std::size_t n_jac_evals, n_func_evals;
+
+	double elapsed_time, accept_frac;
+
+	counters count;
+
 };
 
 
@@ -196,26 +219,6 @@ bool is_method_sdirk( const solver_coeffs &sc );
 solver_options default_solver_options();
 
 
-/**
-   \brief Attempts to find a more optimal time step size based on error estimate
-
-   \param dt_n           Time step size of last taken step
-   \param dt_nm          Time step size of previous taken step.
-   \param abs_err        Absolute error estimate
-   \param rel_err        Current error estimate
-   \param newton_iters   Number of Newton iterations used.
-   \param opts           Solver options
-   \param sc             Solver coefficients.
-   \param max_dt         Largest accepted time step size.
-
-
-   \return A time step size that is estimated to be more optimal.
-*/
-double get_better_time_step( double dt_n, double dt_nm, double err,
-                             double old_err, double tol,
-                             int newton_iters, int maxit,
-                             const solver_options &opts,
-                             const solver_coeffs &sc, double max_dt );
 
 /**
    \brief Converts a string with a method name to an int.
@@ -240,6 +243,16 @@ int name_to_method( const std::string &name );
 const char *method_to_name( int method );
 
 
+
+/**
+   \brief evaluates the inter/extrapolated weight functions to given theta.
+
+   \param theta    The value to inter/extrapolate to.
+   \param sc       The coefficients to use to inter/extrapolate
+
+   \returns A vector containing the values { b1(theta), b2(theta)... }.
+*/
+arma::vec project_b( double theta, const irk::solver_coeffs &sc );
 
 
 
@@ -352,10 +365,36 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 }
 
 
+/**
+   \brief Integrate ODE from t0 to t1 using a third-order Radau IIA method
+
+   t_vals and y_vals shall be unmodified upon failure.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+   \param sc           Solver coefficients
+   \param solver_opts  Options for the internal solver.
+
+   \returns a status code (see \ref odeint_status_codes)
+*/
+template <typename functor_type> inline
+rk_output radau_IIA_32( functor_type &func, double t0, double t1, const arma::vec &y0,
+                        const solver_options &solver_opts, double dt = 1e-6 )
+{
+	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_32 );
+
+	assert( strcmp( sc.name, "RADAU_IIA_32" ) == 0 &&
+	        "For some reason get_coefficients returned wrong coeffs!" );
+	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+
+	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
+}
 
 
 /**
-   \brief Time-integrate a given ODE from t0 to t1, starting at y0
+   \brief Integrate ODE from t0 to t1 using a fifth-order Radau IIA method
 
    t_vals and y_vals shall be unmodified upon failure.
 
@@ -372,18 +411,47 @@ template <typename functor_type> inline
 rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::vec &y0,
                         const solver_options &solver_opts, double dt = 1e-6 )
 {
-	double t = t0;
-	rk_output sol;
-	sol.status = SUCCESS;
-
-	sol.t_vals.push_back(t);
-	sol.y_vals.push_back(y0);
-
 	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_53 );
 
 	assert( strcmp( sc.name, "RADAU_IIA_53" ) == 0 &&
 	        "For some reason get_coefficients returned wrong coeffs!" );
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+
+	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
+}
+
+
+
+
+/**
+   \brief Generic time integration function for IRK methods
+
+   t_vals and y_vals shall be unmodified upon failure.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+   \param sc           Solver coefficients
+   \param solver_opts  Options for the internal solver.
+
+   \returns a struct that contains status, solution, etc. (see irk::rk_output).
+*/
+template <typename functor_type> inline
+rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y0,
+                    const solver_options &solver_opts, double dt,
+                    const solver_coeffs &sc )
+{
+	std::cerr << "    Rehuel: Integrating over interval [ "
+	          << t0 << ", " << t1 << " ]...\n"
+	          << "            Method = " << sc.name << "\n";
+
+	my_timer timer;
+
+	double t = t0;
+	rk_output sol;
+	sol.status = SUCCESS;
+
 	assert( solver_opts.newton_opts && "Newton solver options not set!" );
 	assert( dt > 0 && "Cannot use time step size <= 0!" );
 
@@ -393,7 +461,8 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
 
-	arma::vec y = y0;
+	arma::vec y  = y0;
+	arma::vec yo = y;
 	arma::vec K_np, K_n;
 	K_np.zeros( N );
 	K_n.zeros( N );
@@ -406,14 +475,18 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 	dts[0] = dts[1] = dts[2] = dt;
 	errs[0] = errs[1] = errs[2] = 0.9;
 
-	std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+	if( solver_opts.out_interval > 0 ){
+		std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+	}
 
-	std::size_t n_attempt = 0;
-	std::size_t n_reject_newton = 0;
-	std::size_t n_reject_err    = 0;
+	arma::vec err_est;
+	err_est.zeros( y.size() );
 
-	std::ofstream err_info( "err.log" );
-	err_info << "# step time  err  iters\n";
+	sol.t_vals.push_back(t);
+	sol.y_vals.push_back(y);
+	sol.stages.push_back(K_n);
+	sol.err_est.push_back( err_est );
+	sol.err.push_back( 0.0 );
 
 	bool alternative_error_formula = true;
 
@@ -424,7 +497,7 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 		if( t + dt > t1 ){
 			dt = t1 - t;
 		}
-		++n_attempt;
+		sol.count.attempt++;
 
 		int integrator_status = 0;
 
@@ -443,14 +516,28 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 			nw( stages_func, stages_jac );
 
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
-		                               newton_stats, true /* false */ );
+		                               newton_stats,
+		                               !solver_opts.verbose_newton );
+		//K_np = newton::broyden_iterate( nw, K_n, newton_opts,
+		//                                newton_stats );
 		int newton_status = newton_stats.conv_status;
 
 		// *********** Verify Newton iteration convergence ************
 		if( newton_status != newton::SUCCESS ){
-			dt *= 0.1;
-			++n_reject_newton;
+			//std::cerr << "    Rehuel: Newton iteration failed! "
+			//          << "Retrying with dt = " << dt << "\n";
+			dt *= 0.5;
+			sol.count.reject_newton++;
+			if( newton_status == newton::INCREMENT_DIVERGE ){
+				sol.count.newton_incr_diverge++;
+			}else if( newton_status == newton::ITERATION_ERROR_TOO_LARGE ){
+				sol.count.newton_iter_error_too_large++;
+			}else if( newton_status == newton::MAXIT_EXCEEDED ){
+				sol.count.newton_maxit_exceed++;
+			}
 			continue;
+		}else{
+			sol.count.newton_success++;
 		}
 
 
@@ -465,59 +552,56 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 			std::size_t i0 = i*Neq;
 			std::size_t i1 = (i+1)*Neq - 1;
 			auto Ki = K_np.subvec( i0, i1 );
-			delta_y   += dt * sc.b[i]  * Ki;
-			delta_alt += dt * sc.b2[i] * Ki;
+			delta_y   += sc.b[i]  * Ki;
+			delta_alt += sc.b2[i] * Ki;
 		}
 
-		arma::vec dy_alt = dt*gamma * func.fun( t, y ) + delta_alt;
-		arma::vec y_n    = y + delta_y;
-		arma::vec yp     = y + dy_alt;
+		arma::vec dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		double K_np_norm      = arma::norm( K_np, "inf" );
+		double delta_y_norm   = arma::norm( delta_y, "inf" );
+		double delta_alt_norm = arma::norm( delta_alt, "inf" );
+
+		arma::vec y_n    = y + dt*delta_y;
+		arma::vec yp     = y + dt*dy_alt;
 		arma::vec delta_delta = dy_alt - delta_y;
 
-
-		/*
-		std::cerr << "    Rehuel: old y, new y, y' and dy:\n";
-		for( std::size_t i = 0; i < y_n.size(); ++i ){
-			std::cerr << "        " << y[i] << "   " << y_n[i] << "   " << yp[i]
-			          << "  " << std::scientific << delta_delta[i]
-			          << "\n";
-		}
-		*/
 		// **************      Estimate error:    **********************
 		arma::mat I, J0;
 		I.eye(Neq, Neq);
 		J0 = func.jac( t, y );
 		// Formula 8.19:
-		arma::vec err_8_19 = arma::solve( I - gamma * dt * J0,
-		                                  delta_delta );
-		arma::vec err_est = err_8_19;
-
+		arma::vec err_8_19 = dt*arma::solve( I - gamma * dt * J0,
+		                                     delta_delta );
+		err_est = err_8_19;
 
 		// Alternative formula 8.20:
 		if( alternative_error_formula ){
 			// Use the alternative formulation:
-			arma::vec dy_alt_alt = dt*gamma*func.fun(t, y+err_est);
+			arma::vec dy_alt_alt = gamma*func.fun(t, y+err_est);
 			dy_alt_alt += delta_alt;
 			arma::vec err_alt = dy_alt_alt - delta_y;
-			err_est = arma::solve( I - gamma*dt*J0, err_alt );
+			err_est = dt*arma::solve( I - gamma*dt*J0, err_alt );
 		}
 
 		double err_tot = 0.0;
 		double n = 0.0;
+		double atol = solver_opts.abs_tol;
+		double rtol = solver_opts.rel_tol;
 		for( std::size_t i = 0; i < err_est.size(); ++i ){
 			double erri = err_est[i];
-			double sci  = solver_opts.abs_tol;
 			double y0i  = std::fabs( y[i] );
 			double y1i  = std::fabs( y_n[i] );
+			double sci  = atol + rtol * std::max( y0i, y1i );
 
-			sci += solver_opts.rel_tol * std::max( y0i, y1i );
-			err_tot += erri*erri / sci / sci;
+			double add = erri / sci;
+			err_tot += add * add;
 			n += 1.0;
 		}
 
+		assert( err_tot >= 0.0 && "Error cannot be negative!" );
 		double err = std::sqrt( err_tot / n );
 
-		assert( err >= 0.0 && "Error cannot be negative!" );
+
 		if( err < machine_precision ){
 			err = machine_precision;
 		}
@@ -530,16 +614,12 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 			// This is bad.
 			alternative_error_formula = true;
 			integrator_status = 1;
-			++n_reject_err;
+			sol.count.reject_err++;
 
-
-			err_info << step << " " << t << " " << dt << " "
-			         << err << " " << newton_stats.iters << "\n";
 		}
 
 
 		// **************      Find new dt:    **********************
-
 
 		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
 		fac /= ( newton_opts.maxit + newton_stats.iters );
@@ -549,8 +629,12 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 		double scale_27 = std::pow( err_inv, expt );
 		double dt_rat = dts[0] / dts[1];
 		double err_frac = errs[1] / errs[0];
+		if( errs[1] == 0 || errs[0] == 0 ){
+			err_frac = 1.0;
+		}
 		double err_rat = std::pow( err_frac, expt );
 		double scale_28 = scale_27 * dt_rat * err_rat;
+
 		/*
 		std::cerr << "    Rehuel: Time step controller:\n"
 		          << "            err      = " << err << "\n"
@@ -561,7 +645,13 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 		          << "            scale_27 = " << scale_27 << "\n"
 		          << "            scale_28 = " << scale_28 << "\n\n";
 		*/
-		double new_dt = fac * dt * std::min( scale_27, scale_28 );
+
+		double min_scales = std::min( scale_27, scale_28 );
+		double new_dt = fac * dt * min_scales;
+		if( solver_opts.max_dt > 0 ){
+			new_dt = std::min( solver_opts.max_dt, new_dt );
+		}
+
 
 		// **************    Update y and time   ********************
 
@@ -574,8 +664,8 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 
 
 		if( integrator_status == 0 ){
-
-			y = y_n;
+			yo = y;
+			y  = y_n;
 			t += dt;
 			++step;
 
@@ -586,11 +676,6 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 			sol.err.push_back( err );
 
 			alternative_error_formula = false;
-
-
-			err_info << step << " " << t << " " << dt << " "
-			         << err << " " << newton_stats.iters << "\n";
-
 		}
 
 		// **************      Actually set the new dt:    **********************
@@ -600,21 +685,42 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 		dts[1] = dts[0];
 		dts[0] = dt;
 
-		if( integrator_status == 0 ){
-
+		if( false && (integrator_status == 0) ){
 			// ***************   Estimate new stages:  *************
+			// NOTE: This depends on the definition of the variables
+			// that are the stages. If the code is later changed to
+			// solve the stages according to Hairer & Wanner, this
+			// too needs to change.
+			double dt_frac = dts[0]/dts[1];
+			for( std::size_t i = 0; i < Ns; ++i ){
+				double ci = sc.c(i);
+
+				double theta = 1.0 + dt_frac * ci;
+				arma::vec bs = project_b( theta, sc );
+
+				arma::vec Yi = yo;
+				for( std::size_t j = 0; j < Ns; ++j ){
+					std::size_t j0 = j*Neq;
+					std::size_t j1 = (j+1)*Neq - 1;
+					auto Kj = K_np.subvec( j0, j1 );
+					Yi += dt * bs[j] * Kj;
+				}
+
+				// Now you have an approximation for the time
+				// point at t + ci*dt. Use the rhs evaluated
+				// at this point as an approximation for the
+				// next stage.
+				std::size_t i0 = i*Neq;
+				std::size_t i1 = (i+1)*Neq - 1;
+				double ti = t + dt*ci;
+				K_n.subvec( i0, i1 ) = func.fun( ti, Yi );
+			}
 		}
 	}
 
-	double accept_rat = static_cast<double>(step) / n_attempt;
-
-	std::cerr << "    Rehuel: Done integrating ODE over [ " << t0 << ", "
-	          << t1 << " ].\n";
-	std::cerr << "            Number of succesful steps: " << step
-	          << " / " << n_attempt
-	          << ". Accept ratio = " << accept_rat
-	          << ", rejected due to newton: " << n_reject_newton
-	          << ", rejected due to err: " << n_reject_err << "\n";
+	double elapsed = timer.toc();
+	sol.elapsed_time = elapsed;
+	sol.accept_frac = static_cast<double>(step) / sol.count.attempt;
 
 	return sol;
 }
@@ -636,9 +742,19 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 */
 template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
-                  const solver_options &solver_opts, double dt = 1e-6 )
+                  const solver_options &solver_opts,
+                  int method = irk::RADAU_IIA_53, double dt = 1e-6 )
 {
-	return radau_IIA_53( func, t0, t1, y0, solver_opts );
+	switch(method){
+		case RADAU_IIA_53:
+			return radau_IIA_53( func, t0, t1, y0, solver_opts );
+		case RADAU_IIA_32:
+			return radau_IIA_32( func, t0, t1, y0, solver_opts );
+		default:
+			std::cerr << "    Rehuel: method code " << method
+			          << " is not used!\n";
+			return rk_output();
+	}
 }
 
 

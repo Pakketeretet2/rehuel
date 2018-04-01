@@ -28,9 +28,13 @@
 // Functions for performing Newton iteration.
 
 #define ARMA_USE_CXX11
+#define ARMA_USE_BLAS
+#define ARMA_DONT_PRINT_ERRORS
 
 #include <armadillo>
+#include <iomanip>
 #include <fstream>
+
 
 #include "my_timer.hpp"
 
@@ -40,8 +44,11 @@ namespace newton {
 
 /// \brief Return codes for newton_solve.
 enum newton_solve_ret_codes {
-	SUCCESS = 0,       ///< Converged to tolerance
-	NOT_CONVERGED = 1  ///< Did not converge to tolerance within maxit
+	SUCCESS = 0,                ///< Converged to tolerance
+	INCREMENT_DIVERGE,          ///< Increment in x increased
+	ITERATION_ERROR_TOO_LARGE,  ///< Estimated iteration error is too large
+	MAXIT_EXCEEDED,             ///< Number of iterations too large
+	GENERIC_ERROR               ///< Generic failure
 };
 
 
@@ -49,11 +56,12 @@ enum newton_solve_ret_codes {
    \brief contains options for the solver.
 */
 struct options {
-	options() : tol(1e-4), maxit(500), time_internals(false),
-	            max_step(-1), refresh_jac(true), precondition(false),
-	            limit_step(false) {}
+	options() : tol(1e-4), dx_delta(1e-4), maxit(500),
+	            time_internals(false), max_step(-1), refresh_jac(true),
+	            precondition(false), limit_step(false) {}
 
 	double tol;           ///< Desired tolerance.
+	double dx_delta;      ///< Terminate if the increment is below this.
 	int maxit;            ///< Maximum number of iterations
 	bool time_internals;  ///< Print timings for solver
 	double max_step;      ///< Limit update to this length in N-D.
@@ -73,16 +81,13 @@ struct options {
    \brief contains status for the solver.
 */
 struct status {
-	status() : conv_status(SUCCESS), res(0.0), iters(0),
-	           store_final_F(false), store_final_J(false){}
+	status() : conv_status(SUCCESS), res(0.0), iters(0), eta_final(0.0){}
 
 
 	int conv_status;  ///< Status code, see \ref newton_solve_ret_codes
 	double res;       ///< Final residual (F(x_root)^2)
 	int iters;        ///< Number of iterations actually used
-
-	bool store_final_F;  ///< If true, the final value of F(x) is stored
-	bool store_final_J;  ///< If true, the final value of J(x) is stored
+	double eta_final; ///< Last value of eta_k
 };
 
 
@@ -154,7 +159,7 @@ struct newton_functor_wrapper
 */
 inline arma::vec solve_impl( const arma::mat &A, const arma::vec &b )
 {
-	return arma::solve(A,b, arma::solve_opts::no_approx);
+	return arma::solve(A,b);
 }
 
 /**
@@ -167,6 +172,28 @@ inline arma::vec solve_impl( const arma::sp_mat &A, const arma::vec &b )
 	return arma::spsolve(A,b);
 }
 
+
+
+/**
+   \brief converts t to a string and pads c until it is width wide.
+*/
+template <typename T>
+std::string to_fixed_w_string( T t, std::size_t wide, char c = ' ' )
+{
+	std::stringstream ss;
+	ss << std::setw(wide) << std::scientific << t;
+	std::string s = ss.str();
+
+	if( s.length() > wide ){
+		// That won't work...
+		std::cerr << "String is wider than width!\n";
+	}else{
+		std::size_t add = wide - s.length();
+		std::string app( add, c );
+		s.append( app );
+	}
+	return s;
+}
 
 
 
@@ -308,11 +335,7 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		f0 = r;
 		x0 = x;
 	}
-	if( stats.iters == opts.maxit && res2 > tol2 ){
-		stats.conv_status = NOT_CONVERGED;
-	}else{
-		stats.conv_status = SUCCESS;
-	}
+
 	stats.res = std::sqrt( res2 );
 	return x;
 }
@@ -365,51 +388,82 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
                                const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
-	double tol2 = opts.tol*opts.tol;
+	stats.iters = 0;
 	arma::vec r = func.fun(x);
 	double res2 = arma::dot( r, r );
-	// double old_res2 = res2;
-	stats.iters = 1;
 
 	std::size_t N = x.size();
 	arma::vec x0 = x;
+	arma::vec xn = x;
 	arma::vec f0 = r;
 
 	arma::vec direction;
 
+
 	typename functor_type::jac_type L(N, N), U(N,N);
 
-
+	double tol2 = opts.tol*opts.tol;
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
 
 	auto J = func.jac(x);
-
-	if( !quiet ){
-		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
-		          << " " << res2 << "\n";
-	}
-
 	typename functor_type::jac_type P;
 	P.eye(N,N);
 
-	while( (res2 > tol2) && (stats.iters < opts.maxit) ){
+	double incr1 = 0;
+	double incr0 = 0;
+
+	// Estimated convergence rate:
+	double theta_k = 1.0;
+	double eta_k = 1.0;
+
+	auto print_stats =
+		[&opts, &xn, &stats, &res2, &incr1, &incr0, &theta_k, &eta_k](){
+		int w = 14;
+		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
+		          << "  " << to_fixed_w_string( res2, w )
+		          << "  " << to_fixed_w_string( incr1, w )
+		          << "  " << to_fixed_w_string( incr0, w )
+		          << "  " << to_fixed_w_string( theta_k, w )
+		          << "  " << to_fixed_w_string( eta_k, w )
+		          << "  " << eta_k * incr1 << "/" << opts.tol << "\n"
+		          << "          x : (";
+		for( std::size_t i = 0; i < xn.size(); ++i ){
+			std::cerr << " " << xn[i];
+		}
+		std::cerr << " )\n";
+	};
+
+	bool terminate = false;
+
+
+	while( !terminate && (stats.iters < opts.maxit) ){
+		if( !quiet ) print_stats();
+
 		double lambda = 1.0;
 		if( limit_step ){
-			lambda = (1.0 + opts.tol*res2)  / (1.0 + res2);
+			lambda = 1.0 / (1.0 + res2);
 		}
 
-		if( precondition ){
-			for( std::size_t i = 0; i < N; ++i ){
-				if( J(i,i) != 0.0 ){
-					P(i,i) = 1.0 / J(i,i);
+		// solve_impl might throw.
+		try{
+			if( precondition ){
+				for( std::size_t i = 0; i < N; ++i ){
+					if( J(i,i) != 0.0 ){
+						P(i,i) = 1.0 / J(i,i);
+					}else{
+						P(i,i) = 1.0;
+					}
 				}
-			}
-			direction = -solve_impl(P*J, P*r);
+				direction = -solve_impl(P*J, P*r);
 
-		}else{
-			direction = -solve_impl(J, r);
+			}else{
+				direction = -solve_impl(J, r);
+			}
+		}catch( std::exception &e ){
+			stats.conv_status = GENERIC_ERROR;
+			return x;
 		}
 
 		if( max_step2 > 0 ){
@@ -419,38 +473,65 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 			}
 		}
 
-		x = x0 + direction;
+		xn = x0 + lambda*direction;
 		if( refresh_jac ){
-			J = func.jac(x);
+			J = func.jac(xn);
 		}
 
-		r = func.fun(x);
+		r = func.fun(xn);
 		res2 = arma::dot( r, r );
 
-		++stats.iters;
 		f0 = r;
-		x0 = x;
+		x0 = xn;
 
-		if( !quiet ){
-			std::cerr << "    Newton: " << stats.iters << "/"
-			          << opts.maxit << " " << res2 << "\n";
+		incr0 = incr1;
+		incr1 = arma::norm( direction, "inf" );
+
+		++stats.iters;
+
+		if( stats.iters > 1 ){
+			theta_k = incr1 / incr0;
+			eta_k = theta_k / ( 1.0 - theta_k );
+			if( theta_k > 1.0 ){
+				//std::cerr << "    Newton: Divergence at step "
+				//          << stats.iters << "!\n";
+				stats.conv_status = INCREMENT_DIVERGE;
+				terminate = true;
+			}
 		}
 
+		if( res2 < tol2 ){
+			terminate = true;
+			stats.conv_status = SUCCESS;
+		}
 
+		if( incr1 < opts.dx_delta ){
+			terminate = true;
+			stats.conv_status = SUCCESS;
+		}
 	}
-	if( stats.iters == opts.maxit && res2 > tol2 ){
-		stats.conv_status = NOT_CONVERGED;
-	}else{
-		stats.conv_status = SUCCESS;
+
+
+	if( stats.iters == opts.maxit ){
+		stats.conv_status = MAXIT_EXCEEDED;
 	}
 	stats.res = std::sqrt( res2 );
-
+	stats.eta_final = eta_k;
 	// Check whether or not res is NaN or inf or somesuch.
 	if( !std::isfinite( stats.res ) ){
-		stats.conv_status = NOT_CONVERGED;
+		stats.conv_status = GENERIC_ERROR;
 	}
 
-	return x;
+	if( !quiet ){
+		print_stats();
+		std::cerr << "\n";
+	}
+
+	if( stats.conv_status == SUCCESS ){
+		return xn;
+	}else{
+		return x;
+	}
 }
 
 
@@ -580,29 +661,6 @@ arma::vec newton_iterate( functor_type &func, arma::vec x,
 	}
 }
 
-
-
-/// \brief A namespace with some functions to test the solvers on.
-namespace test_functions {
-
-/// \brief Rosenbrock's function functor
-struct rosenbrock_func
-{
-	typedef arma::mat jac_type;
-
-	rosenbrock_func(double a, double b) : a(a), b(b){}
-	/// \brief Function itself
-	double f( const arma::vec &x );
-
-	/// \brief Gradient of Rosenbrock's function
-	virtual arma::vec fun( const arma::vec &x );
-	/// \brief Hessian of Rosenbrock's function
-	virtual arma::mat jac( const arma::vec &x );
-
-	double a, b;
-};
-
-} // namespace test_functions
 
 } // namespace newton
 

@@ -283,6 +283,30 @@ solver_coeffs get_coefficients( int method )
 		// case GAUSS_LEGENDRE_84:
 		// case GAUSS_LEGENDRE_126:
 
+		case RADAU_IIA_32:{
+
+			sc.A = { {5.0/12.0, -1.0/12.0},
+			         {3.0/4.0, 1.0/4.0 } };
+			// A does not have real eigenvalues...
+			// We take the real part of the complex values.
+			sc.gamma = 1.0/3.0;
+
+			sc.c  = { 1.0/3.0, 1.0 };
+			sc.b  = { 3.0/4.0, 1.0/4.0 };
+
+			sc.b2 = { (-6*sc.gamma + 3.0) / 4.0,
+			          ( 2*sc.gamma + 1.0) / 4.0 };
+
+			sc.order = 3;
+			sc.order2 = 2;
+
+			sc.b_interp = { { 3.0/2.0, -3.0/4.0},
+			                {-1.0/2.0,  3.0/4.0} };
+
+
+			break;
+		}
+
 
 		case RADAU_IIA_53:{
 
@@ -291,8 +315,7 @@ solver_coeffs get_coefficients( int method )
 			         { (16.0 - sqrt6)/36.0, (16 + sqrt6)/36.0, 1.0 / 9.0 } };
 			// gamma is the real eigenvalue of A.
 			sc.gamma = 2.74888829595677e-01;
-			// sc.gamma = 1.0 / 9.0;
-			// sc.gamma = 0.5270441163339914;
+
 
 			sc.c  = {  (4.0-sqrt6)/10.0,  (4.0+sqrt6) / 10.0, 1.0 };
 			sc.b  = {  (16 - sqrt6)/36.0,
@@ -325,7 +348,6 @@ solver_coeffs get_coefficients( int method )
 		}
 		// case RADAU_IIA_95
 		// case RADAU_IIA_137
-
 
 	}
 
@@ -383,6 +405,25 @@ std::vector<std::string> all_method_names()
 		methods.push_back( pair.first );
 	}
 	return methods;
+}
+
+arma::vec project_b( double theta, const irk::solver_coeffs &sc )
+{
+	std::size_t Ns = sc.b.size();
+	const arma::mat &bcs = sc.b_interp;
+	assert( bcs.size() > 0 && "Chosen method does not have dense output!" );
+
+	arma::vec bs(Ns), ts(Ns);
+
+	// ts will contain { t, t^2, t^3, ..., t^{Ns} }
+	double tt = theta;
+	for( std::size_t i = 0; i < Ns; ++i ){
+		ts[i] = tt;
+		tt *= theta;
+	}
+
+	// Now bs = sc.b_interp * ts;
+	return sc.b_interp * ts;
 }
 
 
