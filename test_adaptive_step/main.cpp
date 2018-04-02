@@ -52,7 +52,7 @@ int main( int argc, char **argv )
 	newt_opts.dx_delta = 0.1*so.rel_tol;
 
 	newt_opts.maxit = 10;
-	newt_opts.refresh_jac = true;
+	newt_opts.refresh_jac = false; // true;
 	so.newton_opts = &newt_opts;
 	so.out_interval = 1000000;
 	so.verbose_newton = false;
@@ -164,17 +164,17 @@ int main( int argc, char **argv )
 	newt_opts.limit_step = true;
 	newt_opts.maxit = 50;
 
-	so.out_interval = 10000;
+	so.out_interval = 10;
 
-	//test_equations::three_body three_b( 1.0, 1.0, 1.0 );
-	//for( int method : methods ){
-	//	auto sol = integrate( three_b, y0, t0, t1, dt, method, "threeb", so );
-	//	add_time( method, sol.elapsed_time );
-	//}
+	test_equations::three_body three_b( 1.0, 1.0, 1.0 );
+	for( int method : methods ){
+		auto sol = integrate( three_b, y0, t0, t1, dt, method, "threeb", so );
+		add_time( method, sol.elapsed_time );
+	}
 
 	std::vector<std::string> eqs = { "Exponential", "Stiff", "Van der Pol",
 	                                 "Robertson", "Brusselator",
-	                                 "Brusselator2" }; //, "Three body" };
+	                                 "Brusselator2", "Three body" };
 	std::cerr << "    Performance on test problems (ms elapsed):\n";
 	std::cerr << "    Equation:  Radau IIA53   Radau IIA32:\n";
 
