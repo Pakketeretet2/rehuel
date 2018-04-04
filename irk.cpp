@@ -557,7 +557,11 @@ solver_coeffs get_coefficients( int method )
 			// gamma is the real eigenvalue of A.
 			sc.gamma = 0.1590658444274690;
 
-			sc.b2 = { };
+			sc.b2 = { sc.b(0) - 1.5864079001863282*sc.gamma,
+			          sc.b(1) + 1.0081178814983730*sc.gamma,
+			          sc.b(2) - 0.73097486615978746*sc.gamma,
+			          sc.b(3) + 0.50926488484774272*sc.gamma,
+			          sc.b(4) - 0.2*sc.gamma };
 
 			sc.order  = 9;
 			sc.order2 = 5;
