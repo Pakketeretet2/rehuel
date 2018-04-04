@@ -27,16 +27,12 @@
 
 // Functions for performing Newton iteration.
 
-#define ARMA_USE_CXX11
-#define ARMA_USE_BLAS
-#define ARMA_DONT_PRINT_ERRORS
+#include "arma_include.hpp"
+#include "my_timer.hpp"
 
-#include <armadillo>
+
 #include <iomanip>
 #include <fstream>
-
-
-#include "my_timer.hpp"
 
 
 /// \brief A namespace with solvers for non-linear systems of equations.
@@ -281,12 +277,14 @@ bool verify_jacobi_matrix( const arma::vec &y, functor_type &func )
    \param x     Initial guess for root.
    \param opts  Options for solver (see \ref options)
    \param stats Will contain solver statistics (see \ref status)
+   \param quiet If true, will not print output.
 
    \returns the root of F(x).
 */
 template <typename functor_type>
 arma::vec broyden_iterate( functor_type &func, arma::vec x,
-                           const options &opts, status &stats )
+                           const options &opts, status &stats,
+                           bool quiet = true )
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
@@ -300,13 +298,30 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 
 	arma::mat Jaci( N, N );
 	Jaci.eye(N,N);
-
+	double incr = 2*opts.dx_delta;
 
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
+	bool terminate = false;
 
-	while( res2 > tol2 && stats.iters < opts.maxit ){
+	auto print_stats =
+		[&opts, &x, &stats, &res2, &incr](){
+		int w = 14;
+		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
+		<< "  " << to_fixed_w_string( res2, w )
+		<< "  " << to_fixed_w_string( incr, w )
+		<< "          x : (";
+		for( std::size_t i = 0; i < x.size(); ++i ){
+			std::cerr << " " << x[i];
+		}
+		std::cerr << " )\n";
+	};
+
+
+	while( !terminate && stats.iters < opts.maxit ){
+		if( !quiet ) print_stats();
+
 		double lambda = 1.0 / sqrt(1.0 + res2 );
 		arma::vec direction = -lambda*Jaci*f0;
 
@@ -316,7 +331,7 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 				direction *= std::sqrt(max_step2/norm2)/lambda;
 			}
 		}
-
+		incr = arma::norm( direction, "inf" );
 
 		x = x0 + direction;
 		r = func.fun(x);
@@ -329,6 +344,15 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 		arma::rowvec right_part = dx.t() * Jaci;
 		Jaci += left_part * right_part / norm;
 		res2 = arma::dot( r, r );
+
+		if( incr < opts.dx_delta ){
+			terminate = true;
+			stats.conv_status = SUCCESS;
+		}
+		if( res2 < tol2 ){
+			terminate = true;
+			stats.conv_status = SUCCESS;
+		}
 
 		++stats.iters;
 
@@ -500,10 +524,12 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 			}
 		}
 
+		/*
 		if( res2 < tol2 ){
 			terminate = true;
 			stats.conv_status = SUCCESS;
 		}
+		*/
 
 		if( incr1 < opts.dx_delta ){
 			terminate = true;

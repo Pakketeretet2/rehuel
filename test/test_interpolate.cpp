@@ -8,17 +8,22 @@ TEST_CASE( "Dense output and interpolation", "[dense_output]" )
 		irk::solver_coeffs sc = irk::get_coefficients( irk::RADAU_IIA_32 );
 		arma::vec bs = project_b( 1.0, sc );
 
-		REQUIRE( bs(0) == 3.0/4.0 );
-		REQUIRE( bs(1) == 1.0/4.0 );
+		std::cerr << "sc.interp_b is " << sc.b_interp << "\n";
+
+		REQUIRE( bs(0) == Approx(3.0/4.0) );
+		REQUIRE( bs(1) == Approx(1.0/4.0) );
 
 		bs = project_b( 1.0/3.0, sc );
-		REQUIRE( bs(0) ==  5.0/12.0 );
-		REQUIRE( bs(1) == -1.0/12.0 );
+		std::cerr << "bs = " << bs << "\n";
+		REQUIRE( bs(0) == Approx( 5.0/12.0) );
+		REQUIRE( bs(1) == Approx(-1.0/12.0) );
 	}
 
 	SECTION( "RADAU_IIA_53" ){
 		irk::solver_coeffs sc = irk::get_coefficients( irk::RADAU_IIA_53 );
 		arma::vec bs = project_b( 1.0, sc );
+
+		std::cerr << "sc.interp_b is " << sc.b_interp << "\n";
 
 		for( std::size_t i = 0; i < bs.size(); ++i ){
 			REQUIRE( bs(i) == Approx(sc.b(i)) );

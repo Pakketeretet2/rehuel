@@ -6,23 +6,91 @@
 
 namespace irk {
 
+
+
 /**
-   \brief Combine all "cross-terms". That is, if
-   v1 = { [1], [2] } and v2 = 3
-   it should return
-   { [1, 2], [1, 3] }
-   if
-   v1 = { [ 1, 2 ], [ 1, 3 ] }, v2 = 4, then it should return
-   { [ 1, 2, 4 ], [ 1, 3, 4 ] }
+   \brief expands the coefficient lists.
+
+   This is needed to automatically calculate the interpolating coefficients.
+
+   This is like operator expansion of operator( c1, c2 )
+   if c1 = { a1 + a2 } and c2 = { b1 + b2 }
+   and we encode for that as c1 = { {1}, {2} }; c2 = { {3}, {4} }
+   then the expansion would be operator(c1,c2) =
+   { a1b1 + a1b2 + a2b1 + a2b2 } which would be encoded as
+   { {1,3}, {1,4}, {2,3}, {2,4} }.
+   operator( ( a1b1 + a1b2 + a2b1 + a2b2 ), (x1 + x2) ) follows from induction.
 */
 typedef std::vector<std::vector<int> > coeff_list;
-coeff_list cross_term_add( const coeff_list &v1, int v2 )
+coeff_list expand( const coeff_list &c1,
+                   const coeff_list &c2 )
 {
-	coeff_list v3( v1.begin(), v1.end() );
-	for( std::size_t i = 0; i < v1.size(); ++i ){
-		v3[i].push_back(v2);
+	// Test driven:
+	// 1. expand( { {1}, {2} }, { {3}, {4} } ) should lead to
+	// { {1,3}, {1,4}, {2,3}, {2,4} }
+	//
+	// 2. expand( { {1,3}, {1,4}, {2,3}, {2,4} }, { {5}, {6} } ) leads to
+	// { {1,3,5}, {1,4,5}, {2,3,5}, {2,4,5},
+	//   {1,3,6}, {1,4,6}, {2,3,6}, {2,4,6} }
+	//
+	// 3. expand( { {1,2,3}, {4,5} } ) should be
+	// ( a1 + a2 + a3 ) ( b1 + b2 ) =
+	// ( a1b1 + a2b1 + a3b1 + a1b2 + a2b2 + a3b2 ) =
+	// { {1,4}, {2,4}, {3,4}, {1,5}, {2,5}, {2,6} }
+	//
+	coeff_list c3;
+
+	for( std::size_t i = 0; i < c1.size(); ++i ){
+		for( std::size_t j = 0; j < c2.size(); ++j ){
+			std::vector<int> vij( c1[i].begin(), c1[i].end() );
+			vij.insert( vij.end(), c2[j].begin(), c2[j].end() );
+			c3.push_back( vij );
+		}
 	}
-	return v3;
+	return c3;
+}
+
+
+/**
+   \brief Output operator for a coefficient list.
+*/
+std::ostream &operator<<( std::ostream &o, const coeff_list &c )
+{
+	o << " { ";
+	for( std::size_t i = 0; i < c.size(); ++i ){
+		o << "{";
+		for( std::size_t j = 0; j < c[i].size(); ++j ){
+			o << " " << c[i][j];
+		}
+		o << " }";
+		if( i < c.size() - 1 ) o << ", ";
+	}
+	o << " }";
+	return o;
+}
+
+
+/**
+   \brief Simple calculation of the factorial of n.
+*/
+int factorial( int n )
+{
+	if( n <= 1 ) return 1;
+
+	int res = 1;
+	for( int i = 1; i <= n; ++i ){
+		res *= i;
+	}
+
+	return res;
+}
+
+/**
+   \brief binomial coefficient (n above b).
+*/
+int binom_coeff( int n, int b )
+{
+	return factorial( n ) / ( factorial(b)*factorial(n-b) );
 }
 
 
@@ -44,6 +112,31 @@ arma::mat collocation_interpolate_coeffs( const arma::vec &c )
 	// Interpolates on a solution interval as
 	// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
 	//          + b_interp(j,2)*t^3 + ...
+	// The coefficients arise from the following equation:
+	//
+	// bj(t) = integral( lp_j(x), dx ),
+	// where lp_j(x) = (x-c2)(x-c1)(x-c3) / (cj-c2)(cj-c1)(cj-c3)
+	//
+	// Therefore, to derive the shape of the polynomial, we have
+	// to perform some expansion in terms of all the coefficients.
+	//
+	// For example, if we have three stages, then we have
+	//
+	// lp_1(x) = (x - c2)(x - c3)/(c1-c2)(c1-c3)
+	// lp_2(x) = (x - c1)(x - c3)/(c2-c1)(c2-c3)
+	// lp_3(x) = (x - c1)(x - c2)/(c3-c1)(c3-c2)
+	//
+	// The denominators are easily dealt with. For the nominators, we
+	// need to expand the products. We encode x with -1, c1 with 0, etc.
+	// Therefore, for three stages we should get...
+	//
+	// expand( { {-1}, {1} }, { {-1}, {2} } ) =
+	// { {-1 -1}, {-1 2}, {-1 1}, {1 2} }.
+	// This means x^2  + c2 x + c1 x + c1c2
+	//
+	// Afterwards, we integrate in x, so for this case, we'd obtain
+	// x^3/3  + c2 x^2 / 2 + c1 x ^ 2 / 2 + c1c2 * x
+	//
 
 	std::size_t Ns = c.size();
 	arma::vec d( Ns );
@@ -56,18 +149,65 @@ arma::mat collocation_interpolate_coeffs( const arma::vec &c )
 		d(i) = cfacs;
 	}
 
-	arma::mat b_interp( Ns, Ns );
+	std::vector<coeff_list> poly_coefficients(Ns);
+	for( std::size_t i = 0; i < Ns; ++i ){
+		coeff_list ci;
+		for( std::size_t j = 0; j < Ns; ++j ){
+			if( i == j ) continue;
 
-	arma::vec c_terms;
+			int jj = j;
+			// -1 codes for x.
+			if( ci.size() == 0 ){
+				ci = {{-1}, {jj}};
+			}else{
+				coeff_list tmp = expand( ci, { {-1}, {jj} } );
+				ci = tmp;
+			}
+		}
+		poly_coefficients[i] = ci;
+	}
 
-	std::vector<std::vector<int> > tuplets;
+	// The coefficients construct the polynomial, so from this, we can
+	// exactly calculate the polynomial coefficients. It is convoluted
+	// but it works...
+	//
+	// The number of -1 s encode for the power of the term, with
+	// four -1 s meaning it is a fifth order term, etc.
+	arma::mat b_interp;
+	b_interp.zeros( Ns, Ns );
+	for( std::size_t i = 0; i < Ns; ++i ){
+		for( const std::vector<int> cf : poly_coefficients[i] ){
+			// Check the order of the term.
+			int order = 0;
+			for( int j : cf ){
+				if( j == - 1 ) order++;
+			}
+			// order0 is the constant term that will become linear.
+			// If you grab the highest order term, ignore it.
+			// if( order == static_cast<int>(Ns) ) continue;
 
-	// Brilliant idea.
+			double coeff = 1.0 / d(i) / (1.0 + order);
+			for( int j : cf ){
+				if( j != -1 ){
+					// Multiply by the right c:
+					coeff *= -c[j];
+				}
+			}
 
+			int b_interp_idx = Ns - order - 1;
+			int Ns_nosign = Ns;
+			assert( (b_interp_idx >= 0) && "index out of range" );
+			assert( (b_interp_idx < Ns_nosign) &&
+			        "index out of range" );
 
+			b_interp(i, b_interp_idx) += coeff;
+		}
+	}
 
 	return b_interp;
 }
+
+
 
 
 solver_coeffs get_coefficients( int method )
@@ -351,9 +491,7 @@ solver_coeffs get_coefficients( int method )
 			sc.order = 3;
 			sc.order2 = 2;
 
-			sc.b_interp = { { 3.0/2.0, -3.0/4.0},
-			                {-1.0/2.0,  3.0/4.0} };
-
+			sc.b_interp = collocation_interpolate_coeffs( sc.c );
 
 			break;
 		}
@@ -379,6 +517,9 @@ solver_coeffs get_coefficients( int method )
 
 			sc.order = 5;
 			sc.order2 = 3;
+
+			sc.b_interp = collocation_interpolate_coeffs( sc.c );
+
 
 
 			break;
@@ -416,12 +557,16 @@ solver_coeffs get_coefficients( int method )
 			// gamma is the real eigenvalue of A.
 			sc.gamma = 0.1590658444274690;
 
-
-
-			sc.b2 = { };
+			sc.b2 = { sc.b(0) - 1.5864079001863282*sc.gamma,
+			          sc.b(1) + 1.0081178814983730*sc.gamma,
+			          sc.b(2) - 0.73097486615978746*sc.gamma,
+			          sc.b(3) + 0.50926488484774272*sc.gamma,
+			          sc.b(4) - 0.2*sc.gamma };
 
 			sc.order  = 9;
 			sc.order2 = 5;
+
+			sc.b_interp = collocation_interpolate_coeffs( sc.c );
 
 			// Interpolates on a solution interval as
 			// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
@@ -513,7 +658,8 @@ arma::vec project_b( double theta, const irk::solver_coeffs &sc )
 	// ts will contain { t, t^2, t^3, ..., t^{Ns} }
 	double tt = theta;
 	for( std::size_t i = 0; i < Ns; ++i ){
-		ts[i] = tt;
+		int j = Ns - i - 1;
+		ts[j] = tt;
 		tt *= theta;
 	}
 
