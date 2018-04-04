@@ -83,9 +83,6 @@ int main( int argc, char **argv )
 			case irk::RADAU_IIA_95:
 				times[2].push_back( time );
 				break;
-			case irk::RADAU_IIA_95:
-				times[2].push_back( time );
-				break;
 			default:
 				break;
 		} };

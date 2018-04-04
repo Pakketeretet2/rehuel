@@ -426,7 +426,6 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 
 	typename functor_type::jac_type L(N, N), U(N,N);
 
-	double tol2 = opts.tol*opts.tol;
 	double max_step2;
 	if( opts.max_step > 0 ) max_step2 = opts.max_step*opts.max_step;
 	else max_step2 = -1;
