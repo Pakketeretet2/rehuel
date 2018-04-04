@@ -26,7 +26,7 @@
 #define FUNCTOR_HPP
 
 
-#include <armadillo>
+#include "arma_include.hpp"
 
 /**
    \brief This class describes how a functor that describes an

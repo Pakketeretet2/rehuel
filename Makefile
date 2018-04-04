@@ -1,5 +1,5 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -shared -fPIC -ffinite-math-only \
+FLAGS = -std=c++11 -pedantic -g -O3 -shared -fPIC -ffinite-math-only -fopenmp \
         -Werror=return-type -Werror=uninitialized -Wall -Werror
 
 LNK = -L./ -larmadillo

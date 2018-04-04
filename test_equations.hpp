@@ -26,7 +26,7 @@
 #ifndef TEST_EQUATIONS_HPP
 #define TEST_EQUATIONS_HPP
 
-#include <armadillo>
+#include "arma_include.hpp"
 #include <cassert>
 
 #include "functor.hpp"
@@ -40,6 +40,11 @@ struct exponential : public functor
 	typedef arma::mat jac_type;
 	explicit exponential( double l ) : l(l) {}
 
+	arma::vec sol( double t )
+	{
+		return { exp( l*t ) };
+	}
+
 	arma::vec fun( double t, const arma::vec &y )
 	{
 		return { l*y };
@@ -52,6 +57,34 @@ struct exponential : public functor
 
 	double l;
 };
+
+
+// Exponential function:
+struct harmonic : public functor
+{
+	typedef arma::mat jac_type;
+	explicit harmonic( double w ) : w(w) {}
+
+	arma::vec sol( double t )
+	{
+		return { sin(w*t), cos(w*t) };
+	}
+
+	arma::vec fun( double t, const arma::vec &y )
+	{
+		return { w*y[1], -w*y[0] };
+	}
+
+	jac_type jac( double t, const arma::vec &y )
+	{
+		return { { 0, w }, { -w, 0 } };
+	}
+
+	double w;
+};
+
+
+
 
 
 // Van der Pol oscillator:
@@ -235,7 +268,7 @@ struct reac_diff :  public functor_sparse_jac {
 
 		// rhs.zeros( 2*Nx );
 		// Reaction part:
-		for( std::size_t i = 0; i < Nx; ++i ){
+		for( int i = 0; i < Nx; ++i ){
 			rhs[i]    += -2*rate*y[i]*y[i] + 2*irate*y[i+Nx];
 			rhs[i+Nx] += rate*y[i]*y[i]    - irate*y[i+Nx];
 		}
@@ -248,7 +281,7 @@ struct reac_diff :  public functor_sparse_jac {
 		jac_type J = diff_matrix;
 		// J.zeros(2*Nx,2*Nx);
 		// Reaction part:
-		for( std::size_t i = 0; i < Nx; ++i ){
+		for( int i = 0; i < Nx; ++i ){
 			J(i,i)    = -4*rate*y[i];
 			J(i,i+Nx) =  2*irate;
 
@@ -530,6 +563,40 @@ struct three_body : public functor
 	double m1, m2, m3;
 };
 
+
+struct kinetic_4 : public functor
+{
+	typedef arma::mat jac_type;
+
+	kinetic_4( double b2, double b3, double b4 )
+		: b2(b2), b3(b3), b4(b4) {}
+
+	virtual arma::vec fun( double t, const arma::vec &y )
+	{
+		arma::vec rhs(4);
+		rhs(0)  = -2*y(0)*y(0)  - y(0)*(y(1) + y(2));
+		rhs(0) += 2*b2*y(1) + b3*y(2) + b4*y(3);
+
+		rhs(1) = y(0)*y(0) - y(0)*y(1) + b3*y(2) - b2*y(1);
+		rhs(2) = y(0)*y(1) - y(0)*y(2) + b4*y(3) - b3*y(2);
+		rhs(3) = y(0)*y(2) - b4*y(3);
+
+		return rhs;
+	}
+
+
+	virtual jac_type jac( double t, const arma::vec &y )
+	{
+		jac_type J(4,4);
+		J = { { -4*y(0) - y(1) - y(2), -y(0) + 2*b2, -y(0) + b3, b4 },
+		      { 2*y(0) - y(1), -y(0) - b2, b3, 0.0 },
+		      { y(1) - y(2), y(0), -y(0) - b3, b4  },
+		      { y(2), 0, y(0), -b4} };
+		return J;
+	}
+
+	double b2, b3, b4;
+};
 
 
 } // test_equations
