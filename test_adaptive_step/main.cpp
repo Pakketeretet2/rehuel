@@ -56,10 +56,11 @@ int main( int argc, char **argv )
 	so.newton_opts = &newt_opts;
 	so.out_interval = 1000000;
 	so.verbose_newton = false;
-	std::vector<int> methods = { irk::RADAU_IIA_53, irk::RADAU_IIA_32 };
+	std::vector<int> methods = { irk::RADAU_IIA_53, irk::RADAU_IIA_32,
+	                             irk::RADAU_IIA_95 };
 	arma::vec y0 = { 1.0 };
 
-	std::vector<std::vector<double> > times(2);
+	std::vector<std::vector<double> > times( methods.size() );
 
 	double t0 = 0.0;
 	double t1 = 20.0;
@@ -72,6 +73,9 @@ int main( int argc, char **argv )
 				break;
 			case irk::RADAU_IIA_32:
 				times[1].push_back( time );
+				break;
+			case irk::RADAU_IIA_95:
+				times[2].push_back( time );
 				break;
 			default:
 				break;

@@ -28,17 +28,14 @@
 #ifndef IRK_HPP
 #define IRK_HPP
 
-#define ARMA_USE_CXX11
-#define ARMA_USE_BLAS
-#define ARMA_DONT_PRINT_ERRORS
 
-#include <armadillo>
+
 #include <cassert>
 #include <limits>
 #include <iomanip>
 
+#include "arma_include.hpp"
 #include "enums.hpp"
-#include "integrator_io.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
@@ -254,6 +251,51 @@ const char *method_to_name( int method );
    \returns A vector containing the values { b1(theta), b2(theta)... }.
 */
 arma::vec project_b( double theta, const irk::solver_coeffs &sc );
+
+
+/**
+   \brief expands the coefficient lists.
+
+   This is needed to automatically calculate the interpolating coefficients.
+
+   \param c1 The first coefficient list
+   \param c2 The second coefficient list
+
+   This is like operator expansion of operator( c1, c2 )
+   if c1 = { a1 + a2 } and c2 = { b1 + b2 }
+   and we encode for that as c1 = { {1}, {2} }; c2 = { {3}, {4} }
+   then the expansion would be operator(c1,c2) =
+   { a1b1 + a1b2 + a2b1 + a2b2 } which would be encoded as
+   { {1,3}, {1,4}, {2,3}, {2,4} }.
+   operator( ( a1b1 + a1b2 + a2b1 + a2b2 ), (x1 + x2) ) follows from induction.
+
+   \returns the expanded coefficient list.
+*/
+typedef std::vector<std::vector<int> > coeff_list;
+coeff_list expand( const coeff_list &c1, const coeff_list &c2 );
+
+
+/**
+   \brief Prints the coeff_list to output stream.
+
+   \param o  The output stream
+   \param c  The coefficient list.
+
+   \returns the output stream.
+*/
+std::ostream &operator<<( std::ostream &o, const coeff_list &c );
+
+
+/**
+   \brief Generates the interpolation polynomial coefficients
+          for collocation methods
+
+   \param c    The collocation points of the method.
+
+   \returns The interpolation coefficient matrix.
+*/
+arma::mat collocation_interpolate_coeffs( const arma::vec &c );
+
 
 
 
@@ -558,10 +600,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		}
 
 		arma::vec dy_alt = gamma * func.fun( t, y ) + delta_alt;
-		double K_np_norm      = arma::norm( K_np, "inf" );
-		double delta_y_norm   = arma::norm( delta_y, "inf" );
-		double delta_alt_norm = arma::norm( delta_alt, "inf" );
-
 		arma::vec y_n    = y + dt*delta_y;
 		arma::vec yp     = y + dt*dy_alt;
 		arma::vec delta_delta = dy_alt - delta_y;
@@ -748,9 +786,9 @@ rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
 {
 	switch(method){
 		case RADAU_IIA_53:
-			return radau_IIA_53( func, t0, t1, y0, solver_opts );
+			return radau_IIA_53(func, t0, t1, y0, solver_opts, dt);
 		case RADAU_IIA_32:
-			return radau_IIA_32( func, t0, t1, y0, solver_opts );
+			return radau_IIA_32(func, t0, t1, y0, solver_opts, dt);
 		default:
 			std::cerr << "    Rehuel: method code " << method
 			          << " is not used!\n";
