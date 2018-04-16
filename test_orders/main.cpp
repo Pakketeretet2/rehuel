@@ -17,9 +17,10 @@ int main( int argc, char **argv )
 
 	bool help = false;
 
-	double w = 0.2;
-	test_equations::harmonic func( w );
-	double t1 = 50000.0 * w;
+	double w = 0.001;
+	// test_equations::harmonic func( w );
+	test_equations::exponential func( -w );
+	double t1 = 5.0 / w;
 
 	std::string method = "RADAU_IIA_32";
 
@@ -46,8 +47,7 @@ int main( int argc, char **argv )
 	std::vector<double> dts = { 5e-3,
 	                            1e-2, 2e-2, 5e-2,
 	                            1e-1, 2e-1, 5e-1,
-	                            1e0,  2e0,  5e0,
-	                            1e1,  2e1,  5e1 };
+	                            1e0 };
 	auto so = irk::default_solver_options();
 	auto sc = irk::get_coefficients( m );
 	newton::options no;
@@ -56,23 +56,18 @@ int main( int argc, char **argv )
 	so.newton_opts = &no;
 	so.out_interval = 1000000;
 
-	std::string fname = "sol_";
+	std::string fname = "total_error_";
 	fname += method;
 	fname += ".dat";
-	std::ofstream sol_out( fname );
+	std::ofstream err_out( fname );
 
 	for( double dt : dts ){
-		bool output = false;
-		if( std::fabs( 2e-1 - dt ) < 1e-12 ) output = true;
 
-		arma::vec y0 = { 0.0, 1.0 };
+		arma::vec y0 = { 1.0 };
 		irk::rk_output sol = irk::odeint( func, 0, t1, y0, so, m, dt );
 		double max_rel_err = 0.0;
 		double max_abs_err = 0.0;
-		if( output ){
-			sol_out << std::setprecision(16) << std::setw(20);
-			sol_out << 0.0 << " " << y0[0] << " " << y0[1] << "\n";
-		}
+
 		for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
 			double ti = sol.t_vals[i];
 			arma::vec yi = sol.y_vals[i];
@@ -80,22 +75,21 @@ int main( int argc, char **argv )
 			double yreal = func.sol( ti )[0];
 			double ynumer = yi[0];
 
-			double abs_err = yreal - ynumer;
-			double rel_err = abs_err / yreal;
+			double abs_err = std::abs( yreal - ynumer );
+			double rel_err = abs_err / std::abs( yreal );
 
 			max_rel_err = std::max( rel_err, max_rel_err );
 			max_abs_err = std::max( abs_err, max_abs_err );
 
-			if( output ){
-				sol_out << ti << " " << yi[0] << " "
-				        << yi[1] << "\n";
-			}
-
+			err_out << ti << " " << abs_err << " "
+			        << rel_err << "\n";
 		}
-		std::cout << dt << " " << max_rel_err << " " << max_abs_err << "\n";
+		std::cout << dt << " " << max_abs_err << " "
+		          << max_rel_err << "\n";
 	}
 
 
 
 	return 0;
 }
+
