@@ -51,9 +51,9 @@ namespace irk {
 struct solver_coeffs
 {
 	const char *name; ///< Human-friendly name for the method.
-	arma::vec b; ///< weights for the new y-value
-	arma::vec c; ///< these set the intermediate time points
-	arma::mat A; ///< alpha coefficients in Butcher tableau
+	arma::vec b;      ///< weights for the new y-value
+	arma::vec c;      ///< these set the intermediate time points
+	arma::mat A;      ///< alpha coefficients in Butcher tableau
 
 	arma::vec b2; ///< weights for the new y-value of the embedded RK method
 
@@ -146,9 +146,18 @@ struct rk_output
 	double elapsed_time, accept_frac;
 
 	counters count;
-
 };
 
+
+/**
+   \brief Merges two rk_output structs.
+
+   \param sol1 First rk_output struct.
+   \param sol2 Second rk_output sctruct.
+
+   \returns a solution struct that contains the merged contents of both.
+*/
+rk_output merge_rk_output( const rk_output &sol1, const rk_output &sol2 );
 
 
 /**

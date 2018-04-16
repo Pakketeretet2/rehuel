@@ -222,8 +222,9 @@ solver_coeffs get_coefficients( int method )
 	// double sqrt15 = sqrt(15.0);
 
 	// Methods that need adding:
-	// RADAU_137, LOBATTO_IIA_{43,86,129},
-	// LOBATTO_IIIC_{43,86,129}, GAUSS_LEGENDRE_{42,84,126}
+	// LOBATTO_IIA_{43,86,129},
+	// LOBATTO_IIIC_{43,86,129},
+	// GAUSS_LEGENDRE_{42,84,126}
 
 	sc.FSAL = false;
 	sc.name = method_to_name( method );
@@ -568,26 +569,104 @@ solver_coeffs get_coefficients( int method )
 
 			sc.b_interp = collocation_interpolate_coeffs( sc.c );
 
-			// Interpolates on a solution interval as
-			// b_j(t) = b_interp(j,0)*t + b_interp(j,1)*t^2
-			//          + b_interp(j,2)*t^3 + ...
-			/*
-			double c1 = sc.c[0];
-			double c2 = sc.c[1];
-			double c3 = sc.c[2];
-
-			double d1 = (c1-c2)*(c1-c3);
-			double d2 = (c2-c1)*(c2-c3);
-			double d3 = (c3-c1)*(c3-c2);
-
-			sc.b_interp = { { c2*c3/d1, -(c2+c3)/(2.0*d1), (1.0/3.0)/d1 },
-			                { c1*c3/d2, -(c1+c3)/(2.0*d2), (1.0/3.0)/d2 },
-			                { c1*c2/d3, -(c1+c2)/(2.0*d3), (1.0/3.0)/d3 } };
-			*/
-
-			         break;
+			break;
 		}
-		// case RADAU_IIA_137
+
+		case RADAU_IIA_137: {
+
+			sc.A = { {  0.037546264993921331333686127624105551410,
+			           -0.014039334556460401537626568603936253927,
+			            0.010352789600742300936755479003273124789,
+			           -0.008158322540275011909204543577213278349,
+			            0.006388413879534684943755951486405680409,
+			           -0.004602326779148655499352025854768521774,
+			            0.001828942561470643704035856835298607816 },
+
+			         {  0.080147596515618967795215595316188773479,
+			            0.081062063985891536679584719357221980975,
+			           -0.021237992120711034937085469604419103837,
+			            0.014000291238817118983742204835134926788,
+			           -0.010234185730090163829199816607636044634,
+			            0.007153465151364590498062382166962141175,
+			           -0.002812639372406723340342762967473461717 },
+
+			         {  0.072063846941881902113362526561137596780,
+			            0.171068354983886619424352504009050302800,
+			            0.109614564040072109233220407461845690823,
+			           -0.024619871728984053862318864441100561089,
+			            0.014760377043950817073195348981742706482,
+			           -0.009575259396791400556328724726641713431,
+			            0.003672678397138305671569774234741682832 },
+
+			         {  0.075705125819824420424641229496338921970,
+			            0.154090155142171144646331682046482915172,
+			            0.227107736673202386411281287949366350098,
+			            0.117478187037024781987912680673932161442,
+			           -0.023810827153044173582047929325774334376,
+			            0.012709985533661205633610757619788395065,
+			           -0.004608844281289633440336366654612469297 },
+
+			         {  0.073912342163191846540806321243016399213,
+			            0.161355607615942432186220145903094810374,
+			            0.206867241552104197819578846437670730910,
+			            0.237007115342694234762246772957327514747,
+			            0.103086793533813446624105845745721640646,
+			           -0.018854139152580448840052190417863035125,
+			            0.005858900974888791823977618246677391072 },
+
+			         {  0.074705562059796230172292559361766628756,
+			            0.158307223872468700658479384514628716574,
+			            0.214153423267200031108697457856861396619,
+			            0.219877847031860039987487355490766771106,
+			            0.198752121680635269801826469184534504760,
+			            0.069265501605509133230972165761976742365,
+			           -0.008116008197728290107881426350852749124 },
+
+			         {  0.074494235556010317933248780209166920975,
+			            0.159102115733650740872435217234934182108,
+			            0.212351889502977804199154019575104122356,
+			            0.223554914507283234749674476821221017986,
+			            0.190474936822115576902969173938062761867,
+			            0.119613744612656202893538740384776300830,
+			            0.020408163265306122448979591836734693878 }
+			};
+
+			sc.b = {    0.074494235556010317933248780209166920975,
+			            0.159102115733650740872435217234934182108,
+			            0.212351889502977804199154019575104122356,
+			            0.223554914507283234749674476821221017986,
+			            0.190474936822115576902969173938062761867,
+			            0.119613744612656202893538740384776300830,
+			            0.020408163265306122448979591836734693878 };
+
+			sc.c = {    0.029316427159784891972050276913164910374,
+			            0.148078599668484291849976852495979212230,
+			            0.336984690281154299097052972080775705198,
+			            0.558671518771550132081393341805521940074,
+			            0.769233862030054500916883360115645451837,
+			            0.926945671319741114851873965819682011056,
+			            1 };
+
+
+			sc.gamma =  0.111896465300035075935905337180769194745;
+
+
+			sc.b2 = { sc.b(0) - 1.59406421856104180 * sc.gamma,
+			          sc.b(1) + 1.03655375219647650 * sc.gamma,
+			          sc.b(2) - 0.79382172349079269 * sc.gamma,
+			          sc.b(3) + 0.63257765224993423 * sc.gamma,
+			          sc.b(4) - 0.49761071360300131 * sc.gamma,
+			          sc.b(5) + 0.35922239406556795 * sc.gamma,
+			          sc.b(6) - 0.14285714285714286 * sc.gamma };
+
+			sc.order  = 13;
+			sc.order2 = 7;
+
+			sc.b_interp = collocation_interpolate_coeffs( sc.c );
+
+
+			break;
+		}
 
 	}
 
@@ -647,6 +726,7 @@ std::vector<std::string> all_method_names()
 	return methods;
 }
 
+
 arma::vec project_b( double theta, const irk::solver_coeffs &sc )
 {
 	std::size_t Ns = sc.b.size();
@@ -667,6 +747,60 @@ arma::vec project_b( double theta, const irk::solver_coeffs &sc )
 	return sc.b_interp * ts;
 }
 
+
+rk_output merge_rk_output( const rk_output &sol1, const rk_output &sol2 )
+{
+	rk_output merger( sol1 );
+	merger.status |= sol2.status;
+
+	merger.t_vals.insert( merger.t_vals.end(),
+	                      sol2.t_vals.begin(), sol2.t_vals.end() );
+	merger.y_vals.insert( merger.y_vals.end(),
+	                      sol2.y_vals.begin(), sol2.y_vals.end() );
+	merger.stages.insert( merger.stages.end(),
+	                      sol2.stages.begin(), sol2.stages.end() );
+	merger.err_est.insert( merger.err_est.end(),
+	                      sol2.err_est.begin(), sol2.err_est.end() );
+	merger.err.insert( merger.err.end(),
+	                      sol2.err.begin(), sol2.err.end() );
+
+	merger.elapsed_time += sol2.elapsed_time;
+	double steps1 = sol1.t_vals.size();
+	double steps2 = sol2.t_vals.size();
+	double total_steps = steps1 + steps2;
+	merger.accept_frac = steps1*sol1.accept_frac + steps2*sol2.accept_frac;
+	merger.accept_frac /= total_steps;
+
+	merger.count.attempt += sol2.count.attempt;
+	merger.count.reject_newton += sol2.count.reject_newton;
+	merger.count.reject_err += sol2.count.reject_err;
+	merger.count.newton_success += sol2.count.newton_success;
+	merger.count.newton_incr_diverge += sol2.count.newton_incr_diverge;
+	merger.count.newton_iter_error_too_large +=
+		sol2.count.newton_iter_error_too_large;
+	merger.count.newton_maxit_exceed += sol2.count.newton_maxit_exceed;
+
+	return merger;
+}
+
+
+void restore_state( const rk_output &sol, double &t, arma::vec &y, arma::vec &K,
+                    arma::vec &err_est, double errs[3], double dts[3] )
+{
+	// Attempt to restore state from an rk_output object.
+
+	// sol already stores
+	//  - Last time value
+	//  - Last solution
+	//  - Last stage values
+	//  - Last error estimate vector
+	//  - Last error
+	// need:
+	//  - dt (can be calculated).
+	//
+
+
+}
 
 
 
