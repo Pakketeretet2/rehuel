@@ -3,8 +3,8 @@
 #include "../arma_include.hpp"
 
 #include "catch.hpp"
-
 #include "irk.hpp"
+#include "test_equations.hpp"
 
 
 
@@ -179,4 +179,65 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 		auto coeffs = get_coefficients( RADAU_IIA_95 );
 		arma::mat b_interp = collocation_interpolate_coeffs( coeffs.c );
 	}
+}
+
+
+
+TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
+{
+	using namespace irk;
+	rk_output sol1;
+	rk_output sol2;
+
+	sol1.t_vals = { 0.0, 0.1, 0.2 };
+	sol2.t_vals = { 0.3, 0.4, 0.5 };
+
+	sol1.y_vals = { {1.0}, {0.9}, {0.9*0.9} };
+	sol2.y_vals = { {0.9*0.9*0.9}, {0.9*0.9*0.9*0.9}, {0.9*0.9*0.9*0.9*0.9} };
+
+
+	rk_output sol3 = merge_rk_output( sol1, sol2 );
+	REQUIRE( sol3.t_vals[0] == 0.0 );
+	REQUIRE( sol3.t_vals[1] == 0.1 );
+	REQUIRE( sol3.t_vals[2] == 0.2 );
+	REQUIRE( sol3.t_vals[3] == 0.3 );
+	REQUIRE( sol3.t_vals[4] == 0.4 );
+	REQUIRE( sol3.t_vals[5] == 0.5 );
+
+	REQUIRE( sol3.y_vals[0](0) == 1.0 );
+	REQUIRE( sol3.y_vals[1](0) == 0.9 );
+	REQUIRE( sol3.y_vals[2](0) == (0.9*0.9) );
+	REQUIRE( sol3.y_vals[3](0) == (0.9*0.9*0.9) );
+	REQUIRE( sol3.y_vals[4](0) == (0.9*0.9*0.9*0.9) );
+	REQUIRE( sol3.y_vals[5](0) == (0.9*0.9*0.9*0.9*0.9) );
+
+	SECTION( "Applied to an aqual ODE." ){
+
+		auto so = default_solver_options();
+		newton::options opts;
+		opts.tol = 0.1*so.rel_tol;
+		arma::vec Y0 = { 1.0 };
+		test_equations::exponential func( -0.4 );
+		so.out_interval = 1;
+		so.newton_opts = &opts;
+		rk_output soltmp1 = irk::radau_IIA_53( func, 0.0, 2.0, Y0, so );
+		std::size_t nsol1 = soltmp1.t_vals.size();
+		arma::vec Y1 = soltmp1.y_vals[nsol1-1];
+		double dt = soltmp1.t_vals[nsol1-1] - soltmp1.t_vals[nsol1-2];
+		rk_output soltmp2 = irk::radau_IIA_53( func, 2.0, 4.0,
+		                                       Y1, so, dt );
+
+		auto merge = merge_rk_output( soltmp1, soltmp2 );
+
+		for( std::size_t i = 0; i < merge.t_vals.size(); ++i ){
+			if( i < nsol1 ){
+				REQUIRE( merge.t_vals[i] == soltmp1.t_vals[i] );
+			}else{
+				auto j = i - nsol1;
+				REQUIRE( merge.t_vals[i] == soltmp2.t_vals[j] );
+			}
+		}
+	}
+
+
 }

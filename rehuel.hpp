@@ -28,9 +28,6 @@
 #define REHUEL_HPP
 
 
-#include <armadillo>
-
-
 #include "enums.hpp"
 #include "irk.hpp"
 

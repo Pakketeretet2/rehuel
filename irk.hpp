@@ -51,9 +51,9 @@ namespace irk {
 struct solver_coeffs
 {
 	const char *name; ///< Human-friendly name for the method.
-	arma::vec b; ///< weights for the new y-value
-	arma::vec c; ///< these set the intermediate time points
-	arma::mat A; ///< alpha coefficients in Butcher tableau
+	arma::vec b;      ///< weights for the new y-value
+	arma::vec c;      ///< these set the intermediate time points
+	arma::mat A;      ///< alpha coefficients in Butcher tableau
 
 	arma::vec b2; ///< weights for the new y-value of the embedded RK method
 
@@ -84,8 +84,9 @@ struct solver_options : common_solver_options {
 
 	/// \brief Constructor with default values.
 	solver_options() : adaptive_step_size(true),
-	                   use_newton_iters_adaptive_step( false ),
-	                   verbose_newton( false )
+	                   use_newton_iters_adaptive_step(true),
+	                   verbose_newton(false),
+	                   extrapolate_stage(false)
 	{ }
 
 	~solver_options()
@@ -100,6 +101,9 @@ struct solver_options : common_solver_options {
 
 	/// If true, make the Newton iterator print output.
 	bool verbose_newton;
+
+	/// If true, use the current stages and extrapolate to the next time level.
+	bool extrapolate_stage;
 };
 
 
@@ -139,14 +143,21 @@ struct rk_output
 	std::vector<arma::vec> err_est;
 	std::vector<double>    err;
 
-	std::size_t n_jac_evals, n_func_evals;
-
 	double elapsed_time, accept_frac;
 
 	counters count;
-
 };
 
+
+/**
+   \brief Merges two rk_output structs.
+
+   \param sol1 First rk_output struct.
+   \param sol2 Second rk_output sctruct.
+
+   \returns a solution struct that contains the merged contents of both.
+*/
+rk_output merge_rk_output( const rk_output &sol1, const rk_output &sol2 );
 
 
 /**
@@ -464,6 +475,34 @@ rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::ve
 }
 
 
+/**
+   \brief Integrate ODE from t0 to t1 using a fifth-order Radau IIA method
+
+   t_vals and y_vals shall be unmodified upon failure.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+   \param sc           Solver coefficients
+   \param solver_opts  Options for the internal solver.
+
+   \returns a status code (see \ref odeint_status_codes)
+*/
+template <typename functor_type> inline
+rk_output radau_IIA_95( functor_type &func, double t0, double t1, const arma::vec &y0,
+                        const solver_options &solver_opts, double dt = 1e-6 )
+{
+	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_95 );
+
+	assert( strcmp( sc.name, "RADAU_IIA_95" ) == 0 &&
+	        "For some reason get_coefficients returned wrong coeffs!" );
+	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+
+	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
+}
+
+
 
 
 /**
@@ -485,6 +524,14 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
                     const solver_options &solver_opts, double dt,
                     const solver_coeffs &sc )
 {
+	if( t0 + dt > t1 ){
+		std::cerr << "    Rehuel: Initial dt (" << dt;
+		dt = t1 - t0;
+		std::cerr << ") too large for interval! Reducing to "
+		          << dt << "\n";
+
+	}
+
 	std::cerr << "    Rehuel: Integrating over interval [ "
 	          << t0 << ", " << t1 << " ]...\n"
 	          << "            Method = " << sc.name << "\n";
@@ -567,6 +614,15 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 		// *********** Verify Newton iteration convergence ************
 		if( newton_status != newton::SUCCESS ){
+			if( !solver_opts.adaptive_step_size ){
+				// In this case, you can do nothing but error.
+				sol.status = GENERAL_ERROR;
+				std::cerr << "    Rehuel: Newton iteration "
+				          << "failed for constant time step "
+				          << "size! Aborting!\n";
+				return sol;
+			}
+
 			//std::cerr << "    Rehuel: Newton iteration failed! "
 			//          << "Retrying with dt = " << dt << "\n";
 			dt *= 0.5;
@@ -649,12 +705,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		errs[1] = errs[0];
 		errs[0] = err;
 
-		if( err > 1.0 ){
+		if( solver_opts.adaptive_step_size && (err > 1.0) ){
 			// This is bad.
 			alternative_error_formula = true;
 			integrator_status = 1;
 			sol.count.reject_err++;
-
 		}
 
 
@@ -686,7 +741,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		*/
 
 		double min_scales = std::min( scale_27, scale_28 );
-		double new_dt = fac * dt * min_scales;
+		// When growing dt, don't grow more than a factor 4:
+		double new_dt = fac * dt * std::min( 4.0, min_scales );
 		if( solver_opts.max_dt > 0 ){
 			new_dt = std::min( solver_opts.max_dt, new_dt );
 		}
@@ -702,7 +758,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		}
 
 
-		if( integrator_status == 0 ){
+		if( !solver_opts.adaptive_step_size || integrator_status == 0 ){
 			yo = y;
 			y  = y_n;
 			t += dt;
@@ -719,12 +775,12 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 		// **************      Actually set the new dt:    **********************
 
-		dt = new_dt;
+		if( solver_opts.adaptive_step_size ) dt = new_dt;
 		dts[2] = dts[1];
 		dts[1] = dts[0];
 		dts[0] = dt;
 
-		if( false && (integrator_status == 0) ){
+		if( solver_opts.extrapolate_stage && (integrator_status == 0) ){
 			// ***************   Estimate new stages:  *************
 			// NOTE: This depends on the definition of the variables
 			// that are the stages. If the code is later changed to
@@ -784,16 +840,11 @@ rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
                   const solver_options &solver_opts,
                   int method = irk::RADAU_IIA_53, double dt = 1e-6 )
 {
-	switch(method){
-		case RADAU_IIA_53:
-			return radau_IIA_53(func, t0, t1, y0, solver_opts, dt);
-		case RADAU_IIA_32:
-			return radau_IIA_32(func, t0, t1, y0, solver_opts, dt);
-		default:
-			std::cerr << "    Rehuel: method code " << method
-			          << " is not used!\n";
-			return rk_output();
-	}
+	solver_coeffs sc = get_coefficients( method );
+
+	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+
+	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
 }
 
 

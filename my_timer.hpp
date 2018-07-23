@@ -42,7 +42,7 @@
 class my_timer_linux {
 public:
 	/// Default constructor, no output.
-	my_timer_linux() : out(nullptr), t_tic{0}, t_toc{0}
+	my_timer_linux() : out(nullptr), t_tic{0,0}, t_toc{0,0}
 	{ init_tic_toc(); }
 
 	/**
@@ -51,7 +51,7 @@ public:
 	   \param out_stream  Print output to here.
 	*/
 	explicit my_timer_linux(std::ostream &out_stream)
-		: out(&out_stream), t_tic{0}, t_toc{0}
+		: out(&out_stream), t_tic{0,0}, t_toc{0,0}
 	{ init_tic_toc(); }
 
 	/// Empty destructor
@@ -162,24 +162,24 @@ class my_timer_windows {
 public:
 	my_timer_windows(){}
 
-	explicit my_timer_windows(std::ostream &out_stream) {}
+	explicit my_timer_windows(std::ostream &) {}
 
 	/// Empty destructor
 	~my_timer_windows(){}
 
 	void tic() {}
-	double toc( const std::string &msg, const std::string &post )
+	double toc( const std::string &, const std::string & )
 	{ return 0.0; }
 	double toc( const std::string &msg )
 	{ return toc( msg, "" ); }
 	double toc( )
 	{ return toc( "", "" ); }
 
-	void enable_output( std::ostream &o ) { }
+	void enable_output( std::ostream & ) { }
 	void disable_output() { }
 
 private:
-	void init_tic_toc() { }
+	// void init_tic_toc() { }
 	my_timer_windows( const my_timer_windows &o ) = delete;
 	my_timer_windows &operator=( const my_timer_windows &o ) = delete;
 };
