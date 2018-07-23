@@ -17,10 +17,10 @@ int main( int argc, char **argv )
 
 	bool help = false;
 
-	double w = 0.001;
+	double w = 0.1;
 	// test_equations::harmonic func( w );
 	test_equations::exponential func( -w );
-	double t1 = 5.0 / w;
+	double t1 = 20.0 / w;
 
 	std::string method = "RADAU_IIA_32";
 
@@ -47,7 +47,8 @@ int main( int argc, char **argv )
 	std::vector<double> dts = { 5e-3,
 	                            1e-2, 2e-2, 5e-2,
 	                            1e-1, 2e-1, 5e-1,
-	                            1e0 };
+	                            1, 1.5, 2, 2.5, 5,
+				    10, 12, 15, 20, 25, 30, 40, 50 };
 	auto so = irk::default_solver_options();
 	auto sc = irk::get_coefficients( m );
 	newton::options no;

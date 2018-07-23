@@ -3,13 +3,18 @@ set grid
 set log xy
 set format x "10^{%T}"
 set format y "10^{%T}"
-set xrange[1e-3:1e3]
-set yrange[1e-12:1e4]
+set xrange[1e-4:250]
+set yrange[1e-17:10]
 set key bottom right
 
-plot 'errs_RADAU_IIA_32.dat' w p pt 4 ps 2 lw 2 ti 'Radau IIA 3(2)' \
+plot 2.2e-16 w l lw 2 dt 2 lc rgb 'black' ti "Working precision" \
+   , 'errs_RADAU_IIA_32.dat' w p pt 4 ps 2 lw 2 ti 'Radau IIA 3(2)' \
    , 'errs_RADAU_IIA_53.dat' w p pt 4 ps 2 lw 2 ti 'Radau IIA 5(3)' \
    , 'errs_RADAU_IIA_95.dat' w p pt 4 ps 2 lw 2 ti 'Radau IIA 9(5)' \
-   , 1e1*x**3 w l lw 2 dt 2 ti '$\sim x^3$' \
-   , 4e-3*x**5 w l lw 2 dt 2 ti '$\sim x^5$' \
-   , 3e-10*x**9 w l lw 2 dt 2 ti '$\sim x^9$' \
+   , 'errs_RADAU_IIA_137.dat' w p pt 4 ps 2 lw 2 ti 'Radau IIA 13(7)' \
+   , 'errs_LOBATTO_IIIA_127.dat' w p pt 4 ps 2 lw 2 ti 'Lobatto IIIA 12(7)' \
+   , 3e-10*x**3 w l lw 2 dt 2 ti '$\sim x^3$' \
+   , 1e-15*x**5 w l lw 2 dt 2 ti '$\sim x^5$' \
+   , 3e-20*x**9 w l lw 2 dt 2 ti '$\sim x^9$' \
+   , 1e-24*x**11 w l lw 2 dt 2 ti '$\sim x^{12}$' \
+   , 3e-30*x**13 w l lw 2 dt 2 ti '$\sim x^{13}$'

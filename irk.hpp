@@ -840,18 +840,11 @@ rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
                   const solver_options &solver_opts,
                   int method = irk::RADAU_IIA_53, double dt = 1e-6 )
 {
-	switch(method){
-		case RADAU_IIA_53:
-			return radau_IIA_53(func, t0, t1, y0, solver_opts, dt);
-		case RADAU_IIA_32:
-			return radau_IIA_32(func, t0, t1, y0, solver_opts, dt);
-		case RADAU_IIA_95:
-			return radau_IIA_95(func, t0, t1, y0, solver_opts, dt);
-		default:
-			std::cerr << "    Rehuel: method code " << method
-			          << " is not used!\n";
-			return rk_output();
-	}
+	solver_coeffs sc = get_coefficients( method );
+
+	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+
+	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
 }
 
 
