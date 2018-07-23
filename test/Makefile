@@ -12,7 +12,7 @@ INC = -I./ -I$(TIMER_DIR) -I$(REHUEL_DIR) -I$(CATCH2_DIR)
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
 
-EXE = test_rehuel
+EXE = rehuel_test
 EXT = cpp
 SRC = $(wildcard *.$(EXT))
 
