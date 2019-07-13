@@ -99,7 +99,7 @@ int binom_coeff( int n, int b )
 bool verify_solver_coeffs( const solver_coeffs &sc )
 {
 	auto N = sc.b.size();
-	if( N != sc.c.size() || N != sc.A.rows() || N != sc.A.cols() ){
+	if( N != sc.c.size() || N != sc.A.n_rows || N != sc.A.n_cols ){
 		return false;
 	}
 	if( N == 0 ) return false;
@@ -140,8 +140,7 @@ mat_type collocation_interpolate_coeffs( const vec_type& c )
 	//
 
 	std::size_t Ns = c.size();
-	// vec_type d(Ns);
-	Eigen::Vector4d d;
+	vec_type d(Ns);
 	
 	for( std::size_t i = 0; i < Ns; ++i ){
 		double cfacs = 1.0;
@@ -176,7 +175,7 @@ mat_type collocation_interpolate_coeffs( const vec_type& c )
 	//
 	// The number of -1 s encode for the power of the term, with
 	// four -1 s meaning it is a fifth order term, etc.
-	mat_type b_interp = zeros( Ns, Ns );
+	mat_type b_interp = arma::zeros( Ns, Ns );
 
 	for( std::size_t i = 0; i < Ns; ++i ){
 		for( const std::vector<int> &cf : poly_coefficients[i] ){
@@ -202,8 +201,6 @@ mat_type collocation_interpolate_coeffs( const vec_type& c )
 			assert( (b_interp_idx >= 0) && "index out of range" );
 			assert( (b_interp_idx < Ns_nosign) &&
 			        "index out of range" );
-			std::cerr << "i = " << i << ", b_interp_idx = "
-			          << b_interp_idx << ", Ns = " << Ns << "\n";
 			
 			b_interp(i, b_interp_idx) += coeff;
 		}
@@ -239,7 +236,7 @@ solver_coeffs get_coefficients( int method )
 		break;
 
 	case IMPLICIT_EULER:
-		sc.A = { {1.0} };
+		sc.A = { 1.0 };
 		sc.b = { 1.0 };
 		sc.c = { 1.0 };
 		sc.order = 1;
@@ -340,7 +337,7 @@ solver_coeffs get_coefficients( int method )
 		sc.order = 5;
 		sc.order2 = 3;
 
-		// sc.b_interp = collocation_interpolate_coeffs( sc.c );
+		sc.b_interp = collocation_interpolate_coeffs( sc.c );
 
 
 
@@ -388,7 +385,7 @@ solver_coeffs get_coefficients( int method )
 		sc.order  = 9;
 		sc.order2 = 5;
 
-		// sc.b_interp = collocation_interpolate_coeffs( sc.c );
+		sc.b_interp = collocation_interpolate_coeffs( sc.c );
 
 		break;
 	}
@@ -483,7 +480,7 @@ solver_coeffs get_coefficients( int method )
 		sc.order  = 13;
 		sc.order2 = 7;
 
-		// sc.b_interp = collocation_interpolate_coeffs( sc.c );
+		sc.b_interp = collocation_interpolate_coeffs( sc.c );
 
 
 		break;
@@ -629,10 +626,10 @@ solver_coeffs get_coefficients( int method )
 	}
 
 	// Some checks:
-	for( long int i = 0; i < sc.c.size(); ++i ){
+	for( std::size_t i = 0; i < sc.c.size(); ++i ){
 		double ci = sc.c(i);
 		double si = 0.0;
-		for( long int j = 0; j < sc.c.size(); ++j ){
+		for( std::size_t j = 0; j < sc.c.size(); ++j ){
 			si += sc.A(i,j);
 		}
 		if( std::fabs( si - ci ) > 1e-5 ){
@@ -687,14 +684,11 @@ std::vector<std::string> all_method_names()
 
 vec_type project_b( double theta, const irk::solver_coeffs &sc )
 {
-	std::cerr << "Assigning sc.b_interp to bcs...\n";
-	std::cerr << "sc.b_interp = " << sc.b_interp << "\n";
-	
 	assert( sc.b_interp.size() > 0 && "Chosen method does not have dense output!" );
 
 	std::size_t Ns = sc.b.size();
-	Eigen::VectorXd ts(Ns);
-	/*
+        vec_type ts(Ns);
+	
 	// ts will contain { t, t^2, t^3, ..., t^{Ns} }
 	double tt = theta;
 	for( std::size_t i = 0; i < Ns; ++i ){
@@ -702,14 +696,8 @@ vec_type project_b( double theta, const irk::solver_coeffs &sc )
 		ts(j) = tt;
 		tt *= theta;
 	}
-	*/
 	// Now bs = sc.b_interp * ts;
-	// vec_type bs;
-	std::cerr << "ts.v.data() is at " << ts.data() << "\n";
-	Eigen::VectorXd v(Ns);
-	v = ts; //  = sc.b_interp * ts;
-	//std::cerr << "   v.data() is at " << v.data() << "\n";
-	return vec_eigen(ts);
+        return sc.b_interp * ts;
 }
 
 

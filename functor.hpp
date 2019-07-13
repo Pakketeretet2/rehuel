@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
 #define FUNCTOR_HPP
 
 
-#include "arma_include.hpp"
+#include "matrix_vector.hpp"
 
 /**
    \brief This class describes how a functor that describes an
@@ -34,21 +34,23 @@
 */
 class functor {
 public:
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 
-	virtual arma::vec fun( double t, const arma::vec &y ) = 0;
-	virtual jac_type jac( double t, const arma::vec &y ) = 0;
+	virtual vec_type fun( double t, const vec_type &y ) = 0;
+	virtual jac_type jac( double t, const vec_type &y ) = 0;
 };
 
 
 /**
    \brief A similar functor but for the case of a sparse Jacobian matrix.
 */
+/*
 class functor_sparse_jac {
 public:
-	typedef arma::sp_mat jac_type;
-	virtual arma::vec fun( double t, const arma::vec &y ) = 0;
-	virtual jac_type jac( double t, const arma::vec &y ) = 0;
+	typedef sp_mat_type jac_type;
+	virtual vec_type fun( double t, const vec_type &y ) = 0;
+	virtual jac_type jac( double t, const vec_type &y ) = 0;
 };
+*/
 
 #endif // FUNCTOR_HPP

@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -27,12 +27,15 @@
 
 // Functions for performing Newton iteration.
 
-#include "arma_include.hpp"
 #include "my_timer.hpp"
 
-
+#include "arma_include.hpp"
 #include <iomanip>
 #include <fstream>
+
+typedef arma::vec vec_type;
+typedef arma::mat mat_type;
+
 
 
 /// \brief A namespace with solvers for non-linear systems of equations.
@@ -101,12 +104,12 @@ struct newton_lambda_wrapper
 
 	newton_lambda_wrapper( f_func &f, J_func &J ) : f(f), J(J) {}
 
-	arma::vec fun( const arma::vec &K )
+	vec_type fun( const vec_type &K )
 	{
 		return f(K);
 	}
 
-	jac_type jac( const arma::vec &K )
+	jac_type jac( const vec_type &K )
 	{
 		return J(K);
 	}
@@ -131,12 +134,12 @@ struct newton_functor_wrapper
 
 	newton_functor_wrapper( functor_type &func, double t ) : func(func), t(t) {}
 
-	arma::vec fun( const arma::vec &Y )
+	vec_type fun( const vec_type &Y )
 	{
 		return func.fun( t, Y );
 	}
 
-	jac_type jac( const arma::vec &Y )
+	jac_type jac( const vec_type &Y )
 	{
 		return func.jac( t, Y );
 	}
@@ -145,28 +148,6 @@ struct newton_functor_wrapper
 	double t;
 };
 
-
-
-
-/**
-   \brief this function selects between solve and spsolve.
-
-   Implementation for full matrices.
-*/
-inline arma::vec solve_impl( const arma::mat &A, const arma::vec &b )
-{
-	return arma::solve(A,b);
-}
-
-/**
-   \brief this function selects between solve and spsolve.
-
-   Implementation for sparse matrices
-*/
-inline arma::vec solve_impl( const arma::sp_mat &A, const arma::vec &b )
-{
-	return arma::spsolve(A,b);
-}
 
 
 
@@ -202,25 +183,25 @@ std::string to_fixed_w_string( T t, std::size_t wide, char c = ' ' )
     \param h    Finite difference step size.
 */
 template <typename functor_type> inline
-arma::mat approx_jacobi_matrix( const arma::vec &y, functor_type &func,
+mat_type approx_jacobi_matrix( const vec_type &y, functor_type &func,
                                 double h )
 {
 	std::size_t N = y.size();
-	arma::mat J_approx(N,N);
+	mat_type J_approx;
 	J_approx.zeros(N,N);
-	arma::vec f0 = func.fun(y);
-	arma::vec new_yp = y;
-	arma::vec new_ym = y;
+	vec_type f0 = func.fun(y);
+	vec_type new_yp = y;
+	vec_type new_ym = y;
 
 	for( std::size_t j = 0; j < N; ++j ){
 		double old_y_j = y(j);
 
 		new_yp(j) += h;
 		new_ym(j) -= h;
-		arma::vec fp = func.fun( new_yp );
-		arma::vec fm = func.fun( new_ym );
+		vec_type fp = func.fun( new_yp );
+		vec_type fm = func.fun( new_ym );
 
-		arma::vec delta = fp - fm;
+		vec_type delta = fp - fm;
 		delta /= (2.0*h);
 
 		for( std::size_t i = 0; i < N; ++i ){
@@ -245,10 +226,10 @@ arma::mat approx_jacobi_matrix( const arma::vec &y, functor_type &func,
     \returns true if jac is accurate, false otherwise.
 */
 template <typename functor_type> inline
-bool verify_jacobi_matrix( const arma::vec &y, functor_type &func )
+bool verify_jacobi_matrix(const vec_type &y, functor_type &func)
 {
-	arma::mat J_approx = approx_jacobi_matrix( y, func, 1e-4 );
-	arma::mat J_fun = func.jac( y );
+	mat_type J_approx = approx_jacobi_matrix( y, func, 1e-4 );
+	mat_type J_fun = func.jac( y );
 	std::size_t N = y.size();
 	double max_diff2 = 0;
 	for( std::size_t i = 0; i < N; ++i ){
@@ -282,22 +263,23 @@ bool verify_jacobi_matrix( const arma::vec &y, functor_type &func )
    \returns the root of F(x).
 */
 template <typename functor_type>
-arma::vec broyden_iterate( functor_type &func, arma::vec x,
+vec_type broyden_iterate( functor_type &func, vec_type x,
                            const options &opts, status &stats,
                            bool quiet = true )
 {
 	stats.conv_status = SUCCESS;
 	double tol2 = opts.tol*opts.tol;
-	arma::vec r = func.fun(x);
-	double res2 = arma::dot( r, r );
+	vec_type r = func.fun(x);
+	double res2 = dot( r, r );
 	stats.iters = 1;
 
 	std::size_t N = x.size();
-	arma::vec x0 = x;
-	arma::vec f0 = r;
+	vec_type x0 = x;
+	vec_type f0 = r;
 
-	arma::mat Jaci( N, N );
-	Jaci.eye(N,N);
+	mat_type Jaci(N,N);
+	Jaci.eye( N, N );
+
 	double incr = 2*opts.dx_delta;
 
 	double max_step2;
@@ -308,7 +290,7 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 	auto print_stats =
 		[&opts, &x, &stats, &res2, &incr](){
 		int w = 14;
-		std::cerr << "    Newton: " << stats.iters << "/" << opts.maxit
+		std::cerr << "    Broyden: " << stats.iters << "/" << opts.maxit
 		<< "  " << to_fixed_w_string( res2, w )
 		<< "  " << to_fixed_w_string( incr, w )
 		<< "          x : (";
@@ -322,28 +304,29 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 	while( !terminate && stats.iters < opts.maxit ){
 		if( !quiet ) print_stats();
 
-		double lambda = 1.0 / sqrt(1.0 + res2 );
-		arma::vec direction = -lambda*Jaci*f0;
+		double lambda = 1.0 / sqrt(1.0 + res2);
+		vec_type direction = -lambda*(Jaci*f0);
 
 		if( max_step2 > 0 ){
-			double norm2 = arma::dot( direction, direction );
+			double norm2 = dot( direction, direction );
 			if( lambda*lambda*norm2 > max_step2 ){
 				direction *= std::sqrt(max_step2/norm2)/lambda;
 			}
 		}
-		incr = arma::norm( direction, "inf" );
+		incr = arma::norm(direction, "inf");
 
 		x = x0 + direction;
 		r = func.fun(x);
-		arma::vec dx = x - x0;
-		arma::vec df = r - f0;
+		vec_type dx = x - x0;
+		vec_type df = r - f0;
 
-		arma::vec normm = (dx.t() * Jaci) * df;
-		double norm = normm(0);
-		arma::vec left_part = ( dx - Jaci*df );
-		arma::rowvec right_part = dx.t() * Jaci;
-		Jaci += left_part * right_part / norm;
-		res2 = arma::dot( r, r );
+		// This is x^T*Jaci...
+		arma::rowvec xt_J = dx.t()*Jaci;
+		double norm = arma::dot(xt_J, df);
+		vec_type left_part = ( dx - Jaci*df );
+
+		Jaci += left_part*xt_J / norm;
+		res2 = dot( r, r );
 
 		if( incr < opts.dx_delta ){
 			terminate = true;
@@ -366,37 +349,6 @@ arma::vec broyden_iterate( functor_type &func, arma::vec x,
 
 
 /**
-   \brief Performs Gauss-Seide to solve system F(x) = 0.
-
-   \param F     The non-linear system whose root to find.
-   \param x     Initial guess for root.
-   \param opts  Options for solver (see \p options)
-   \param stats Will contain solver statistics (see \p status)
-
-   \returns the root of F(x).
-*/
-template <typename functor_type> inline
-arma::vec gauss_seidel( functor_type &func, arma::vec x,
-                        const options &opts, status &stats )
-{
-	arma::vec yn = func.fun(x);
-	double res2 = arma::norm( yn, 2 );
-	double tol2 = opts.tol * opts.tol;
-	std::cerr << "Starting Gauss-Seidel at " << stats.iters
-	          << " iters, res = " << std::sqrt(res2) << "\n";
-	while( res2 > tol2 && stats.iters < opts.maxit ){
-		x = yn;
-		yn = func.fun(x);
-		++stats.iters;
-		res2 = arma::norm( yn, 2 );
-	}
-
-	return x;
-}
-
-
-
-/**
    \brief Templated implementation of Newton's method.
 
    \param func  The functor for which the root of func.fun is to be found.
@@ -408,21 +360,20 @@ arma::vec gauss_seidel( functor_type &func, arma::vec x,
 */
 template <typename functor_type, bool refresh_jac, bool precondition,
           bool time_internals, bool limit_step, bool quiet> inline
-arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
+vec_type newton_iterate_impl( functor_type &func, vec_type x,
                                const options &opts, status &stats )
 {
 	stats.conv_status = SUCCESS;
 	stats.iters = 0;
-	arma::vec r = func.fun(x);
-	double res2 = arma::dot( r, r );
+	vec_type r = func.fun(x);
+	double res2 = dot( r, r );
 
 	std::size_t N = x.size();
-	arma::vec x0 = x;
-	arma::vec xn = x;
-	arma::vec f0 = r;
+	vec_type x0 = x;
+	vec_type xn = x;
+	vec_type f0 = r;
 
-	arma::vec direction;
-
+	vec_type direction;
 
 	typename functor_type::jac_type L(N, N), U(N,N);
 
@@ -479,18 +430,20 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 						P(i,i) = 1.0;
 					}
 				}
-				direction = -solve_impl(P*J, P*r);
+				direction = -arma::solve(P*J, P*r);
 
 			}else{
-				direction = -solve_impl(J, r);
+				direction = -arma::solve(J,r);
 			}
 		}catch( std::exception &e ){
 			stats.conv_status = GENERIC_ERROR;
+			std::cerr << "Newton caught generic error!\n";
 			return x;
 		}
+		//std::cerr << "Step direction: " << direction << "\n";
 
 		if( max_step2 > 0 ){
-			double norm2 = arma::dot( direction, direction );
+			double norm2 = dot( direction, direction );
 			if( lambda*lambda*norm2 > max_step2 ){
 				direction *= std::sqrt(max_step2/norm2)/lambda;
 			}
@@ -502,16 +455,19 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 		}
 
 		r = func.fun(xn);
-		res2 = arma::dot( r, r );
+		res2 = dot( r, r );
 
 		f0 = r;
 		x0 = xn;
 
 		incr0 = incr1;
-		incr1 = arma::norm( direction, "inf" );
+		incr1 = arma::norm(direction, "inf");
 
 		++stats.iters;
 
+		/*
+		  This was supposed to accelerate convergence or something
+		  but it does not work.
 		if( stats.iters > 1 ){
 			theta_k = incr1 / incr0;
 			eta_k = theta_k / ( 1.0 - theta_k );
@@ -522,6 +478,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
 				terminate = true;
 			}
 		}
+		*/
 
 		/*
 		if( res2 < tol2 ){
@@ -571,7 +528,7 @@ arma::vec newton_iterate_impl( functor_type &func, arma::vec x,
    \returns the root of F(x).
 */
 template <typename functor_type> inline
-arma::vec newton_iterate( functor_type &func, arma::vec x,
+vec_type newton_iterate( functor_type &func, vec_type x,
                           const options &opts, status &stats,
                           bool quiet = true )
 {

@@ -32,7 +32,6 @@
 #include <limits>
 #include <iomanip>
 
-#include "matrix_vector.hpp"
 #include "enums.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
@@ -357,18 +356,18 @@ vec_type construct_F( double t, const vec_type &y, const vec_type &K,
 		double ti = t + dt * c[i];
 		if (debug) std::cerr << "Constructing yi and delta...\n";
 		vec_type yi = y;
-		vec_type delta = zeros(Neq);
+		vec_type delta = arma::zeros(Neq);
 		for( unsigned int j = 0; j < Ns; ++j ){
 			unsigned int offset = j*Neq;
 			// vec_eigen needs a read-only segment function.
 			//auto K_part = K.segment(offset, offset+Neq);
-			delta.v += A(i,j) * K.segment(offset, offset+Neq);
+			delta += A(i,j) * K.subvec(offset, offset+Neq-1);
 		}
 		if (debug) std::cerr << "Constructed delta...\n";
 		yi += dt*delta;
-		auto ki = K.segment( i*Neq, i*Neq + Neq );
+		auto ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
 		vec_type tmp = func.fun( ti, yi );
-		F.segment( i*Neq, i*Neq + Neq ) = tmp.v - ki;
+		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
 	}
 	return F;
 }
@@ -404,9 +403,7 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 	const vec_type &c = sc.c;
 	const mat_type &A = sc.A;
 
-	typename functor_type::jac_type J( NN, NN );
-	J = eye( NN, NN );
-	J *= -1.0;
+	typename functor_type::jac_type J = -arma::eye( NN, NN );
 
 	// i is column, j is row.
 	for( unsigned int i = 0; i < Ns; ++i ){
@@ -415,7 +412,7 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 
 		for( unsigned int j = 0; j < Ns; ++j ){
 			unsigned int offset = j*Neq;
-			yi.v += dt*A(i,j)*K.segment(offset, offset + Neq);
+			yi += dt*A(i,j)*K.subvec(offset, offset + Neq-1);
 		}
 		auto Ji = func.jac( ti, yi );
 
@@ -426,15 +423,12 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 			// which is
 			// F(t + ci, y + sum_{k=0}^N-1 (a_{i,k}*k_k))' * a_{i,j}*dt
 			// Armadillo syntax is (from, to)
-			// Eigen syntax is (from, size);
-			/*
-			  auto Jc = J.submat( i*Neq, j*Neq,
+			auto Jc = J.submat( i*Neq, j*Neq,
 			                    i*Neq + Neq - 1,
 			                    j*Neq + Neq - 1 );
-			*/
-			auto Jc = J.block(i*Neq, j*Neq, Neq, Neq);
+			//auto Jc = J.block(i*Neq, j*Neq, Neq, Neq);
 			double a_part = dt * A(i,j);
-			Jc += Ji.A * a_part;
+			Jc += Ji * a_part;
 		}
 	}
 
@@ -575,7 +569,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 	vec_type y  = y0;
 	vec_type yo = y;
-	vec_type K_np = zeros(N), K_n = zeros(N);
+	vec_type K_np = arma::zeros(N), K_n = arma::zeros(N);
 
 	newton::status newton_stats;
 	long long int step = 0;
@@ -589,7 +583,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
 	}
 
-	vec_type err_est = zeros( y.size() );
+	vec_type err_est = arma::zeros( y.size() );
 
 	sol.t_vals.push_back(t);
 	sol.y_vals.push_back(y);
@@ -663,13 +657,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		vec_type delta_y, delta_alt;
 		std::size_t Neq = y.size();
 		double gamma = sc.gamma;
-		delta_y = zeros( Neq );
-		delta_alt = zeros( Neq );
+		delta_y = arma::zeros( Neq );
+		delta_alt = arma::zeros( Neq );
 
 		for( std::size_t i = 0; i < Ns; ++i ){
 			std::size_t i0 = i*Neq;
 			std::size_t i1 = (i+1)*Neq;
-			auto Ki = K_np.segment( i0, i1 );
+			auto Ki = K_np.subvec( i0, i1 - 1 );
 			delta_y   += sc.b[i]  * Ki;
 			delta_alt += sc.b2[i] * Ki;
 		}
@@ -681,11 +675,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 		// **************      Estimate error:    **********************
 		mat_type I, J0;
-		I = eye(Neq, Neq);
+		I = arma::eye(Neq, Neq);
 		J0 = func.jac( t, y );
 		// Formula 8.19:
 		mat_type solve_tmp = I - gamma*dt*J0;
-		vec_type err_8_19 = dt*solve_tmp.solve(delta_delta);
+		vec_type err_8_19 = dt*arma::solve(solve_tmp, delta_delta);
 		err_est = err_8_19;
 
 		// Alternative formula 8.20:
@@ -694,7 +688,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 			vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
 			dy_alt_alt += delta_alt;
 			vec_type err_alt = dy_alt_alt - delta_y;
-			err_est = dt*solve_tmp.solve(err_alt);
+			err_est = dt*arma::solve(solve_tmp, err_alt);
 		}
 
 		double err_tot = 0.0;
@@ -816,7 +810,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 				for( std::size_t j = 0; j < Ns; ++j ){
 					std::size_t j0 = j*Neq;
 					std::size_t j1 = (j+1)*Neq;
-					auto Kj = K_np.segment( j0, j1 );
+					auto Kj = K_np.subvec( j0, j1-1 );
 					Yi += dt * bs[j] * Kj;
 				}
 
@@ -827,8 +821,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 				std::size_t i0 = i*Neq;
 				std::size_t i1 = (i+1)*Neq;
 				double ti = t + dt*ci;
-				vec_eigen tmp_f = func.fun( ti, Yi );
-				K_n.segment( i0, i1 ) = tmp_f.v;
+				K_n.subvec( i0, i1-1 ) = func.fun(ti,Yi);
 			}
 		}
 	}
