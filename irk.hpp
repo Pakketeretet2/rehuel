@@ -45,8 +45,8 @@ constexpr const bool debug = false;
 #endif // DEBUG_OUTPUT
 
 
-typedef vec_eigen vec_type;
-typedef mat_eigen mat_type;
+typedef arma::vec vec_type;
+typedef arma::mat mat_type;
 
 
 /**
