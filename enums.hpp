@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,16 +35,7 @@
 
 
 // Some macro magic for enum to string and back.
-#define FOREACH_RK_METHOD(METHOD)         \
-	METHOD(EXPLICIT_EULER, 100)       \
-	METHOD(RUNGE_KUTTA_4,  110)       \
-	                                  \
-	METHOD(BOGACKI_SHAMPINE_32,120)	  \
-	                                  \
-	METHOD(CASH_KARP_54,130)          \
-	METHOD(DORMAND_PRINCE_54,131)     \
-	METHOD(FEHLBERG_54,132)           \
-	                                  \
+#define FOREACH_IRK_METHOD(METHOD)        \
 	METHOD(IMPLICIT_EULER,200)        \
 	                                  \
 	METHOD(RADAU_IIA_32,  210)        \
@@ -64,6 +55,16 @@
 	METHOD(GAUSS_LEGENDRE_63,  241)   \
 	METHOD(GAUSS_LEGENDRE_105, 242)   \
 	METHOD(GAUSS_LEGENDRE_147, 243)
+
+#define FOREACH_ERK_METHOD(METHOD)        \
+	METHOD(EXPLICIT_EULER, 100)       \
+	METHOD(RUNGE_KUTTA_4,  110)       \
+	                                  \
+	METHOD(BOGACKI_SHAMPINE_32,120)	  \
+	                                  \
+	METHOD(CASH_KARP_54,130)          \
+	METHOD(DORMAND_PRINCE_54,131)     \
+	METHOD(FEHLBERG_54,132)           
 
 
 
@@ -87,14 +88,23 @@ enum ms_methods {
 
 namespace irk {
 
-/// \brief enumerates all implemented RK methods.
+/// \brief enumerates all implemented implicit RK methods.
 enum rk_methods {
-	FOREACH_RK_METHOD(GENERATE_ENUM)
+	FOREACH_IRK_METHOD(GENERATE_ENUM)
 
 };
 
-
 } // namespace irk
+
+/// \brief enumerates all implemented explicit RK methods.
+namespace erk {
+	
+enum rk_methods {
+	FOREACH_ERK_METHOD(GENERATE_ENUM)
+};
+	
+} // namespace erk
+
 
 
 /// \brief enumerates possible return codes.
