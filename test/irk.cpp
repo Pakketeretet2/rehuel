@@ -145,7 +145,6 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 	//              =  1.5x + 0.5
 	//
 
-	/*
 	SECTION( "RADAU_IIA_32" ){
 		std::cerr << "Checking coeffs for RADAU_IIA_32:\n";
 		auto coeffs = get_coefficients( RADAU_IIA_32 );
@@ -180,7 +179,6 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 		auto coeffs = get_coefficients( RADAU_IIA_95 );
 		mat_type b_interp = collocation_interpolate_coeffs( coeffs.c );
 	}
-	*/
 }
 
 
