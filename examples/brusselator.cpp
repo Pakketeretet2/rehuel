@@ -59,7 +59,7 @@ struct brusselator {
 int main( int argc, char **argv )
 {
 	double t0 = 0.0;
-	double t1 = 1e5;
+	double t1 = 1e2;
 	arma::vec Y0 = { 2.0, 2.0 };
 
 	brusselator brus;
