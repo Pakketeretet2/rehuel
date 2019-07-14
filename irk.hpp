@@ -37,30 +37,29 @@
 #include "newton.hpp"
 #include "options.hpp"
 
-#ifdef DEBUG_OUTPUT
-constexpr const bool debug = true;
-#else
-constexpr const bool debug = false;
-#endif // DEBUG_OUTPUT
-
-
-typedef arma::vec vec_type;
-typedef arma::mat mat_type;
-
 
 /**
    \brief Contains functions related to implicit Runge-Kutta methods.
  */
 namespace irk {
 
+	
+#ifdef DEBUG_OUTPUT
+constexpr const bool debug = true;
+#else
+constexpr const bool debug = false;
+#endif // DEBUG_OUTPUT
+
+	
+typedef arma::vec vec_type;
+typedef arma::mat mat_type;
+
+
 /**
    Contains the Butcher tableau plus time step size.
 */
 struct solver_coeffs
 {
-	//typedef arma::vec vec_type;
-	//typedef arma::mat mat_type;
-	
 	const char *name; ///< Human-friendly name for the method.
 	vec_type b;      ///< weights for the new y-value
 	vec_type c;      ///< these set the intermediate time points
@@ -152,7 +151,7 @@ struct rk_output
 	std::vector<vec_type> stages;
 
 	std::vector<vec_type> err_est;
-	std::vector<double>    err;
+	std::vector<double>   err;
 
 	double elapsed_time, accept_frac;
 
@@ -568,7 +567,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	std::size_t N   = Neq * Ns;
 
 	vec_type y  = y0;
-	vec_type yo = y;
+	vec_type yo(N);
 	vec_type K_np = arma::zeros(N), K_n = arma::zeros(N);
 
 	newton::status newton_stats;
@@ -592,11 +591,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	sol.err.push_back( 0.0 );
 
 	bool alternative_error_formula = true;
+	std::size_t min_order = std::min( sc.order, sc.order2 );
 
-	// Make sure you stop exactly at t = t1.
 	while( t < t1 ){
-
 		// ****************  Calculate stages:   ************
+		// Make sure you stop exactly at t = t1.
 		if( t + dt > t1 ){
 			dt = t1 - t;
 		}
@@ -621,8 +620,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
 		                               newton_stats,
 		                               !solver_opts.verbose_newton );
-		//K_np = newton::broyden_iterate( nw, K_n, newton_opts,
-		//                                newton_stats );
 		int newton_status = newton_stats.conv_status;
 
 		// *********** Verify Newton iteration convergence ************
@@ -665,7 +662,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 			std::size_t i1 = (i+1)*Neq;
 			auto Ki = K_np.subvec( i0, i1 - 1 );
 			delta_y   += sc.b[i]  * Ki;
-			delta_alt += sc.b2[i] * Ki;
+			if (solver_opts.adaptive_step_size) {
+				delta_alt += sc.b2[i] * Ki;
+			}
 		}
 
 		vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
@@ -731,7 +730,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
 		fac /= ( newton_opts.maxit + newton_stats.iters );
 
-		double expt = 1.0 / ( 1.0 + std::min( sc.order, sc.order2 ) );
+		double expt = 1.0 / ( 1.0 + min_order );
 		double err_inv = 1.0 / err;
 		double scale_27 = std::pow( err_inv, expt );
 		double dt_rat = dts[0] / dts[1];
@@ -788,7 +787,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 		// **************      Actually set the new dt:    **********************
 
-		if( solver_opts.adaptive_step_size ) dt = new_dt;
+		if( solver_opts.adaptive_step_size ) {
+			dt = new_dt;
+		}
 		dts[2] = dts[1];
 		dts[1] = dts[0];
 		dts[0] = dt;
@@ -850,13 +851,17 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 */
 template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
-                  const solver_options &solver_opts,
+                  solver_options solver_opts,
                   int method = irk::RADAU_IIA_53, double dt = 1e-6 )
 {
 	solver_coeffs sc = get_coefficients( method );
-
+	if (solver_opts.adaptive_step_size && sc.b2.size() == 0) {
+		std::cerr << "    Rehuel: WARNING: Cannot have adaptive time "
+		          << "step with non-embedding method! Disabling "
+		          << "adaptive time step size!\n";
+		solver_opts.adaptive_step_size = false;
+	}
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-	if (debug) std::cerr << "Got the solver coefficients, integrating now...\n";
 	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
 }
 

@@ -219,7 +219,6 @@ solver_coeffs get_coefficients( int method )
 			          << method_to_name( method ) << "!\n";
 		}
 	}
-
 	
 	return sc;
 }
@@ -238,7 +237,7 @@ solver_options default_solver_options()
 
 bool verify_solver_options( solver_options &opts )
 {
-	// TODO: Check that A is not on-or-above-diagonal.
+
 	return true;
 }
 

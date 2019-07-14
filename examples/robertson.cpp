@@ -19,45 +19,55 @@
 ============================================================================= */
 
 /**
-   \file brusselator.cpp
+   \file robertson.cpp
 
-   \brief This file contains code to solve the Brusselator as example.
+   \brief This file contains code to solve the Robertson oscillator as example.
 
-   Compile as g++ -O3 -I../ -fopenmp -march=native -lrehuel -larmadillo brusselator.cpp -o brusselator
+   Compile as g++ -O3 -I../ -fopenmp -march=native -lrehuel -larmadillo robertson.cpp -o robertson
 */
-
-#include <iostream>
 
 #include "rehuel.hpp"
 
-/*
-  ODEs are implemented through functors. They need to implement two functions:
-  fun and jac.
-  The first calculates the RHS of the ODE, the second the Jacobi matrix.
-  It also needs a typedef, jac_type, to indicate whether or not the Jacobi
-  matrix is sparse or not. Currently only non-sparse is supported.
-*/
-struct brusselator {
-	typedef arma::mat jac_type;
 
-	arma::vec fun( double t, const arma::vec &Y ) const
+
+// Robertson oscillator:
+struct rober {
+	typedef mat_type jac_type;
+
+	rober(double a = 3e7, double b = 1e4) : a(a), b(b) {}
+	
+	
+	vec_type fun( double t, const vec_type &y )
 	{
-		return { a + Y[0]*Y[0]*Y[1] - b*Y[0] - Y[0],
-		         b*Y[0] - Y[0]*Y[0]*Y[1] };
+		return { -0.04*y[0] + b * y[1]*y[2],
+		          0.04*y[0] - b * y[1]*y[2] - a*y[1]*y[1],
+		          a*y[1]*y[1] };
 	}
 
-	arma::mat jac( double t, const arma::vec &Y ) const
+
+	jac_type jac( double t, const vec_type &y )
 	{
-		return { {2*Y[0]*Y[1] - b - 1.0, Y[0]*Y[0]},
-		         {b - 2*Y[0]*Y[1], -Y[0]*Y[0] } };
+		jac_type J(3,3);
+		J(0,0) = -0.04;
+		J(0,1) = b*y[2];
+		J(0,2) = b*y[1];
+
+		J(1,0) = 0.04;
+		J(1,1) = -b*y[2] - 2*a*y[1];
+		J(1,2) = -b*y[1];
+
+		J(2,0) = J(2,2) = 0.0;
+		J(2,1) = 2*a*y[1];
+		return J;
 	}
 
-	double a,b;
+	double a, b;
 };
 
 
 
-int solve_irk(const std::string &method_str, brusselator &brus,
+
+int solve_irk(const std::string &method_str, rober &robertson,
               arma::vec Y0, double t0, double t1)
 {
 	newton::options newton_opts;
@@ -65,7 +75,7 @@ int solve_irk(const std::string &method_str, brusselator &brus,
 	solver_opts.newton_opts = &newton_opts;
 	int method = irk::RADAU_IIA_32;
 	method = irk::name_to_method(method_str);
-	irk::rk_output sol = irk::odeint( brus, t0, t1, Y0,
+	irk::rk_output sol = irk::odeint( robertson, t0, t1, Y0,
 	                                  solver_opts, method );
 
 	std::cerr << "Solved ODE with " << sol.t_vals.size() << " time steps in "
@@ -82,15 +92,15 @@ int solve_irk(const std::string &method_str, brusselator &brus,
 
 
 
-int solve_erk(const std::string &method_str, brusselator &brus,
+int solve_erk(const std::string &method_str, rober &robertson,
               arma::vec Y0, double t0, double t1)
 {
 	erk::solver_options solver_opts = erk::default_solver_options();
 	int method = erk::CASH_KARP_54;
 	method = erk::name_to_method(method_str);
 	solver_opts.adaptive_step_size = true;
-	erk::rk_output sol = erk::odeint( brus, t0, t1, Y0,
-	                                  solver_opts, method );
+	erk::rk_output sol = erk::odeint( robertson, t0, t1, Y0,
+	                                  solver_opts, method, 1e-8 );
 	
 	std::cerr << "Solved ODE with " << sol.t_vals.size() << " time steps in "
 	          << sol.elapsed_time / 1000.0 << " seconds.\n";
@@ -110,11 +120,9 @@ int main( int argc, char **argv )
 {
 	double t0 = 0.0;
 	double t1 = 1e4;
-	arma::vec Y0 = { 2.0, 2.0 };
+	arma::vec Y0 = { 1.0, 0.0, 0.0 };
 
-	brusselator brus;
-	brus.a = 2.0;
-	brus.b = brus.a*brus.a + 2.5; // Just past Hopf bifurcation.
+	rober robertson(3e4, 1e1);
 	std::string method_name = "RADAU_IIA_53";
 	if (argc > 1) {
 		method_name = argv[1];
@@ -125,12 +133,12 @@ int main( int argc, char **argv )
 		// method = 0 indicates that this method is not an irk.
 		std::cerr << "method = " << method << " for name "
 		          << method_name << "\n";
-		return solve_irk(method_name, brus, Y0, t0, t1);
+		return solve_irk(method_name, robertson, Y0, t0, t1);
 	}
 
 	method = erk::name_to_method(method_name);
 	if (method) {
-		return solve_erk(method_name, brus, Y0, t0, t1);
+		return solve_erk(method_name, robertson, Y0, t0, t1);
 	}
 	
 	return 0;
