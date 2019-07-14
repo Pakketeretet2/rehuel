@@ -56,6 +56,7 @@
 	METHOD(GAUSS_LEGENDRE_105, 242)   \
 	METHOD(GAUSS_LEGENDRE_147, 243)
 
+
 #define FOREACH_ERK_METHOD(METHOD)        \
 	METHOD(EXPLICIT_EULER, 100)       \
 	METHOD(RUNGE_KUTTA_4,  110)       \
@@ -74,16 +75,6 @@
 #define GENERATE_ENUM(ENUM, VAL) ENUM = VAL,
 #define GENERATE_STRING(STRING, VAL) {VAL,#STRING},
 #define GENERATE_MAP(STRING, VAL) {#STRING, VAL},
-
-
-namespace multistep {
-
-/// \brief enumerates all implemented multistep methods.
-enum ms_methods {
-	FOREACH_MULTISTEP_METHOD(GENERATE_ENUM)
-};
-
-} // namespace multistep
 
 
 namespace irk {
@@ -131,6 +122,6 @@ enum odeint_status_codes {
 	ERROR_LARGER_THAN_ABSTOL = 64
 };
 
-static constexpr const double machine_precision = 1e-18;
+static constexpr const double machine_precision = 1e-17;
 
 #endif // ENUMS_HPP
