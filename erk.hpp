@@ -268,7 +268,6 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 	std::size_t Ns  = sc.b.size();
 
 	vec_type y = y0;
-	vec_type yo(Neq);
 	// Ks is the stages at the new time step.
 	mat_type Ks(Neq,Ns);
 	long long int step = 0;
@@ -279,12 +278,13 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 		std::cerr  << "    Rehuel: step  t  dt   err\n";
 	}
 
+	double err = 0.0;
 	vec_type err_est = arma::zeros(Neq);
 	sol.t_vals.push_back(t);
 	sol.y_vals.push_back(y);
 	sol.stages.push_back(vectorise(Ks));
 	sol.err_est.push_back( err_est );
-	sol.err.push_back( 0.0 );
+	sol.err.push_back( err );
 
 	// This will keep track of error estimates during integration.
 	std::size_t min_order = std::min( sc.order, sc.order2 );
@@ -296,7 +296,6 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			dt = t1 - t;
 		}
 		sol.count.attempt++;
-
 		int integrator_status = 0;
 
 		// Formula for explicit stages are
@@ -315,8 +314,6 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			delta_y   += sc.b(i)*Ks.col(i);
 		}
 		vec_type y_n   = y + dt*delta_y;
-		
-		double err = 0.0;
 		double new_dt = dt;
 		
 		// If you have no adaptive step size, error calculation
@@ -328,12 +325,11 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			}
 		
 			// ************* Error estimate: ***********
-	
 			double err_tot = 0.0;
 			double atol = solver_opts.abs_tol, rtol = solver_opts.rel_tol;
-			
+			// err_est is ||y1 - yhat1|| in Wanner & Hairer.
 			err_est = dt*(delta_alt - delta_y);
-			
+			double n = Neq;
 			for (std::size_t i = 0; i < Neq; ++i) {
 				double erri = err_est(i);
 				double y0i  = std::fabs(y(i));
@@ -342,8 +338,8 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 				double add = erri / sci;
 				err_tot += add*add;
 			}
+			err = std::sqrt(err_tot / n);
 			assert( err_tot >= 0.0 && "Error cannot be negative!" );
-			err = std::sqrt(err_tot / static_cast<double>(Neq));
 			
 			if (err < machine_precision) {
 				err = machine_precision;
@@ -351,14 +347,15 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			errs[2] = errs[1];
 			errs[1] = errs[0];
 			errs[0] = err;
-			
+
 			// ************* Adaptive time step size control: ***********
 			
 			// Error is too large to tolerate:
-			if (solver_opts.adaptive_step_size && (err > 1.0)) {
+			if (solver_opts.adaptive_step_size && (err >= 1.0)) {
 				integrator_status = 1;
 				sol.count.reject_err++;
 			}
+			
 			double fac  = 0.9;
 			double expt = 1.0 / (1.0 + min_order);
 			double err_inv = 1.0 / err;
@@ -370,19 +367,9 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			}
 			double err_rat = std::pow(err_frac, expt);
 			double scale_28 = scale_27 * dt_rat * err_rat;
-			double min_scale = std::min(scale_27, scale_28);
-			
-			if (debug) {
-				std::cerr << "    Rehuel: Time step controller:\n"
-				          << "            err      = " << err << "\n"
-				          << "            err_inv  = " << err_inv << "\n"
-				          << "            dt_rat   = " << dt_rat << "\n"
-				          << "            err_frac = " << err_frac << "\n"
-				          << "            err_rat  = " << err_rat << "\n"
-				          << "            scale_27 = " << scale_27 << "\n"
-				          << "            scale_28 = " << scale_28 << "\n\n";
-			}
-			double new_dt = fac * dt * std::min(4.0, min_scale);
+			double min_scale = scale_27; // std::min(scale_27, scale_28);
+			new_dt = fac * dt * std::min(4.0, min_scale);
+
 			if (solver_opts.max_dt > 0) {
 				new_dt = std::min(solver_opts.max_dt, new_dt);
 			}
@@ -396,7 +383,6 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 		}
 		
 		if (!solver_opts.adaptive_step_size || integrator_status == 0) {
-			yo = y;
 			y  = y_n;
 			t += dt;
 			++step;
@@ -452,7 +438,6 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
 	}
 
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
 	return erk_guts(func, t0, t1, y0, solver_opts, dt, sc);
 }
 

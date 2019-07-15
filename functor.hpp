@@ -26,7 +26,7 @@
 #define FUNCTOR_HPP
 
 
-#include "matrix_vector.hpp"
+#include "arma_include.hpp"
 
 /**
    \brief This class describes how a functor that describes an
@@ -34,9 +34,9 @@
 */
 class functor {
 public:
-	typedef mat_type jac_type;
+	typedef arma::mat jac_type;
 
-	virtual vec_type fun( double t, const vec_type &y ) = 0;
+	virtual arma::vec fun( double t, const vec_type &y ) = 0;
 	virtual jac_type jac( double t, const vec_type &y ) = 0;
 };
 

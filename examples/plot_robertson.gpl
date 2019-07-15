@@ -4,8 +4,18 @@ set log xy
 set xrange[1e-4:1e12]
 set yrange[1e-16:1]
 
-plot 'robertson_BOGACKI_SHAMPINE_32.dat' u 1:3 w l ti 'Bogacki-Shampine' \
-   , 'robertson_CASH_KARP_54.dat'        u 1:3 w l ti 'Cash-Karp' \
-   , 'robertson_RADAU_IIA_137.dat'       u 1:3 w l ti 'Radau 13-7' \
-   , 'robertson_RADAU_IIA_53.dat'        u 1:3 w l ti 'Radau 5-3' \
-   , 'robertson_RADAU_IIA_32.dat'        u 1:3 w l ti 'Radau 3-2'
+set term epslatex standalone solid color size 12cm,8cm
+set output "robertson.tex"
+
+plot 'robertson_RADAU_IIA_53.dat'        u 1:2 w l  lw 2 lc rgb '#AA0000' ti 'Radau 5-3' \
+   , ''                                  u 1:3 w lp lw 2 pt 4 lc rgb '#AA0000' ti '' \
+   , ''                                  u 1:4 w lp lw 2 pt 6 lc rgb '#AA0000' ti '' \
+   , 'robertson_RADAU_IIA_32.dat'        u 1:2 w l  lw 2 lc rgb '#00AA00' ti 'Radau 3-2' \
+   , ''                                  u 1:3 w lp lw 2 pt 4 lc rgb '#00AA00' ti '' \
+   , ''                                  u 1:4 w lp lw 2 pt 6 lc rgb '#00AA00' ti '' \
+   , 'robertson_LOBATTO_IIIA_43.dat'     u 1:2 w l  lw 2 lc rgb '#0000AA' ti 'Lobatto A 4-3' \
+   , ''                                  u 1:3 w lp lw 2 pt 4 lc rgb '#0000AA' ti '' \
+   , ''                                  u 1:4 w lp lw 2 pt 6 lc rgb '#0000AA' ti '' \
+   , 'robertson_LOBATTO_IIIC_43.dat'     u 1:2 w l  lw 2 lc rgb '#000000' ti 'Lobatto C 4-3' \
+   , ''                                  u 1:3 w lp lw 2 pt 4 lc rgb '#000000' ti '' \
+   , ''                                  u 1:4 w lp lw 2 pt 6 lc rgb '#000000' ti ''
