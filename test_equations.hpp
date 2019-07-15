@@ -26,7 +26,6 @@
 #ifndef TEST_EQUATIONS_HPP
 #define TEST_EQUATIONS_HPP
 
-#include "matrix_vector.hpp"
 #include <cassert>
 
 #include "functor.hpp"
