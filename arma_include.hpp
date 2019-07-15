@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -29,9 +29,9 @@
 #ifndef ARMA_INCLUDE_HPP
 #define ARMA_INCLUDE_HPP
 
-
 #define ARMA_USE_CXX11
 #define ARMA_USE_LAPACK
+#define ARMA_USE_SUPERLU
 #define ARMA_USE_BLAS
 #define ARMA_USE_OPENMP
 

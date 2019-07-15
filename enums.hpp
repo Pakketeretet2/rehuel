@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,16 +35,7 @@
 
 
 // Some macro magic for enum to string and back.
-#define FOREACH_RK_METHOD(METHOD)         \
-	METHOD(EXPLICIT_EULER, 100)       \
-	METHOD(RUNGE_KUTTA_4,  110)       \
-	                                  \
-	METHOD(BOGACKI_SHAMPINE_32,120)	  \
-	                                  \
-	METHOD(CASH_KARP_54,130)          \
-	METHOD(DORMAND_PRINCE_54,131)     \
-	METHOD(FEHLBERG_54,132)           \
-	                                  \
+#define FOREACH_IRK_METHOD(METHOD)        \
 	METHOD(IMPLICIT_EULER,200)        \
 	                                  \
 	METHOD(RADAU_IIA_32,  210)        \
@@ -53,16 +44,28 @@
 	METHOD(RADAU_IIA_137, 213)        \
 	                                  \
 	METHOD(LOBATTO_IIIA_43,  220)     \
-	METHOD(LOBATTO_IIIA_86,  221)     \
-	METHOD(LOBATTO_IIIA_129, 222)     \
+	METHOD(LOBATTO_IIIA_85,  221)     \
+	METHOD(LOBATTO_IIIA_127, 222)     \
 	                                  \
 	METHOD(LOBATTO_IIIC_43,  230)     \
-	METHOD(LOBATTO_IIIC_86,  231)     \
-	METHOD(LOBATTO_IIIC_129, 232)     \
+	METHOD(LOBATTO_IIIC_85,  231)     \
+	METHOD(LOBATTO_IIIC_127, 232)     \
 	                                  \
 	METHOD(GAUSS_LEGENDRE_42,  240)   \
-	METHOD(GAUSS_LEGENDRE_84,  241)   \
-	METHOD(GAUSS_LEGENDRE_126, 242)
+	METHOD(GAUSS_LEGENDRE_63,  241)   \
+	METHOD(GAUSS_LEGENDRE_105, 242)   \
+	METHOD(GAUSS_LEGENDRE_147, 243)
+
+
+#define FOREACH_ERK_METHOD(METHOD)        \
+	METHOD(EXPLICIT_EULER, 100)       \
+	METHOD(RUNGE_KUTTA_4,  110)       \
+	                                  \
+	METHOD(BOGACKI_SHAMPINE_32,120)	  \
+	                                  \
+	METHOD(CASH_KARP_54,130)          \
+	METHOD(DORMAND_PRINCE_54,131)     \
+	METHOD(FEHLBERG_54,132)           
 
 
 
@@ -74,26 +77,25 @@
 #define GENERATE_MAP(STRING, VAL) {#STRING, VAL},
 
 
-namespace multistep {
-
-/// \brief enumerates all implemented multistep methods.
-enum ms_methods {
-	FOREACH_MULTISTEP_METHOD(GENERATE_ENUM)
-};
-
-} // namespace multistep
-
-
 namespace irk {
 
-/// \brief enumerates all implemented RK methods.
+/// \brief enumerates all implemented implicit RK methods.
 enum rk_methods {
-	FOREACH_RK_METHOD(GENERATE_ENUM)
+	FOREACH_IRK_METHOD(GENERATE_ENUM)
 
 };
 
-
 } // namespace irk
+
+/// \brief enumerates all implemented explicit RK methods.
+namespace erk {
+	
+enum rk_methods {
+	FOREACH_ERK_METHOD(GENERATE_ENUM)
+};
+	
+} // namespace erk
+
 
 
 /// \brief enumerates possible return codes.
@@ -120,6 +122,6 @@ enum odeint_status_codes {
 	ERROR_LARGER_THAN_ABSTOL = 64
 };
 
-static constexpr const double machine_precision = 1e-18;
+static constexpr const double machine_precision = 1e-17;
 
 #endif // ENUMS_HPP

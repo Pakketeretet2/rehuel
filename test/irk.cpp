@@ -148,7 +148,7 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 	SECTION( "RADAU_IIA_32" ){
 		std::cerr << "Checking coeffs for RADAU_IIA_32:\n";
 		auto coeffs = get_coefficients( RADAU_IIA_32 );
-		arma::mat b_interp = collocation_interpolate_coeffs( coeffs.c );
+		mat_type b_interp = collocation_interpolate_coeffs( coeffs.c );
 
 		std::cerr << "Size of b_interp is " << b_interp.size() << "\n";
 		std::cerr << "Here is the matrix:\n";
@@ -171,13 +171,13 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 	SECTION( "RADAU_IIA_53" ){
 		std::cerr << "Checking coeffs for RADAU_IIA_53:\n";
 		auto coeffs = get_coefficients( RADAU_IIA_53 );
-		arma::mat b_interp = collocation_interpolate_coeffs( coeffs.c );
+		mat_type b_interp = collocation_interpolate_coeffs( coeffs.c );
 	}
 
 	SECTION( "RADAU_IIA_95" ){
 		std::cerr << "Checking coeffs for RADAU_IIA_95:\n";
 		auto coeffs = get_coefficients( RADAU_IIA_95 );
-		arma::mat b_interp = collocation_interpolate_coeffs( coeffs.c );
+		mat_type b_interp = collocation_interpolate_coeffs( coeffs.c );
 	}
 }
 
@@ -192,8 +192,12 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 	sol1.t_vals = { 0.0, 0.1, 0.2 };
 	sol2.t_vals = { 0.3, 0.4, 0.5 };
 
-	sol1.y_vals = { {1.0}, {0.9}, {0.9*0.9} };
-	sol2.y_vals = { {0.9*0.9*0.9}, {0.9*0.9*0.9*0.9}, {0.9*0.9*0.9*0.9*0.9} };
+	sol1.y_vals = { {1.0},
+	                {0.9},
+	                {0.9*0.9} };
+	sol2.y_vals = { {0.9*0.9*0.9},
+	                {0.9*0.9*0.9*0.9},
+	                {0.9*0.9*0.9*0.9*0.9} };
 
 
 	rk_output sol3 = merge_rk_output( sol1, sol2 );
@@ -216,13 +220,13 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 		auto so = default_solver_options();
 		newton::options opts;
 		opts.tol = 0.1*so.rel_tol;
-		arma::vec Y0 = { 1.0 };
+		vec_type Y0 = { 1.0 };
 		test_equations::exponential func( -0.4 );
 		so.out_interval = 1;
 		so.newton_opts = &opts;
 		rk_output soltmp1 = irk::radau_IIA_53( func, 0.0, 2.0, Y0, so );
 		std::size_t nsol1 = soltmp1.t_vals.size();
-		arma::vec Y1 = soltmp1.y_vals[nsol1-1];
+	        vec_type Y1 = soltmp1.y_vals[nsol1-1];
 		double dt = soltmp1.t_vals[nsol1-1] - soltmp1.t_vals[nsol1-2];
 		rk_output soltmp2 = irk::radau_IIA_53( func, 2.0, 4.0,
 		                                       Y1, so, dt );

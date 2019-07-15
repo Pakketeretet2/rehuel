@@ -28,11 +28,13 @@ irk::rk_output integrate( T &func, const arma::vec &y0, double t0, double t1,
 	int digits = std::max( 1, static_cast<int>( -log10(tolerance) - 1 ) );
 	std::cerr << "    Writing out " << digits << " digits.\n";
 
-	out << std::setprecision(digits);
+
 	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
 		double ti = sol.t_vals[i];
-		out << ti;
+		out << std::setprecision(17) << ti;
+
 		const arma::vec &yi = sol.y_vals[i];
+		out << std::setprecision(digits);
 		for( std::size_t j = 0; j < yi.size(); ++j ){
 			out << " " << yi[j];
 		}
@@ -56,13 +58,12 @@ int main( int argc, char **argv )
 	newt_opts.tol = 0.1*so.rel_tol;
 	newt_opts.dx_delta = 0.1*so.rel_tol;
 
-	newt_opts.maxit = 10;
+	newt_opts.maxit = 50;
 	newt_opts.refresh_jac = false; // true;
 	so.newton_opts = &newt_opts;
 	so.out_interval = 10000;
 	so.verbose_newton = false;
-	std::vector<int> methods = { irk::RADAU_IIA_32,
-	                             irk::RADAU_IIA_53,
+	std::vector<int> methods = { irk::RADAU_IIA_53,
 	                             irk::RADAU_IIA_95 };
 	arma::vec y0 = { 1.0 };
 
@@ -72,20 +73,14 @@ int main( int argc, char **argv )
 	double t1 = 20.0;
 	double dt = 1e-4;
 
-	auto add_time = [&times]( int method, double time ){
-		switch(method){
-			case irk::RADAU_IIA_53:
-				times[0].push_back( time );
+	auto add_time = [&times, &methods]( int method, double time ){
+		for( std::size_t i = 0; i < methods.size(); ++i ){
+			if( methods[i] == method ){
+				times[i].push_back( time );
 				break;
-			case irk::RADAU_IIA_32:
-				times[1].push_back( time );
-				break;
-			case irk::RADAU_IIA_95:
-				times[2].push_back( time );
-				break;
-			default:
-				break;
+			}
 		} };
+
 	test_equations::exponential exponen( -0.2 );
 	for( int method : methods ){
 		auto sol = integrate( exponen, y0, t0, t1, dt, method, "exponential", so );
@@ -186,7 +181,7 @@ int main( int argc, char **argv )
 	newt_opts.tol = 0.1*so.rel_tol;
 	newt_opts.dx_delta = 0.1*so.rel_tol;
 	newt_opts.limit_step = false;
-	newt_opts.maxit = 10;
+	newt_opts.maxit = 500;
 	so.out_interval = 10000;
 	t0 = 0.0;
 	t1 = 1e12;

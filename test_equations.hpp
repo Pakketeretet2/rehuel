@@ -1,8 +1,8 @@
 /*
    Rehuel: a simple C++ library for solving ODEs
+ 
 
-
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@
 #ifndef TEST_EQUATIONS_HPP
 #define TEST_EQUATIONS_HPP
 
-#include "arma_include.hpp"
 #include <cassert>
 
 #include "functor.hpp"
@@ -37,22 +36,22 @@ namespace test_equations {
 // Exponential function:
 struct exponential : public functor
 {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 	explicit exponential( double l ) : l(l) {}
 
-	arma::vec sol( double t )
+	vec_type sol( double t )
 	{
 		return { exp( l*t ) };
 	}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
-		return { l*y };
+		return l*y;
 	}
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
-		return { l };
+		return {l};
 	}
 
 	double l;
@@ -62,20 +61,20 @@ struct exponential : public functor
 // Exponential function:
 struct harmonic : public functor
 {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 	explicit harmonic( double w ) : w(w) {}
 
-	arma::vec sol( double t )
+	vec_type sol( double t )
 	{
 		return { sin(w*t), cos(w*t) };
 	}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
 		return { w*y[1], -w*y[0] };
 	}
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
 		return { { 0, w }, { -w, 0 } };
 	}
@@ -90,15 +89,15 @@ struct harmonic : public functor
 // Van der Pol oscillator:
 struct vdpol : public functor
 {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 	vdpol( double mu ) : mu(mu){}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
-		return { y[1], (( 1 - y[0]*y[0] ) * y[1] - y[0]) / mu };
+		return { y[1], ((1 - y[0]*y[0]) * y[1] - y[0]) / mu };
 	}
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
 		jac_type J(2,2);
 		J(0,0) = 0.0;
@@ -118,16 +117,16 @@ struct vdpol : public functor
 // Brusselator:
 struct bruss : public functor
 {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 	bruss( double a, double b ) : a(a), b(b) {}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
 		return { a + y[0]*y[0]*y[1] - b*y[0] - y[0],
-		         b*y[0] - y[0]*y[0]*y[1] };
+		                  b*y[0] - y[0]*y[0]*y[1] };
 	}
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
 		jac_type J(2,2);
 		J(0,0) = 2*y[0]*y[1] - b - 1;
@@ -146,17 +145,17 @@ struct bruss : public functor
 
 // Robertson oscillator:
 struct rober :  public functor {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
 		return { -0.04*y[0] + 1e4 * y[1]*y[2],
 		          0.04*y[0] - 1e4 * y[1]*y[2] - 3e7*y[1]*y[1],
-		          3e7*y[1]*y[1] };
+		                  3e7*y[1]*y[1] };
 	}
 
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
 		jac_type J(3,3);
 		J(0,0) = -0.04;
@@ -176,17 +175,17 @@ struct rober :  public functor {
 
 // Simple dimerization reaction:
 struct dimer :  public functor  {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 
 	explicit dimer( double rate ) : rate(rate), irate(1.0/rate) {}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
 		return { -2*rate*y[0]*y[0] + 2*irate*y[1],
-		          rate*y[0]*y[0] - irate*y[1] };
+		                  rate*y[0]*y[0] - irate*y[1] };
 	}
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
 		jac_type J(2,2);
 		J(0,0) = -4*rate*y[0];
@@ -202,6 +201,7 @@ struct dimer :  public functor  {
 
 
 
+/*
 // 1-dimensional reaction-diffusion model on [x0,x1]
 struct reac_diff :  public functor_sparse_jac {
 	// This represents the equations
@@ -215,8 +215,7 @@ struct reac_diff :  public functor_sparse_jac {
 	// n2(x=0)  = 0.5
 	// n2'(x=1) = 0
 
-	//typedef arma::sp_mat jac_type;
-	typedef arma::sp_mat jac_type;
+	typedef sp_mat_type jac_type;
 
 
 	reac_diff( int Nx, double D1, double D2, double rate )
@@ -227,8 +226,8 @@ struct reac_diff :  public functor_sparse_jac {
 		// The n1-part of the Laplace operator.
 		double idx2 = 1.0 * D1 / dx2;
 
-		diff_rhs.zeros(2*Nx);
-		diff_matrix.zeros(2*Nx,2*Nx);
+		diff_rhs    = zeros(2*Nx);
+		diff_matrix = zeros(2*Nx,2*Nx);
 
 		// Left side, n1(x=0) = 1.0;
 		// So it starts at x = dt.
@@ -262,9 +261,9 @@ struct reac_diff :  public functor_sparse_jac {
 
 	}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
-		arma::vec rhs = diff_matrix * y + diff_rhs;
+		vec_type rhs = diff_matrix * y + diff_rhs;
 
 		// rhs.zeros( 2*Nx );
 		// Reaction part:
@@ -276,7 +275,7 @@ struct reac_diff :  public functor_sparse_jac {
 		return rhs;
 	}
 
-	jac_type jac( double t, const arma::vec &y )
+	jac_type jac( double t, const vec_type &y )
 	{
 		jac_type J = diff_matrix;
 		// J.zeros(2*Nx,2*Nx);
@@ -297,10 +296,10 @@ struct reac_diff :  public functor_sparse_jac {
 	int Nx;
 	double D1, D2, rate, irate;
 	jac_type diff_matrix;
-	arma::vec diff_rhs;
+	vec_type diff_rhs;
 	double dx, dx2;
 };
-
+*/
 
 
 
@@ -314,33 +313,32 @@ struct stiff_eq  :  public functor {
 	// --> Y' = A*Y, Y = ( y, u )
 	//
 
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 
 	stiff_eq() : A(2,2)
 	{
-		A.zeros(2,2);
 		A(0,0) = 0.0;
 		A(0,1) = 1.0;
 		A(1,0) = -1000.0;
 		A(1,1) = -1001.0;
 	}
 
-	arma::vec sol( double t ) const
+	vec_type sol( double t ) const
 	{
 		double ysol = -exp(-1000*t)/999.0 + 1000*exp(-t)/999.0;
 		double usol = ( 1000.0*exp(-1000*t) - 1000.0*exp(-t) ) / 999.0;
-		arma::vec solution(2);
+		vec_type solution(2);
 		solution(0) = ysol;
 		solution(1) = usol;
 		return solution;
 	}
 
-	arma::vec fun( double t, const arma::vec &y )
+	vec_type fun( double t, const vec_type &y )
 	{
 		return A*y;
 	}
 
-	jac_type jac( double  t, const arma::vec &y )
+	jac_type jac( double  t, const vec_type &y )
 	{
 		return A;
 	}
@@ -354,19 +352,19 @@ private:
 
 struct three_body : public functor
 {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 
 	three_body( double m1, double m2, double m3 )
 		: m1r(m1/m3), m2r(m2/m3), m1(m1), m2(m2), m3(m3) {}
 
-	virtual arma::vec fun( double t, const arma::vec &y )
+	virtual vec_type fun( double t, const vec_type &y )
 	{
 		// y contains ( q0, q1, q2, q3, q4, q5,
 		//            ( p0, p1, p2, p3, p4, p5 )
 		//
 		// (q0, q1, q2, q3, q4, q5) are (x0, y0, x1, y1, x2, y2)
 
-		arma::vec dydt(12);
+		vec_type dydt(12);
 		dydt[0] =  y[6] / m1;
 		dydt[1] =  y[7] / m1;
 		dydt[2] =  y[8] / m2;
@@ -403,9 +401,9 @@ struct three_body : public functor
 		return dydt;
 	}
 
-	virtual jac_type jac( double t, const arma::vec &y )
+	virtual jac_type jac( double t, const vec_type &y )
 	{
-		arma::mat J(12,12);
+		mat_type J(12,12);
 
 		double x2mx1 = y[2] - y[0];
 		double y2my1 = y[3] - y[1];
@@ -438,7 +436,7 @@ struct three_body : public functor
 		double r23_5 = r23_3*r23_2;
 
 
-		J.zeros(12,12);
+		J = arma::zeros(12,12);
 
 		// [ 0..5 ] is p, [ 6..11 ] is x.
 		J( 6, 6)  = -m1*m3 / r13_3 + 3*m1*m3*x3mx1_2 / r13_5
@@ -520,7 +518,7 @@ struct three_body : public functor
 	}
 
 
-	double kin_energy( const arma::vec &y )
+	double kin_energy( const vec_type &y )
 	{
 		double px0 = y[6];
 		double py0 = y[7];
@@ -536,7 +534,7 @@ struct three_body : public functor
 		return 0.5*T;
 	}
 
-	double pot_energy( const arma::vec &y )
+	double pot_energy( const vec_type &y )
 	{
 
 		double r12_x = y[2] - y[0];
@@ -566,14 +564,14 @@ struct three_body : public functor
 
 struct kinetic_4 : public functor
 {
-	typedef arma::mat jac_type;
+	typedef mat_type jac_type;
 
 	kinetic_4( double b2, double b3, double b4 )
 		: b2(b2), b3(b3), b4(b4) {}
 
-	virtual arma::vec fun( double t, const arma::vec &y )
+	virtual vec_type fun( double t, const vec_type &y )
 	{
-		arma::vec rhs(4);
+		vec_type rhs(4);
 		rhs(0)  = -2*y(0)*y(0)  - y(0)*(y(1) + y(2));
 		rhs(0) += 2*b2*y(1) + b3*y(2) + b4*y(3);
 
@@ -585,13 +583,12 @@ struct kinetic_4 : public functor
 	}
 
 
-	virtual jac_type jac( double t, const arma::vec &y )
+	virtual jac_type jac( double t, const vec_type &y )
 	{
-		jac_type J(4,4);
-		J = { { -4*y(0) - y(1) - y(2), -y(0) + 2*b2, -y(0) + b3, b4 },
-		      { 2*y(0) - y(1), -y(0) - b2, b3, 0.0 },
-		      { y(1) - y(2), y(0), -y(0) - b3, b4  },
-		      { y(2), 0, y(0), -b4} };
+		jac_type J = { { -4*y(0) - y(1) - y(2), -y(0) + 2*b2, -y(0) + b3, b4 },
+		               { 2*y(0) - y(1), -y(0) - b2, b3, 0.0 },
+		               { y(1) - y(2), y(0), -y(0) - b3, b4  },
+		               { y(2), 0, y(0), -b4} };
 		return J;
 	}
 

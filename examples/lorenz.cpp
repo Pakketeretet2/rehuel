@@ -19,11 +19,11 @@
 ============================================================================= */
 
 /**
-   \file brusselator.cpp
+   \file lorenz.cpp
 
-   \brief This file contains code to solve the Brusselator as example.
+   \brief This file contains code to generate a Lorenz' strange attractor.
 
-   Compile as g++ -O3 -I../ -fopenmp -march=native -lrehuel -larmadillo brusselator.cpp -o brusselator
+   Compile as g++ -O3 -I../ -fopenmp -march=native -lrehuel -larmadillo lorenz.cpp -o lorenz
 */
 
 #include <iostream>
@@ -37,27 +37,36 @@
   It also needs a typedef, jac_type, to indicate whether or not the Jacobi
   matrix is sparse or not. Currently only non-sparse is supported.
 */
-struct brusselator {
-	typedef arma::mat jac_type;
 
-	arma::vec fun( double t, const arma::vec &Y ) const
+struct lorenz {
+	typedef arma::vec vec_type;
+	typedef arma::mat mat_type;
+	typedef mat_type jac_type;
+	
+	lorenz(double sigma = 10, double rho = 28, double beta = 8.0/3.0)
+		: s(sigma), r(rho), b(beta) {}
+
+	vec_type fun(double t, const vec_type &y) const
 	{
-		return { a + Y[0]*Y[0]*Y[1] - b*Y[0] - Y[0],
-		         b*Y[0] - Y[0]*Y[0]*Y[1] };
+		return { s*(y(1) - y(0)),
+		         y(0)*(r - y(2)) - y(1),
+		         y(0)*y(1) - b*y(2)
+		};
 	}
 
-	arma::mat jac( double t, const arma::vec &Y ) const
+	mat_type jac(double t, const vec_type &y) const
 	{
-		return { {2*Y[0]*Y[1] - b - 1.0, Y[0]*Y[0]},
-		         {b - 2*Y[0]*Y[1], -Y[0]*Y[0] } };
+		return { { -s, s, 0 },
+		         { r-y(2), -1.0, -y(0) },
+		         {y(1), y(0), -b}
+		};
 	}
 
-	double a,b;
+	double s, r, b;
 };
 
 
-
-int solve_irk(const std::string &method_str, brusselator &brus,
+int solve_irk(const std::string &method_str, lorenz &l,
               arma::vec Y0, double t0, double t1)
 {
 	newton::options newton_opts;
@@ -65,11 +74,13 @@ int solve_irk(const std::string &method_str, brusselator &brus,
 	solver_opts.newton_opts = &newton_opts;
 	int method = irk::RADAU_IIA_32;
 	method = irk::name_to_method(method_str);
-	irk::rk_output sol = irk::odeint( brus, t0, t1, Y0,
+	irk::rk_output sol = irk::odeint( l, t0, t1, Y0,
 	                                  solver_opts, method );
 
 	std::cerr << "Solved ODE with " << sol.t_vals.size() << " time steps in "
-	          << sol.elapsed_time / 1000.0 << " seconds.\n";
+	          << sol.elapsed_time / 1000.0 << " seconds ("
+	          << sol.t_vals.size()*1000.0/sol.elapsed_time
+	          << " time steps / s).\n";
 	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
 		std::cout << sol.t_vals[i];
 		for( std::size_t j = 0; j < sol.y_vals[i].size(); ++j ){
@@ -82,18 +93,20 @@ int solve_irk(const std::string &method_str, brusselator &brus,
 
 
 
-int solve_erk(const std::string &method_str, brusselator &brus,
+int solve_erk(const std::string &method_str, lorenz &l,
               arma::vec Y0, double t0, double t1)
 {
 	erk::solver_options solver_opts = erk::default_solver_options();
 	int method = erk::CASH_KARP_54;
 	method = erk::name_to_method(method_str);
 	solver_opts.adaptive_step_size = true;
-	erk::rk_output sol = erk::odeint( brus, t0, t1, Y0,
+	erk::rk_output sol = erk::odeint( l, t0, t1, Y0,
 	                                  solver_opts, method );
 	
 	std::cerr << "Solved ODE with " << sol.t_vals.size() << " time steps in "
-	          << sol.elapsed_time / 1000.0 << " seconds.\n";
+	          << sol.elapsed_time / 1000.0 << " seconds ("
+	          << sol.t_vals.size()*1000.0/sol.elapsed_time
+	          << " time steps / s).\n";
 	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
 		std::cout << sol.t_vals[i];
 		for( std::size_t j = 0; j < sol.y_vals[i].size(); ++j ){
@@ -109,12 +122,10 @@ int solve_erk(const std::string &method_str, brusselator &brus,
 int main( int argc, char **argv )
 {
 	double t0 = 0.0;
-	double t1 = 1e4;
-	arma::vec Y0 = { 2.0, 2.0 };
+	double t1 = 1e2;
+	arma::vec Y0 = { 10.0, 1.0, 1.0 };
 
-	brusselator brus;
-	brus.a = 2.0;
-	brus.b = 100.0;
+	lorenz l;
 	std::string method_name = "RADAU_IIA_53";
 	if (argc > 1) {
 		method_name = argv[1];
@@ -122,13 +133,14 @@ int main( int argc, char **argv )
 
 	int method = irk::name_to_method(method_name);
 	if (method) {
-		return solve_irk(method_name, brus, Y0, t0, t1);
+		return solve_irk(method_name, l, Y0, t0, t1);
 	}
 
 	method = erk::name_to_method(method_name);
 	if (method) {
-		return solve_erk(method_name, brus, Y0, t0, t1);
+		return solve_erk(method_name, l, Y0, t0, t1);
 	}
 	
 	return 0;
 }
+
