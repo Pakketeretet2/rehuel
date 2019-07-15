@@ -27,9 +27,9 @@
 #ifndef REHUEL_HPP
 #define REHUEL_HPP
 
-
 #include "enums.hpp"
 #include "irk.hpp"
+#include "erk.hpp"
 
 
 #endif // REHUEL_HPP
