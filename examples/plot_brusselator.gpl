@@ -1,0 +1,6 @@
+# This script plots the output from the brusselator benchmark.
+
+plot 'brusselator_BOGACKI_SHAMPINE_32.dat' u 1:2 w l ti 'Bogacki-Shampine' \
+   , 'brusselator_CASH_KARP_54.dat'        u 1:2 w l ti 'Cash-Karp' \
+   , 'brusselator_RADAU_IIA_137.dat'       u 1:2 w l ti 'Radau 13-7' \
+   , 'brusselator_RADAU_IIA_32.dat'        u 1:2 w l ti 'Radau 3-2'

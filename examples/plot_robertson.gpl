@@ -1,0 +1,11 @@
+# This script plots the output from the brusselator benchmark.
+
+set log xy
+set xrange[1e-4:1e12]
+set yrange[1e-16:1]
+
+plot 'robertson_BOGACKI_SHAMPINE_32.dat' u 1:3 w l ti 'Bogacki-Shampine' \
+   , 'robertson_CASH_KARP_54.dat'        u 1:3 w l ti 'Cash-Karp' \
+   , 'robertson_RADAU_IIA_137.dat'       u 1:3 w l ti 'Radau 13-7' \
+   , 'robertson_RADAU_IIA_53.dat'        u 1:3 w l ti 'Radau 5-3' \
+   , 'robertson_RADAU_IIA_32.dat'        u 1:3 w l ti 'Radau 3-2'

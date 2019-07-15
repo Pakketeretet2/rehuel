@@ -73,11 +73,12 @@ int solve_irk(const std::string &method_str, rober &robertson,
 	newton::options newton_opts;
 	irk::solver_options solver_opts = irk::default_solver_options();
 	solver_opts.newton_opts = &newton_opts;
+	solver_opts.out_interval = 2e6;
 	int method = irk::RADAU_IIA_32;
 	method = irk::name_to_method(method_str);
 	irk::rk_output sol = irk::odeint( robertson, t0, t1, Y0,
 	                                  solver_opts, method );
-
+	
 	std::cerr << "Solved ODE with " << sol.t_vals.size() << " time steps in "
 	          << sol.elapsed_time / 1000.0 << " seconds.\n";
 	for( std::size_t i = 0; i < sol.t_vals.size(); ++i ){
@@ -99,6 +100,7 @@ int solve_erk(const std::string &method_str, rober &robertson,
 	int method = erk::CASH_KARP_54;
 	method = erk::name_to_method(method_str);
 	solver_opts.adaptive_step_size = true;
+		solver_opts.out_interval = 2e6;
 	erk::rk_output sol = erk::odeint( robertson, t0, t1, Y0,
 	                                  solver_opts, method, 1e-8 );
 	
@@ -119,10 +121,10 @@ int solve_erk(const std::string &method_str, rober &robertson,
 int main( int argc, char **argv )
 {
 	double t0 = 0.0;
-	double t1 = 1e4;
-	arma::vec Y0 = { 1.0, 0.0, 0.0 };
+	double t1 = 1e12;
+	arma::vec Y0 = { 0.9, 0.0, 0.0 };
 
-	rober robertson(3e4, 1e1);
+	rober robertson(3e1, 1e0);
 	std::string method_name = "RADAU_IIA_53";
 	if (argc > 1) {
 		method_name = argv[1];

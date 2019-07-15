@@ -29,7 +29,6 @@
 #ifndef ARMA_INCLUDE_HPP
 #define ARMA_INCLUDE_HPP
 
-
 #define ARMA_USE_CXX11
 #define ARMA_USE_LAPACK
 #define ARMA_USE_SUPERLU

@@ -228,7 +228,6 @@ solver_coeffs get_coefficients( int method )
 	sc.FSAL = false;
 	sc.name = method_to_name( method );
 	sc.gamma = 0.0;
-	std::cerr << "Looking up coefficients for method " << method << ".\n";
 
 	switch(method){
 	default:
