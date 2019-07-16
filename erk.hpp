@@ -349,7 +349,8 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			errs[0] = err;
 
 			// ************* Adaptive time step size control: ***********
-			
+			// TODO: This might need optimization geared
+			//       to explicit methods.
 			// Error is too large to tolerate:
 			if (solver_opts.adaptive_step_size && (err >= 1.0)) {
 				integrator_status = 1;
@@ -360,13 +361,12 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			double expt = 1.0 / (1.0 + min_order);
 			double err_inv = 1.0 / err;
 			double scale_27 = std::pow(err_inv, expt);
-			double dt_rat = dts[0] / dts[1];
-			double err_frac = errs[1] / errs[0];
-			if (errs[1] == 0 || errs[0] == 0) {
-				err_frac = 1.0;
-			}
-			double err_rat = std::pow(err_frac, expt);
-			double scale_28 = scale_27 * dt_rat * err_rat;
+			// double dt_rat = dts[0] / dts[1];
+			// double err_frac = errs[1] / errs[0];
+			// if (errs[1] == 0 || errs[0] == 0) {
+			// 	err_frac = 1.0;
+			// }
+			// double err_rat = std::pow(err_frac, expt);
 			double min_scale = scale_27; // std::min(scale_27, scale_28);
 			new_dt = fac * dt * std::min(4.0, min_scale);
 

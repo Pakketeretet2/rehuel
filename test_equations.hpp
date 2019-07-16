@@ -37,6 +37,7 @@ namespace test_equations {
 struct exponential : public functor
 {
 	typedef mat_type jac_type;
+	exponential() : l(1.0) {}
 	explicit exponential( double l ) : l(l) {}
 
 	vec_type sol( double t )
@@ -58,7 +59,7 @@ struct exponential : public functor
 };
 
 
-// Exponential function:
+// Harmonic oscillator function:
 struct harmonic : public functor
 {
 	typedef mat_type jac_type;
@@ -90,6 +91,7 @@ struct harmonic : public functor
 struct vdpol : public functor
 {
 	typedef mat_type jac_type;
+	vdpol() : mu(0.5) {}
 	vdpol( double mu ) : mu(mu){}
 
 	vec_type fun( double t, const vec_type &y )
@@ -118,6 +120,7 @@ struct vdpol : public functor
 struct bruss : public functor
 {
 	typedef mat_type jac_type;
+	bruss() : a(1.0), b(2.5) {}
 	bruss( double a, double b ) : a(a), b(b) {}
 
 	vec_type fun( double t, const vec_type &y )
@@ -151,7 +154,7 @@ struct rober :  public functor {
 	{
 		return { -0.04*y[0] + 1e4 * y[1]*y[2],
 		          0.04*y[0] - 1e4 * y[1]*y[2] - 3e7*y[1]*y[1],
-		                  3e7*y[1]*y[1] };
+		         3e7*y[1]*y[1] };
 	}
 
 
@@ -198,108 +201,6 @@ struct dimer :  public functor  {
 
 	double rate, irate;
 };
-
-
-
-/*
-// 1-dimensional reaction-diffusion model on [x0,x1]
-struct reac_diff :  public functor_sparse_jac {
-	// This represents the equations
-	// dn1/dt = D1*laplace(n1) - 2*C*n1^2 + 2*n2/C
-	// dn2/dt = D2*laplace(n2) + C*n1^2 - n2/C
-	//
-	// with boundary conditions
-	//
-	// n1(x=0)  = 1
-	// n1'(x=1) = 0
-	// n2(x=0)  = 0.5
-	// n2'(x=1) = 0
-
-	typedef sp_mat_type jac_type;
-
-
-	reac_diff( int Nx, double D1, double D2, double rate )
-		: Nx(Nx), D1(D1), D2(D2), rate(rate), irate(1.0/rate),
-		  diff_matrix(2*Nx, 2*Nx), diff_rhs(2*Nx),
-		  dx(1.0/(Nx-1.0)), dx2(dx*dx)
-	{
-		// The n1-part of the Laplace operator.
-		double idx2 = 1.0 * D1 / dx2;
-
-		diff_rhs    = zeros(2*Nx);
-		diff_matrix = zeros(2*Nx,2*Nx);
-
-		// Left side, n1(x=0) = 1.0;
-		// So it starts at x = dt.
-		diff_rhs(0)      =  1.0*D1*idx2;
-		diff_matrix(0,0) = -2.0*D1*idx2;
-		diff_matrix(0,1) =  1.0*D1*idx2;
-
-		for( int i = 1; i < Nx-2; ++i ){
-			diff_matrix(i,i)   = -2.0*D1*idx2;
-			diff_matrix(i,i+1) = D1*idx2;
-			diff_matrix(i,i-1) = D1*idx2;
-		}
-
-		// Right side, n1' = 0.
-		diff_matrix(Nx-1,Nx-1) = -2.0*D1*idx2;
-		diff_matrix(Nx-1,Nx-2) =  2.0*D1*idx2;
-
-		// n2-part of the Laplace operator:
-		diff_rhs(Nx)         =  0.5 * D2 * idx2;
-		diff_matrix(Nx,Nx)   = -2.0 * D2 * idx2;
-		diff_matrix(Nx,Nx+1) =  1.0 * D2 * idx2;
-
-		for( int i = Nx + 1; i < 2*Nx-2; ++i ){
-			diff_matrix(i,i)   = -2.0*D2*idx2;
-			diff_matrix(i,i+1) = D2*idx2;
-			diff_matrix(i,i-1) = D2*idx2;
-		}
-
-		diff_matrix(2*Nx-1, 2*Nx-1) = -2.0*D2*idx2;
-		diff_matrix(2*Nx-1, 2*Nx-2) =  2.0*D2*idx2;
-
-	}
-
-	vec_type fun( double t, const vec_type &y )
-	{
-		vec_type rhs = diff_matrix * y + diff_rhs;
-
-		// rhs.zeros( 2*Nx );
-		// Reaction part:
-		for( int i = 0; i < Nx; ++i ){
-			rhs[i]    += -2*rate*y[i]*y[i] + 2*irate*y[i+Nx];
-			rhs[i+Nx] += rate*y[i]*y[i]    - irate*y[i+Nx];
-		}
-
-		return rhs;
-	}
-
-	jac_type jac( double t, const vec_type &y )
-	{
-		jac_type J = diff_matrix;
-		// J.zeros(2*Nx,2*Nx);
-		// Reaction part:
-		for( int i = 0; i < Nx; ++i ){
-			J(i,i)    = -4*rate*y[i];
-			J(i,i+Nx) =  2*irate;
-
-			J(i+Nx,i)    =  2*rate*y[i];
-			J(i+Nx,i+Nx) = -irate;
-
-		}
-
-
-		return J;
-	}
-
-	int Nx;
-	double D1, D2, rate, irate;
-	jac_type diff_matrix;
-	vec_type diff_rhs;
-	double dx, dx2;
-};
-*/
 
 
 
@@ -354,8 +255,10 @@ struct three_body : public functor
 {
 	typedef mat_type jac_type;
 
+	three_body() : m1(1.0), m2(1.0), m3(1.0), m1r(1.0), m2r(1.0) {}
+	
 	three_body( double m1, double m2, double m3 )
-		: m1r(m1/m3), m2r(m2/m3), m1(m1), m2(m2), m3(m3) {}
+		: m1(m1), m2(m2), m3(m3), m1r(m1/m3), m2r(m2/m3) {}
 
 	virtual vec_type fun( double t, const vec_type &y )
 	{
@@ -556,9 +459,25 @@ struct three_body : public functor
 		return V;
 	}
 
-
-	double m1r, m2r;
+	void set_m1(double new_m1)
+	{
+		m1 = new_m1;
+		m1r = m1/m3;
+	}
+	void set_m2(double new_m2)
+	{
+		m2 = new_m2;
+		m2r = m2/m3;
+	}
+	void set_m3(double new_m3)
+	{
+		m3 = new_m3;
+		m1r = m1 / m3;
+		m2r = m2 / m3;
+	}
+	
 	double m1, m2, m3;
+	double m1r, m2r;
 };
 
 
@@ -595,6 +514,36 @@ struct kinetic_4 : public functor
 	double b2, b3, b4;
 };
 
+
+
+struct lorenz : public functor
+{
+	typedef mat_type jac_type;
+	
+	lorenz(double sigma = 10, double rho = 28, double beta = 8.0/3.0)
+		: s(sigma), r(rho), b(beta) {}
+
+	virtual vec_type fun(double t, const vec_type &y)
+	{
+		return { s*(y(1) - y(0)),
+		         y(0)*(r - y(2)) - y(1),
+		         y(0)*y(1) - b*y(2)
+		};
+	}
+
+	virtual jac_type jac(double t, const vec_type &y)
+	{
+		return { { -s, s, 0 },
+		         { r-y(2), -1.0, -y(0) },
+		         {y(1), y(0), -b}
+		};
+	}
+
+	double s, r, b;
+};
+
+
+	
 
 } // test_equations
 

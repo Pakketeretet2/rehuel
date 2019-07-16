@@ -221,8 +221,8 @@ solver_coeffs get_coefficients( int method )
 	// double sqrt15 = sqrt(15.0);
 
 	// Methods that need adding:
-	// LOBATTO_IIA_{43,86,129},
-	// LOBATTO_IIIC_{43,86,129},
+	// LOBATTO_IIA_{43,85},
+	// LOBATTO_IIIC_{43,85,127},
 	// GAUSS_LEGENDRE_{63,105}
 
 	sc.FSAL = false;
@@ -256,8 +256,7 @@ solver_coeffs get_coefficients( int method )
 		sc.FSAL = true;
 		break;
 
-		// case LOBATTO_IIIA_86:
-		// case LOBATTO_IIIA_129:
+		// case LOBATTO_IIIA_85:
 
 
 	case LOBATTO_IIIC_43:
@@ -273,8 +272,12 @@ solver_coeffs get_coefficients( int method )
 
 		break;
 
-		// case LOBATTO_IIIC_86:
-		// case LOBATTO_IIIC_129:
+	case LOBATTO_IIIC_85:
+		
+		
+		// case LOBATTO_IIIC_127:
+
+		
 
 	case GAUSS_LEGENDRE_42:
 
@@ -464,7 +467,7 @@ solver_coeffs get_coefficients( int method )
 		         0.926945671319741114851873965819682011056,
 		         1 };
 
-
+		
 		sc.gamma =  0.111896465300035075935905337180769194745;
 
 
