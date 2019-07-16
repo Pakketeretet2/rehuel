@@ -654,19 +654,25 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		vec_type delta_y, delta_alt;
 		std::size_t Neq = y.size();
 		double gamma = sc.gamma;
-		delta_y = arma::zeros( Neq );
-		delta_alt = arma::zeros( Neq );
 
-		for( std::size_t i = 0; i < Ns; ++i ){
-			std::size_t i0 = i*Neq;
-			std::size_t i1 = (i+1)*Neq;
-			auto Ki = K_np.subvec( i0, i1 - 1 );
-			delta_y   += sc.b[i]  * Ki;
-			if (solver_opts.adaptive_step_size) {
-				delta_alt += sc.b2[i] * Ki;
-			}
+		// Vectorized version of the loop below:
+		mat_type Ks = arma::reshape(K_np, Neq, Ns);
+		delta_y = Ks*sc.b;
+		if (solver_opts.adaptive_step_size) {
+			delta_alt = Ks*sc.b2;
 		}
-
+		//delta_y = arma::zeros( Neq );
+		//delta_alt = arma::zeros( Neq );
+		//for( std::size_t i = 0; i < Ns; ++i ){
+		//	std::size_t i0 = i*Neq;
+		//	std::size_t i1 = (i+1)*Neq;
+		//	auto Ki = K_np.subvec( i0, i1 - 1 );
+		//	delta_y   += sc.b[i]  * Ki;
+		//	if (solver_opts.adaptive_step_size) {
+		//		delta_alt += sc.b2[i] * Ki;
+		//	}
+		//}
+		
 		vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
 		vec_type y_n    = y + dt*delta_y;
 		vec_type yp     = y + dt*dy_alt;

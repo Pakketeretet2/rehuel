@@ -271,7 +271,7 @@ int solve_three_body(const user_options &u_opts)
 	//            ( p0, p1, p2, p3, p4, p5 )
 	vec_type Y0 = { 1.0, 0.0,  3.0, 2.0,  0.0, 3.0,
 	                0.0, 2.0, -1.0, 0.0, -1.0, 0.0};
-	return int_equation(TB, u_opts, {});
+	return int_equation(TB, u_opts, Y0);
 }
 
 

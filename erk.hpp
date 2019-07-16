@@ -309,20 +309,14 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 		}
 	
 		// ************* Form solution at t + dt: ***********
-		vec_type delta_y   = arma::zeros(Neq);  // Increment to y
-		for (std::size_t i = 0; i < Ns; ++i) {
-			delta_y   += sc.b(i)*Ks.col(i);
-		}
+		vec_type delta_y = Ks*sc.b;
 		vec_type y_n   = y + dt*delta_y;
 		double new_dt = dt;
 		
 		// If you have no adaptive step size, error calculation
 		// might not be very sensible.
 		if (solver_opts.adaptive_step_size) {
-			vec_type delta_alt = arma::zeros(Neq);
-			for (std::size_t i = 0; i < Ns; ++i) {
-				delta_alt += sc.b2(i)*Ks.col(i);
-			}
+			vec_type delta_alt = Ks*sc.b2;
 		
 			// ************* Error estimate: ***********
 			double err_tot = 0.0;
