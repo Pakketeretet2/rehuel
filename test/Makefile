@@ -2,7 +2,7 @@ CC = g++
 FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -march=native \
         -Werror=return-type -Werror=uninitialized -Wall
 
-CATCH2_DIR="/home/stefan/projects/Catch2/single_include/"
+CATCH2_DIR="/home/stefan/projects/Catch2/single_include/catch2/"
 REHUEL_DIR="../"
 TIMER_DIR="../my_timer/"
 
