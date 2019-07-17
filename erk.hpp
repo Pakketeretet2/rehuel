@@ -435,6 +435,32 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
 	return erk_guts(func, t0, t1, y0, solver_opts, dt, sc);
 }
 
+	
+/**
+   \brief Time-integrate a given ODE from t0 to t1, starting at y0.
+
+   This function is supposed to provide a sane "default" explicit solver,
+   à la ode45 in Matlab.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+
+   \returns a struct with the solution and info about the solution quality.
+*/
+template <typename functor_type> inline
+rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
+{
+	solver_coeffs sc = default_solver_options();
+	newton::options n_opts;
+	n_opts.tol = 0.1*std::min(sc.abs_tol, sc.rel_tol);
+	
+	return odeint(func, t0, t1, y0, s_opts);
+}
+
+
+	
 } // namespace erk
 
 

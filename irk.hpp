@@ -435,95 +435,11 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 }
 
 
-/**
-   \brief Integrate ODE from t0 to t1 using a third-order Radau IIA method
-
-   t_vals and y_vals shall be unmodified upon failure.
-
-   \param func         Functor of the ODE to integrate
-   \param t0           Starting time
-   \param t1           Final time
-   \param y0           Initial values
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver.
-
-   \returns an output struct with the solution.
-*/
-template <typename functor_type> inline
-rk_output radau_IIA_32( functor_type &func, double t0, double t1, const vec_type &y0,
-                        const solver_options &solver_opts, double dt = 1e-6 )
-{
-	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_32 );
-
-	assert( strcmp( sc.name, "RADAU_IIA_32" ) == 0 &&
-	        "For some reason get_coefficients returned wrong coeffs!" );
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
-}
-
-
-/**
-   \brief Integrate ODE from t0 to t1 using a fifth-order Radau IIA method
-
-   t_vals and y_vals shall be unmodified upon failure.
-
-   \param func         Functor of the ODE to integrate
-   \param t0           Starting time
-   \param t1           Final time
-   \param y0           Initial values
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver.
-
-   \returns a status code (see \ref odeint_status_codes)
-*/
-template <typename functor_type> inline
-rk_output radau_IIA_53( functor_type &func, double t0, double t1, const vec_type &y0,
-                        const solver_options &solver_opts, double dt = 1e-6 )
-{
-	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_53 );
-	assert( strcmp( sc.name, "RADAU_IIA_53" ) == 0 &&
-	        "For some reason get_coefficients returned wrong coeffs!" );
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-	
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
-}
-
-
-/**
-   \brief Integrate ODE from t0 to t1 using a fifth-order Radau IIA method
-
-   t_vals and y_vals shall be unmodified upon failure.
-
-   \param func         Functor of the ODE to integrate
-   \param t0           Starting time
-   \param t1           Final time
-   \param y0           Initial values
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver.
-
-   \returns a status code (see \ref odeint_status_codes)
-*/
-template <typename functor_type> inline
-rk_output radau_IIA_95( functor_type &func, double t0, double t1, const vec_type &y0,
-                        const solver_options &solver_opts, double dt = 1e-6 )
-{
-	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_95 );
-
-	assert( strcmp( sc.name, "RADAU_IIA_95" ) == 0 &&
-	        "For some reason get_coefficients returned wrong coeffs!" );
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
-}
-
 
 
 
 /**
    \brief Generic time integration function for IRK methods
-
-   t_vals and y_vals shall be unmodified upon failure.
 
    \param func         Functor of the ODE to integrate
    \param t0           Starting time
@@ -844,8 +760,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 /**
    \brief Time-integrate a given ODE from t0 to t1, starting at y0
 
-   t_vals and y_vals shall be unmodified upon failure.
-
    \param func         Functor of the ODE to integrate
    \param t0           Starting time
    \param t1           Final time
@@ -853,7 +767,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
    \param dt           Initial time step size.
    \param solver_opts  Options for the internal solver.
 
-   \returns a status code (see \ref odeint_status_codes)
+   \returns a struct with the solution and info about the solution quality.
 */
 template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
@@ -872,6 +786,29 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
 }
 
 
+
+/**
+   \brief Time-integrate a given ODE from t0 to t1, starting at y0.
+
+   This function is supposed to provide a sane "default" implicit solver,
+   à la ode15s in Matlab.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+
+   \returns a struct with the solution and info about the solution quality.
+*/
+template <typename functor_type> inline
+rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
+{
+	solver_coeffs sc = default_solver_options();
+	newton::options n_opts;
+	n_opts.tol = 0.1*std::min(sc.abs_tol, sc.rel_tol);
+	
+	return odeint(func, t0, t1, y0, s_opts);
+}
 
 } // namespace irk
 
