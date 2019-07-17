@@ -803,9 +803,9 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
 template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 {
-	solver_coeffs sc = default_solver_options();
+	solver_options s_opts = default_solver_options();
 	newton::options n_opts;
-	n_opts.tol = 0.1*std::min(sc.abs_tol, sc.rel_tol);
+	n_opts.tol = 0.1*std::min(s_opts.abs_tol, s_opts.rel_tol);
 	
 	return odeint(func, t0, t1, y0, s_opts);
 }

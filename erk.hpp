@@ -452,7 +452,7 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
 template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 {
-	solver_coeffs sc = default_solver_options();
+	solver_options s_opts = default_solver_options();
 	return odeint(func, t0, t1, y0, s_opts);
 }
 
