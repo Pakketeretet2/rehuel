@@ -136,12 +136,14 @@ struct rk_output
 		counters() : attempt(0), reject_newton(0), reject_err(0),
 		             newton_success(0), newton_incr_diverge(0),
 		             newton_iter_error_too_large(0),
-		             newton_maxit_exceed(0) {}
+		             newton_maxit_exceed(0),
+		             fun_evals(0), jac_evals(0) {}
 
 		std::size_t attempt, reject_newton, reject_err;
 
 		std::size_t newton_success, newton_incr_diverge,
 			newton_iter_error_too_large, newton_maxit_exceed;
+		std::size_t fun_evals, jac_evals;
 	};
 
 	int status;
@@ -335,7 +337,7 @@ mat_type collocation_interpolate_coeffs( const vec_type &c );
 template <typename functor_type> inline
 vec_type construct_F( double t, const vec_type &y, const vec_type &K,
                       double dt, const irk::solver_coeffs &sc,
-                      functor_type &func )
+                      functor_type &func, std::size_t &fun_evals )
 {
 	if (debug) std::cerr << "Constructing F...\n";
 	auto Ns  = sc.b.size();
@@ -350,6 +352,11 @@ vec_type construct_F( double t, const vec_type &y, const vec_type &K,
 
 	const vec_type &c = sc.c;
 	const mat_type &A = sc.A;
+	auto eval_fun = [&func,&fun_evals](double t, const vec_type &Y)
+	                {
+		                ++fun_evals;
+		                return func.fun(t,Y); 
+	                };
 
 	for( unsigned int i = 0; i < Ns; ++i ){
 		double ti = t + dt * c[i];
@@ -365,7 +372,9 @@ vec_type construct_F( double t, const vec_type &y, const vec_type &K,
 		if (debug) std::cerr << "Constructed delta...\n";
 		yi += dt*delta;
 		auto ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
-		vec_type tmp = func.fun( ti, yi );
+		// vec_type tmp = func.fun( ti, yi );
+		vec_type tmp = eval_fun(ti, yi);
+		
 		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
 	}
 	return F;
@@ -388,7 +397,8 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
                                              const vec_type &K,
                                              double dt,
                                              const irk::solver_coeffs &sc,
-                                             functor_type &func )
+                                             functor_type &func,
+                                             std::size_t &jac_evals)
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
@@ -403,6 +413,11 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 	const mat_type &A = sc.A;
 
 	typename functor_type::jac_type J = -arma::eye( NN, NN );
+	auto eval_jac = [&func,&jac_evals](double t, const vec_type &Y)
+	                {
+		                ++jac_evals;
+		                return func.jac(t,Y); 
+	                };
 
 	// i is column, j is row.
 	for( unsigned int i = 0; i < Ns; ++i ){
@@ -413,7 +428,8 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 			unsigned int offset = j*Neq;
 			yi += dt*A(i,j)*K.subvec(offset, offset + Neq-1);
 		}
-		auto Ji = func.jac( ti, yi );
+		//auto Ji = func.jac( ti, yi );
+		auto Ji = eval_jac(ti, yi);
 
 		// j is row.
 		for( unsigned int j = 0; j < Ns; ++j ){
@@ -489,6 +505,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	newton::status newton_stats;
 	long long int step = 0;
 
+	auto eval_fun = [&func,&sol](double t, const vec_type &Y)
+	{
+		++sol.count.fun_evals;
+		return func.fun(t,Y); 
+	};
+
+
 	double dts[3];
 	double errs[3];
 	dts[0] = dts[1] = dts[2] = dt;
@@ -520,12 +543,12 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		int integrator_status = 0;
 
 		// Use newton iteration to find the Ks for the next level:
-		auto stages_func = [&t, &y, &dt, &sc, &func]( const vec_type &K ){
-			return construct_F( t, y, K, dt, sc, func );
+		auto stages_func = [&t, &y, &dt, &sc, &func, &sol]( const vec_type &K ){
+			return construct_F( t, y, K, dt, sc, func, sol.count.fun_evals );
 		};
 
-		auto stages_jac = [&t, &y, &dt, &sc, &func]( const vec_type &K ){
-			return construct_J( t, y, K, dt, sc, func );
+		auto stages_jac = [&t, &y, &dt, &sc, &func, &sol]( const vec_type &K ){
+			return construct_J( t, y, K, dt, sc, func, sol.count.jac_evals );
 		};
 
 		newton::newton_lambda_wrapper<decltype(stages_func),
@@ -589,7 +612,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		//	}
 		//}
 		
-		vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		// vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		vec_type dy_alt = gamma * eval_fun( t, y ) + delta_alt;
 		vec_type y_n    = y + dt*delta_y;
 		vec_type yp     = y + dt*dy_alt;
 		vec_type delta_delta = dy_alt - delta_y;
@@ -606,7 +630,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		// Alternative formula 8.20:
 		if( alternative_error_formula ){
 			// Use the alternative formulation:
-			vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
+			// vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
+			vec_type dy_alt_alt = gamma*eval_fun(t, y + err_est);
 			dy_alt_alt += delta_alt;
 			vec_type err_alt = dy_alt_alt - delta_y;
 			err_est = dt*arma::solve(solve_tmp, err_alt);
@@ -744,7 +769,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 				std::size_t i0 = i*Neq;
 				std::size_t i1 = (i+1)*Neq;
 				double ti = t + dt*ci;
-				K_n.subvec( i0, i1-1 ) = func.fun(ti,Yi);
+				K_n.subvec( i0, i1-1 ) = eval_fun(ti,Yi);
 			}
 		}
 	}

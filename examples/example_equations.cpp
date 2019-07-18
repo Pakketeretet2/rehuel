@@ -179,13 +179,29 @@ void set_erk_options(erk::solver_options &s_opts, const user_options &u_opts)
 }
 
 
+
+void print_fun_jac_counters(const irk::rk_output &sol)
+{
+	std::cerr << sol.count.fun_evals << " function evaluations.\n"
+	          << sol.count.jac_evals << " Jacobi matrix evaluations.\n";
+}
+
+
+void print_fun_jac_counters(const erk::rk_output &sol)
+{
+	std::cerr << sol.count.fun_evals << " function evaluations.\n";
+}
+
+
+
 template <typename rk_output>
 void print_performance(const rk_output &sol)
 {
 	double n_steps = sol.t_vals.size();
-	double elapsed_time, accept_frac;
 	std::cerr << "Solved equation with " << n_steps << " time steps in "
 	          << sol.elapsed_time << " ms.\n";
+	std::cerr << "Accepted " << 100*sol.accept_frac << "% of the steps\n";
+	print_fun_jac_counters(sol);
 }
 
 
@@ -254,7 +270,9 @@ int solve_robertson(const user_options &opts)
 }
 
 
-int solve_three_body(const user_options &u_opts)
+int solve_three_body(const user_options &u_opts,
+                     vec_type Y0 = { 1.0, 0.0,  3.0, 2.0,  0.0, 3.0,
+                                     0.0, 2.0, -1.0, 0.0, -1.0, 0.0})
 {
 	std::cerr << "Solving the three body problem. Both explicit and "
 	          << "implicit methods should work reasonably well, unless "
@@ -267,10 +285,7 @@ int solve_three_body(const user_options &u_opts)
 	TB.set_m1(m1);
 	TB.set_m2(m2);
 	TB.set_m3(m3);
-	// Y contains ( q0, q1, q2, q3, q4, q5,
-	//            ( p0, p1, p2, p3, p4, p5 )
-	vec_type Y0 = { 1.0, 0.0,  3.0, 2.0,  0.0, 3.0,
-	                0.0, 2.0, -1.0, 0.0, -1.0, 0.0};
+
 	return int_equation(TB, u_opts, Y0);
 }
 
@@ -356,10 +371,18 @@ int main(int argc, char **argv)
 		return solve_robertson(u_opts);	
 	} else if (u_opts.eq == "three-body") {
 		return solve_three_body(u_opts);
+	} else if (u_opts.eq == "three-body-resume") {
+		vec_type Y0 = { -161.263, 195.287, -161.26,
+		                195.316, -1940.43, -2519.87,
+		                21.0719, -1.56866, -21.7366,
+		                2.36384, -1.33533, -1.73402 };
+		return solve_three_body(u_opts, Y0);
 	} else if (u_opts.eq == "van-der-pol") {
 		return solve_van_der_pol(u_opts);
 	} else if (u_opts.eq == "brusselator") {
 		return solve_brusselator(u_opts);
+	} else if (u_opts.eq == "lorenz") {
+		return solve_lorenz(u_opts);
 	} else {
 		std::cerr << "Equation \"" << u_opts.eq
 		          << "\" not recognized!\n";
