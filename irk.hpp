@@ -816,7 +816,7 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
    \brief Time-integrate a given ODE from t0 to t1, starting at y0.
 
    This function is supposed to provide a sane "default" implicit solver,
-   à la ode15s in Matlab.
+   a la ode15s in Matlab.
 
    \param func         Functor of the ODE to integrate
    \param t0           Starting time
@@ -834,6 +834,11 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 	
 	return odeint(func, t0, t1, y0, s_opts);
 }
+
+
+
+
+
 
 } // namespace irk
 

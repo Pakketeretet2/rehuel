@@ -1,10 +1,7 @@
-CC = g++
+CC = clang++
 FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -fopenmp -march=native \
         -Werror=return-type -Werror=uninitialized -Wall 
 
-
-MATRIX_VECTOR_DIR = /home/stefan/projects/matrix_vector/
-CATCH2_DIR="/home/stefan/projects/Catch/single_include/catch2"
 REHUEL_DIR="../"
 TIMER_DIR="../my_timer/"
 

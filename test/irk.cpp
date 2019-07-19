@@ -2,10 +2,9 @@
 
 #include "../arma_include.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 #include "irk.hpp"
 #include "test_equations.hpp"
-
 
 
 TEST_CASE( "Test the expansion of polynomial coefficients.", "[poly-expand]" )
@@ -216,7 +215,6 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 	REQUIRE( sol3.y_vals[5](0) == (0.9*0.9*0.9*0.9*0.9) );
 
 	SECTION( "Applied to an aqual ODE." ){
-
 		auto so = default_solver_options();
 		newton::options opts;
 		opts.tol = 0.1*so.rel_tol;
@@ -224,12 +222,14 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 		test_equations::exponential func( -0.4 );
 		so.out_interval = 1;
 		so.newton_opts = &opts;
-		rk_output soltmp1 = irk::radau_IIA_53( func, 0.0, 2.0, Y0, so );
+		std::cerr << "Integrating first leg.\n";
+		rk_output soltmp1 = irk::odeint( func, 0.0, 2.0, Y0, so );
 		std::size_t nsol1 = soltmp1.t_vals.size();
 	        vec_type Y1 = soltmp1.y_vals[nsol1-1];
 		double dt = soltmp1.t_vals[nsol1-1] - soltmp1.t_vals[nsol1-2];
-		rk_output soltmp2 = irk::radau_IIA_53( func, 2.0, 4.0,
-		                                       Y1, so, dt );
+		std::cerr << "Integrating second leg.\n";
+		rk_output soltmp2 = irk::odeint( func, 2.0, 4.0, Y1, so,
+		                                 irk::RADAU_IIA_53, dt );
 
 		auto merge = merge_rk_output( soltmp1, soltmp2 );
 

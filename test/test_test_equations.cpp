@@ -1,6 +1,6 @@
 // This provides some tests for the test equations.
 
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 #include "newton.hpp"
 #include "test_equations.hpp"
