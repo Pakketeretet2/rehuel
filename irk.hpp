@@ -837,9 +837,6 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 
 
 
-
-
-
 } // namespace irk
 
 

@@ -1,5 +1,5 @@
-CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -shared -fPIC -ffinite-math-only -fopenmp -march=native \
+CC = clang++
+FLAGS = -std=c++11 -pedantic -g -O3 -fPIC -ffinite-math-only -fopenmp -march=native \
         -Werror=return-type -Werror=uninitialized -Wall -Werror -Wsign-compare -DDEBUG_OUTPUT
 
 
@@ -7,7 +7,7 @@ LNK = -L./ -larmadillo
 INC = -I./
 
 COMP = $(CC) $(FLAGS) $(INC)
-LINK = $(CC) $(FLAGS) $(INC) $(LNK)
+LINK = $(CC) $(FLAGS) $(INC) $(LNK) -shared
 
 EXE = librehuel.so
 EXT = cpp
