@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -27,9 +27,9 @@
 #ifndef REHUEL_HPP
 #define REHUEL_HPP
 
-
 #include "enums.hpp"
 #include "irk.hpp"
+#include "erk.hpp"
 
 
 #endif // REHUEL_HPP

@@ -63,8 +63,8 @@ int main( int argc, char **argv )
 	so.newton_opts = &newt_opts;
 	so.out_interval = 10000;
 	so.verbose_newton = false;
-	std::vector<int> methods = {
-				     irk::LOBATTO_IIIA_127 };
+	std::vector<int> methods = { irk::RADAU_IIA_53,
+	                             irk::RADAU_IIA_95 };
 	arma::vec y0 = { 1.0 };
 
 	std::vector<std::vector<double> > times( methods.size() );

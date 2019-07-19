@@ -2,7 +2,7 @@
    Rehuel: a simple C++ library for solving ODEs
 
 
-   Copyright 2017, Stefan Paquay (stefanpaquay@gmail.com)
+   Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -28,22 +28,32 @@
 #ifndef IRK_HPP
 #define IRK_HPP
 
-
-
 #include <cassert>
 #include <limits>
 #include <iomanip>
 
-#include "arma_include.hpp"
 #include "enums.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
 
+
 /**
-   \brief Namespace containing functions related to Runge-Kutta methods.
+   \brief Contains functions related to implicit Runge-Kutta methods.
  */
 namespace irk {
+
+	
+#ifdef DEBUG_OUTPUT
+constexpr const bool debug = true;
+#else
+constexpr const bool debug = false;
+#endif // DEBUG_OUTPUT
+
+	
+typedef arma::vec vec_type;
+typedef arma::mat mat_type;
+
 
 /**
    Contains the Butcher tableau plus time step size.
@@ -51,11 +61,11 @@ namespace irk {
 struct solver_coeffs
 {
 	const char *name; ///< Human-friendly name for the method.
-	arma::vec b;      ///< weights for the new y-value
-	arma::vec c;      ///< these set the intermediate time points
-	arma::mat A;      ///< alpha coefficients in Butcher tableau
+	vec_type b;      ///< weights for the new y-value
+	vec_type c;      ///< these set the intermediate time points
+	mat_type A;      ///< alpha coefficients in Butcher tableau
 
-	arma::vec b2; ///< weights for the new y-value of the embedded RK method
+	vec_type b2; ///< weights for the new y-value of the embedded RK method
 
 	int order;   ///< Local convergence order for main method
 	int order2;  ///< Local convergence order for embedded method
@@ -68,7 +78,7 @@ struct solver_coeffs
 	double gamma;
 
 	/// This matrix defines the interpolating polynomial, if available.
-	arma::mat b_interp;
+	mat_type b_interp;
 };
 
 
@@ -108,11 +118,11 @@ struct solver_options : common_solver_options {
 
 
 static std::map<int,std::string> rk_method_to_string = {
-	FOREACH_RK_METHOD(GENERATE_STRING)
+	FOREACH_IRK_METHOD(GENERATE_STRING)
 };
 
 static std::map<std::string,int> rk_string_to_method = {
-	FOREACH_RK_METHOD(GENERATE_MAP)
+	FOREACH_IRK_METHOD(GENERATE_MAP)
 };
 
 
@@ -137,11 +147,11 @@ struct rk_output
 	int status;
 
 	std::vector<double> t_vals;
-	std::vector<arma::vec> y_vals;
-	std::vector<arma::vec> stages;
+	std::vector<vec_type> y_vals;
+	std::vector<vec_type> stages;
 
-	std::vector<arma::vec> err_est;
-	std::vector<double>    err;
+	std::vector<vec_type> err_est;
+	std::vector<double>   err;
 
 	double elapsed_time, accept_frac;
 
@@ -261,7 +271,7 @@ const char *method_to_name( int method );
 
    \returns A vector containing the values { b1(theta), b2(theta)... }.
 */
-arma::vec project_b( double theta, const irk::solver_coeffs &sc );
+vec_type project_b( double theta, const irk::solver_coeffs &sc );
 
 
 /**
@@ -305,7 +315,7 @@ std::ostream &operator<<( std::ostream &o, const coeff_list &c );
 
    \returns The interpolation coefficient matrix.
 */
-arma::mat collocation_interpolate_coeffs( const arma::vec &c );
+mat_type collocation_interpolate_coeffs( const vec_type &c );
 
 
 
@@ -323,34 +333,39 @@ arma::mat collocation_interpolate_coeffs( const arma::vec &c );
    \returns the value for the non-linear system whose root is the new stages.
 */
 template <typename functor_type> inline
-arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
-                       double dt, const irk::solver_coeffs &sc,
-                       functor_type &func )
+vec_type construct_F( double t, const vec_type &y, const vec_type &K,
+                      double dt, const irk::solver_coeffs &sc,
+                      functor_type &func )
 {
+	if (debug) std::cerr << "Constructing F...\n";
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
 	auto NN = Ns*Neq;
 
-	arma::vec F( NN );
-
+	if (debug) std::cerr << "NN = " << NN << ", K.size() is " << K.size() << "\n";
+	vec_type F(NN);
+	if (debug) std::cerr << "Done constructing F...\n";
 	assert( K.size() == NN  && "Size of K is not right!" );
 	assert( y.size() == Neq && "Size of y is not right!" );
 
-	const arma::vec &c = sc.c;
-	const arma::mat &A = sc.A;
+	const vec_type &c = sc.c;
+	const mat_type &A = sc.A;
 
 	for( unsigned int i = 0; i < Ns; ++i ){
 		double ti = t + dt * c[i];
-		arma::vec yi = y;
-		arma::vec delta;
-		delta.zeros( Neq );
+		if (debug) std::cerr << "Constructing yi and delta...\n";
+		vec_type yi = y;
+		vec_type delta = arma::zeros(Neq);
 		for( unsigned int j = 0; j < Ns; ++j ){
 			unsigned int offset = j*Neq;
-			delta += A(i,j) * K.subvec( offset, offset + Neq - 1 );
+			// vec_eigen needs a read-only segment function.
+			//auto K_part = K.segment(offset, offset+Neq);
+			delta += A(i,j) * K.subvec(offset, offset+Neq-1);
 		}
+		if (debug) std::cerr << "Constructed delta...\n";
 		yi += dt*delta;
-		arma::vec ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
-		arma::vec tmp = func.fun( ti, yi );
+		auto ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
+		vec_type tmp = func.fun( ti, yi );
 		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
 	}
 	return F;
@@ -369,8 +384,8 @@ arma::vec construct_F( double t, const arma::vec &y, const arma::vec &K,
    \returns the Jacobi matrix of the non-linear system for the new stages.
 */
 template <typename functor_type> inline
-typename functor_type::jac_type construct_J( double t, const arma::vec &y,
-                                             const arma::vec &K,
+typename functor_type::jac_type construct_J( double t, const vec_type &y,
+                                             const vec_type &K,
                                              double dt,
                                              const irk::solver_coeffs &sc,
                                              functor_type &func )
@@ -379,26 +394,24 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 	auto Neq = y.size();
 	auto NN = Ns*Neq;
 
-	arma::vec F( NN );
+	vec_type F( NN );
 
 	assert( K.size() == NN  && "Size of K is not right!" );
 	assert( y.size() == Neq && "Size of y is not right!" );
 
-	const arma::vec &c = sc.c;
-	const arma::mat &A = sc.A;
+	const vec_type &c = sc.c;
+	const mat_type &A = sc.A;
 
-	typename functor_type::jac_type J( NN, NN );
-	J.eye( NN, NN );
-	J *= -1.0;
+	typename functor_type::jac_type J = -arma::eye( NN, NN );
 
 	// i is column, j is row.
 	for( unsigned int i = 0; i < Ns; ++i ){
 		double ti = t + dt * c[i];
-		arma::vec yi = y;
+		vec_type yi = y;
 
 		for( unsigned int j = 0; j < Ns; ++j ){
 			unsigned int offset = j*Neq;
-			yi += dt * A(i,j) * K.subvec( offset, offset + Neq - 1 );
+			yi += dt*A(i,j)*K.subvec(offset, offset + Neq-1);
 		}
 		auto Ji = func.jac( ti, yi );
 
@@ -408,8 +421,11 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 			// d F(t + ci, y + dt*sum_{k=0}^N-1 (a_{i,k}*k_k)) / d k_j
 			// which is
 			// F(t + ci, y + sum_{k=0}^N-1 (a_{i,k}*k_k))' * a_{i,j}*dt
-			auto Jc = J.submat( i*Neq, j*Neq, i*Neq + Neq - 1,
+			// Armadillo syntax is (from, to)
+			auto Jc = J.submat( i*Neq, j*Neq,
+			                    i*Neq + Neq - 1,
 			                    j*Neq + Neq - 1 );
+			//auto Jc = J.block(i*Neq, j*Neq, Neq, Neq);
 			double a_part = dt * A(i,j);
 			Jc += Ji * a_part;
 		}
@@ -419,96 +435,11 @@ typename functor_type::jac_type construct_J( double t, const arma::vec &y,
 }
 
 
-/**
-   \brief Integrate ODE from t0 to t1 using a third-order Radau IIA method
-
-   t_vals and y_vals shall be unmodified upon failure.
-
-   \param func         Functor of the ODE to integrate
-   \param t0           Starting time
-   \param t1           Final time
-   \param y0           Initial values
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver.
-
-   \returns a status code (see \ref odeint_status_codes)
-*/
-template <typename functor_type> inline
-rk_output radau_IIA_32( functor_type &func, double t0, double t1, const arma::vec &y0,
-                        const solver_options &solver_opts, double dt = 1e-6 )
-{
-	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_32 );
-
-	assert( strcmp( sc.name, "RADAU_IIA_32" ) == 0 &&
-	        "For some reason get_coefficients returned wrong coeffs!" );
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
-}
-
-
-/**
-   \brief Integrate ODE from t0 to t1 using a fifth-order Radau IIA method
-
-   t_vals and y_vals shall be unmodified upon failure.
-
-   \param func         Functor of the ODE to integrate
-   \param t0           Starting time
-   \param t1           Final time
-   \param y0           Initial values
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver.
-
-   \returns a status code (see \ref odeint_status_codes)
-*/
-template <typename functor_type> inline
-rk_output radau_IIA_53( functor_type &func, double t0, double t1, const arma::vec &y0,
-                        const solver_options &solver_opts, double dt = 1e-6 )
-{
-	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_53 );
-
-	assert( strcmp( sc.name, "RADAU_IIA_53" ) == 0 &&
-	        "For some reason get_coefficients returned wrong coeffs!" );
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
-}
-
-
-/**
-   \brief Integrate ODE from t0 to t1 using a fifth-order Radau IIA method
-
-   t_vals and y_vals shall be unmodified upon failure.
-
-   \param func         Functor of the ODE to integrate
-   \param t0           Starting time
-   \param t1           Final time
-   \param y0           Initial values
-   \param sc           Solver coefficients
-   \param solver_opts  Options for the internal solver.
-
-   \returns a status code (see \ref odeint_status_codes)
-*/
-template <typename functor_type> inline
-rk_output radau_IIA_95( functor_type &func, double t0, double t1, const arma::vec &y0,
-                        const solver_options &solver_opts, double dt = 1e-6 )
-{
-	solver_coeffs sc = get_coefficients( irk::RADAU_IIA_95 );
-
-	assert( strcmp( sc.name, "RADAU_IIA_95" ) == 0 &&
-	        "For some reason get_coefficients returned wrong coeffs!" );
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
-}
-
 
 
 
 /**
    \brief Generic time integration function for IRK methods
-
-   t_vals and y_vals shall be unmodified upon failure.
 
    \param func         Functor of the ODE to integrate
    \param t0           Starting time
@@ -520,7 +451,7 @@ rk_output radau_IIA_95( functor_type &func, double t0, double t1, const arma::ve
    \returns a struct that contains status, solution, etc. (see irk::rk_output).
 */
 template <typename functor_type> inline
-rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y0,
+rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0,
                     const solver_options &solver_opts, double dt,
                     const solver_coeffs &sc )
 {
@@ -551,11 +482,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
 
-	arma::vec y  = y0;
-	arma::vec yo = y;
-	arma::vec K_np, K_n;
-	K_np.zeros( N );
-	K_n.zeros( N );
+	vec_type y  = y0;
+	vec_type yo(N);
+	vec_type K_np = arma::zeros(N), K_n = arma::zeros(N);
 
 	newton::status newton_stats;
 	long long int step = 0;
@@ -569,8 +498,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
 	}
 
-	arma::vec err_est;
-	err_est.zeros( y.size() );
+	vec_type err_est = arma::zeros( y.size() );
 
 	sol.t_vals.push_back(t);
 	sol.y_vals.push_back(y);
@@ -579,11 +507,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 	sol.err.push_back( 0.0 );
 
 	bool alternative_error_formula = true;
+	std::size_t min_order = std::min( sc.order, sc.order2 );
 
-	// Make sure you stop exactly at t = t1.
 	while( t < t1 ){
-
 		// ****************  Calculate stages:   ************
+		// Make sure you stop exactly at t = t1.
 		if( t + dt > t1 ){
 			dt = t1 - t;
 		}
@@ -592,11 +520,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		int integrator_status = 0;
 
 		// Use newton iteration to find the Ks for the next level:
-		auto stages_func = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+		auto stages_func = [&t, &y, &dt, &sc, &func]( const vec_type &K ){
 			return construct_F( t, y, K, dt, sc, func );
 		};
 
-		auto stages_jac = [&t, &y, &dt, &sc, &func]( const arma::vec &K ){
+		auto stages_jac = [&t, &y, &dt, &sc, &func]( const vec_type &K ){
 			return construct_J( t, y, K, dt, sc, func );
 		};
 
@@ -608,8 +536,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
 		                               newton_stats,
 		                               !solver_opts.verbose_newton );
-		//K_np = newton::broyden_iterate( nw, K_n, newton_opts,
-		//                                newton_stats );
 		int newton_status = newton_stats.conv_status;
 
 		// *********** Verify Newton iteration convergence ************
@@ -641,41 +567,49 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 
 		// ****************  Construct solution at t + dt   ************
-		arma::vec delta_y, delta_alt;
+		vec_type delta_y, delta_alt;
 		std::size_t Neq = y.size();
 		double gamma = sc.gamma;
-		delta_y.zeros( Neq );
-		delta_alt.zeros( Neq );
 
-		for( std::size_t i = 0; i < Ns; ++i ){
-			std::size_t i0 = i*Neq;
-			std::size_t i1 = (i+1)*Neq - 1;
-			auto Ki = K_np.subvec( i0, i1 );
-			delta_y   += sc.b[i]  * Ki;
-			delta_alt += sc.b2[i] * Ki;
+		// Vectorized version of the loop below:
+		mat_type Ks = arma::reshape(K_np, Neq, Ns);
+		delta_y = Ks*sc.b;
+		if (solver_opts.adaptive_step_size) {
+			delta_alt = Ks*sc.b2;
 		}
-
-		arma::vec dy_alt = gamma * func.fun( t, y ) + delta_alt;
-		arma::vec y_n    = y + dt*delta_y;
-		arma::vec yp     = y + dt*dy_alt;
-		arma::vec delta_delta = dy_alt - delta_y;
+		//delta_y = arma::zeros( Neq );
+		//delta_alt = arma::zeros( Neq );
+		//for( std::size_t i = 0; i < Ns; ++i ){
+		//	std::size_t i0 = i*Neq;
+		//	std::size_t i1 = (i+1)*Neq;
+		//	auto Ki = K_np.subvec( i0, i1 - 1 );
+		//	delta_y   += sc.b[i]  * Ki;
+		//	if (solver_opts.adaptive_step_size) {
+		//		delta_alt += sc.b2[i] * Ki;
+		//	}
+		//}
+		
+		vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		vec_type y_n    = y + dt*delta_y;
+		vec_type yp     = y + dt*dy_alt;
+		vec_type delta_delta = dy_alt - delta_y;
 
 		// **************      Estimate error:    **********************
-		arma::mat I, J0;
-		I.eye(Neq, Neq);
+		mat_type I, J0;
+		I = arma::eye(Neq, Neq);
 		J0 = func.jac( t, y );
 		// Formula 8.19:
-		arma::vec err_8_19 = dt*arma::solve( I - gamma * dt * J0,
-		                                     delta_delta );
+		mat_type solve_tmp = I - gamma*dt*J0;
+		vec_type err_8_19 = dt*arma::solve(solve_tmp, delta_delta);
 		err_est = err_8_19;
 
 		// Alternative formula 8.20:
 		if( alternative_error_formula ){
 			// Use the alternative formulation:
-			arma::vec dy_alt_alt = gamma*func.fun(t, y+err_est);
+			vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
 			dy_alt_alt += delta_alt;
-			arma::vec err_alt = dy_alt_alt - delta_y;
-			err_est = dt*arma::solve( I - gamma*dt*J0, err_alt );
+			vec_type err_alt = dy_alt_alt - delta_y;
+			err_est = dt*arma::solve(solve_tmp, err_alt);
 		}
 
 		double err_tot = 0.0;
@@ -718,7 +652,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
 		fac /= ( newton_opts.maxit + newton_stats.iters );
 
-		double expt = 1.0 / ( 1.0 + std::min( sc.order, sc.order2 ) );
+		double expt = 1.0 / ( 1.0 + min_order );
 		double err_inv = 1.0 / err;
 		double scale_27 = std::pow( err_inv, expt );
 		double dt_rat = dts[0] / dts[1];
@@ -775,7 +709,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 
 		// **************      Actually set the new dt:    **********************
 
-		if( solver_opts.adaptive_step_size ) dt = new_dt;
+		if( solver_opts.adaptive_step_size ) {
+			dt = new_dt;
+		}
 		dts[2] = dts[1];
 		dts[1] = dts[0];
 		dts[0] = dt;
@@ -791,13 +727,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 				double ci = sc.c(i);
 
 				double theta = 1.0 + dt_frac * ci;
-				arma::vec bs = project_b( theta, sc );
+				vec_type bs = project_b( theta, sc );
 
-				arma::vec Yi = yo;
+				vec_type Yi = yo;
 				for( std::size_t j = 0; j < Ns; ++j ){
 					std::size_t j0 = j*Neq;
-					std::size_t j1 = (j+1)*Neq - 1;
-					auto Kj = K_np.subvec( j0, j1 );
+					std::size_t j1 = (j+1)*Neq;
+					auto Kj = K_np.subvec( j0, j1-1 );
 					Yi += dt * bs[j] * Kj;
 				}
 
@@ -806,9 +742,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 				// at this point as an approximation for the
 				// next stage.
 				std::size_t i0 = i*Neq;
-				std::size_t i1 = (i+1)*Neq - 1;
+				std::size_t i1 = (i+1)*Neq;
 				double ti = t + dt*ci;
-				K_n.subvec( i0, i1 ) = func.fun( ti, Yi );
+				K_n.subvec( i0, i1-1 ) = func.fun(ti,Yi);
 			}
 		}
 	}
@@ -824,8 +760,6 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
 /**
    \brief Time-integrate a given ODE from t0 to t1, starting at y0
 
-   t_vals and y_vals shall be unmodified upon failure.
-
    \param func         Functor of the ODE to integrate
    \param t0           Starting time
    \param t1           Final time
@@ -833,21 +767,48 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const arma::vec &y
    \param dt           Initial time step size.
    \param solver_opts  Options for the internal solver.
 
-   \returns a status code (see \ref odeint_status_codes)
+   \returns a struct with the solution and info about the solution quality.
 */
 template <typename functor_type> inline
-rk_output odeint( functor_type &func, double t0, double t1, const arma::vec &y0,
-                  const solver_options &solver_opts,
+rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
+                  solver_options solver_opts,
                   int method = irk::RADAU_IIA_53, double dt = 1e-6 )
 {
 	solver_coeffs sc = get_coefficients( method );
-
+	if (solver_opts.adaptive_step_size && sc.b2.size() == 0) {
+		std::cerr << "    Rehuel: WARNING: Cannot have adaptive time "
+		          << "step with non-embedding method! Disabling "
+		          << "adaptive time step size!\n";
+		solver_opts.adaptive_step_size = false;
+	}
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-
 	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
 }
 
 
+
+/**
+   \brief Time-integrate a given ODE from t0 to t1, starting at y0.
+
+   This function is supposed to provide a sane "default" implicit solver,
+   à la ode15s in Matlab.
+
+   \param func         Functor of the ODE to integrate
+   \param t0           Starting time
+   \param t1           Final time
+   \param y0           Initial values
+
+   \returns a struct with the solution and info about the solution quality.
+*/
+template <typename functor_type> inline
+rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
+{
+	solver_options s_opts = default_solver_options();
+	newton::options n_opts;
+	n_opts.tol = 0.1*std::min(s_opts.abs_tol, s_opts.rel_tol);
+	
+	return odeint(func, t0, t1, y0, s_opts);
+}
 
 } // namespace irk
 

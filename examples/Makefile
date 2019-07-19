@@ -1,20 +1,16 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -fopenmp -march=native \
-        -Werror=return-type -Werror=uninitialized -Wall 
+FLAGS = -O3 -std=c++11 -pedantic -g -fopenmp \
+        -Werror=return-type -Werror=uninitialized -Wall
 
-CATCH2_DIR="/home/stefan/projects/Catch2/single_include/catch2/"
-REHUEL_DIR="../"
-TIMER_DIR="../my_timer/"
-
-LNK = -L./ -larmadillo -lrehuel
-INC = -I./ -I$(TIMER_DIR) -I$(REHUEL_DIR) -I$(CATCH2_DIR) -I$(MATRIX_VECTOR_DIR)
+LNK = -L./ -lrehuel -larmadillo
+INC = -I./ -I../ 
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
 
-EXE = rehuel_test
+EXE = rehuel_example
 EXT = cpp
-SRC = $(wildcard *.$(EXT))
+SRC = example_equations.cpp
 
 # For windows:
 #MAKE_DIR = $(if exist $(1),,mkdir $(1))
