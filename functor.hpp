@@ -34,10 +34,41 @@
 */
 class functor {
 public:
+	/// Provide a typedef for the Jacobi matrix to allow for
+	/// sparse vs. dense matrices.
 	typedef arma::mat jac_type;
 
+	/// Evaluates the RHS of the differential equation.
 	virtual arma::vec fun( double t, const vec_type &y ) = 0;
+	/// Evaluates the Jacobi matrix of the ODE RHS.
 	virtual jac_type jac( double t, const vec_type &y ) = 0;
+
+	/**
+	   \brief calculates the ordinary differential equation's
+	   RHS and Jacobi matrix at the same time. Can be overridden for
+	   efficiency. The default implementation just calls jac and fun.
+
+	   \note This function should satisfy the following code:
+	   \code{
+	   functor F;
+	   arma::vec y0 = <initial conditions>;
+	   F::jac_type J(y0.size(), y0.size());
+	   evaluate(t, y, J) == fun(t,y);
+	   J == jac(t,y);
+	   }
+	   
+	   \param t    Current time
+	   \param y    Current y-vector
+	   \param J    Will contain the Jacobi matrix.
+	   
+	   \returns    The RHS of the ODE
+	*/
+	virtual arma::vec evaluate(double t, const vec_type &y,
+	                           jac_type &J)
+	{
+		J = jac(t, y);
+		return fun(t,y);
+	}
 };
 
 
