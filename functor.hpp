@@ -57,16 +57,17 @@ public:
 	   J == jac(t,y);
 	   }
 	   
-	   \param t    Current time
-	   \param y    Current y-vector
-	   \param J    Will contain the Jacobi matrix.
+	   \param t       Current time
+	   \param y       Current y-vector
+	   \param J       Will contain the Jacobi matrix.
+	   \param calc_J  If false, skip calculating the Jacobi matrix.
 	   
 	   \returns    The RHS of the ODE
 	*/
-	virtual arma::vec evaluate(double t, const vec_type &y,
-	                           jac_type &J)
+	virtual arma::vec compute(double t, const vec_type &y,
+	                          jac_type &J, bool calc_J)
 	{
-		J = jac(t, y);
+		if (calc_J) J = jac(t, y);
 		return fun(t,y);
 	}
 };

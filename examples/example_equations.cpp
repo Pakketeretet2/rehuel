@@ -40,11 +40,13 @@
 struct user_options {
 	user_options() : eq("exponential"), method("LOBATTO_IIIC_85"),
 	                 t0(0.0), t1(10.0), dt(1e-2),
-	                 rel_tol(1e-5), abs_tol(1e-4) {}
+	                 rel_tol(1e-5), abs_tol(1e-4), out_interval(0) {}
 	std::string eq, method;
 
 	double t0, t1, dt;
 	double rel_tol, abs_tol;
+
+	int out_interval;
 };
 
 
@@ -55,7 +57,8 @@ void print_usage()
 	std::cerr << "Usage:\n"
 	          << exe_name << " --equation <equation> --method <method>\n"
 	          << w << " --time-span <t0> <t1> --dt <dt>\n"
-	          << w << " --rel-tol <rtol> --abs-tol <atol>,\n"
+	          << w << " --rel-tol <rtol> --abs-tol <atol>\n"
+	          << w << " --out-interval <interval>,\n"
 	          << "with\n"
 	          << "\t<equation>: Equation to solve. Possible values:\n"
 	          << "\t            values: exponential, stiff-equation,\n"
@@ -68,7 +71,8 @@ void print_usage()
 	          << "\t<dt>        Initial time step size to use. Adaptive\n"
 	          << "\t            integrators change this during integration\n\n"
 	          << "\t<rtol>:     Relative error tolerance for integration\n\n"
-	          << "\t<atol>:     Absolute error tolerance for integration\n\n";
+	          << "\t<atol>:     Absolute error tolerance for integration\n\n"
+	          << "\t<interval>: Output interval.\n\n";
 }
 
 
@@ -123,6 +127,13 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			}
 			u_opts.abs_tol = std::stof(argv[i+1]);
 			i += 2;
+		} else if (arg == "--out-interval") {
+			if (i+1 == argc) {
+				std::cerr << "Option \"" << arg
+				          << "\" needs a value!\n";
+			}
+			u_opts.out_interval = std::stoi(argv[i+1]);
+			i += 2;
 		} else {
 			std::cerr << "Unrecognized arg \"" << arg << "\"!\n";
 			return -1;
@@ -168,6 +179,7 @@ void set_irk_options(irk::solver_options &s_opts, newton::options &n_opts,
 	s_opts.newton_opts = &n_opts;
 	s_opts.rel_tol = u_opts.rel_tol;
 	s_opts.abs_tol = u_opts.abs_tol;
+	s_opts.out_interval = u_opts.out_interval;
 	n_opts.tol = 0.1*std::min(s_opts.rel_tol, s_opts.abs_tol);
 }
 
@@ -176,6 +188,7 @@ void set_erk_options(erk::solver_options &s_opts, const user_options &u_opts)
 {
 	s_opts.rel_tol = u_opts.rel_tol;
 	s_opts.abs_tol = u_opts.abs_tol;
+	s_opts.out_interval = u_opts.out_interval;
 }
 
 
