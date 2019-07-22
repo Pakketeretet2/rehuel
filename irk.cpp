@@ -218,6 +218,7 @@ solver_coeffs get_coefficients( int method )
 	double sqrt3 = sqrt(3.0);
 	// double sqrt5 = sqrt(5.0);
 	double sqrt6 = sqrt(6.0);
+	double sqrt21 = sqrt(21.0);
 	// double sqrt15 = sqrt(15.0);
 
 	// Methods that need adding:
@@ -273,6 +274,41 @@ solver_coeffs get_coefficients( int method )
 		break;
 
 	case LOBATTO_IIIC_85:
+		sc.A = { {1.0/20.0,
+		          -7.0/60.0,
+		          2.0/15.0,
+		          -7.0/60.0,
+		          1.0/20.0},
+
+		         {1.0/20.0,
+		          29.0/180.0,
+		          (47.0  - 15*sqrt21)/315.0,
+		          (203.0 - 30*sqrt21)/1260.0,
+		          -3.0/140.0},
+		         
+		         {1.0/20.0,
+		          (329.0 + 105.0*sqrt21)/2880.0,
+		          73.0/360.0,
+		          (329.0 - 105.0*sqrt21)/2880.0,
+		          3.0/160.0},
+
+		         {1.0/20.0,
+		          (203.0 + 30*sqrt21)/1260.0,
+		          (47+15*sqrt21)/315.0,
+		          29/180.0,
+		          -3/140.0},
+
+		         {1.0/20.0,
+		          49/180.0,
+		          16/45.0,
+		          49/180.0,
+		          1.0/20.0}};
+		sc.c = {0.0, 0.5 - sqrt21/14.0, 0.5, 0.5 + sqrt21/14.0, 1.0};
+		sc.b = {0.05, 49/180.0, 16/45.0, 49/180.0, 0.05};
+
+		// TODO: sc.b2
+		sc.order = 8;
+		// TODO: sc.order2
 		
 		break;
 		// case LOBATTO_IIIC_127:
