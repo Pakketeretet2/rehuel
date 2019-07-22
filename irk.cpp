@@ -274,7 +274,7 @@ solver_coeffs get_coefficients( int method )
 
 	case LOBATTO_IIIC_85:
 		
-		
+		break;
 		// case LOBATTO_IIIC_127:
 
 		

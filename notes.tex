@@ -156,4 +156,91 @@ To find $\bvec{A}_1$ and $\bvec{A}_2$, we apply the initial value $(x,y) = (1,0)
 
 Given a Runge-Kutta method, it is sometimes possible to find a second set of weights $\hat{\bvec{b}}$ in such a way that the approximation $\hat{\bvec{y}} = $
 
+\section{Stability regions}
+
+For a given Runge-Kutta method, the stability region can be determined by applying the method to a
+simple test problem $y' = \lambda y.$
+For a general Runge-Kutta method, the stages are implicitly defined as
+\begin{align*}
+  \begin{pmatrix} \bvec{k}_0 \\
+    \bvec{k}_1 \\
+    \vdots \\
+    \bvec{k}_{N-1} 
+  \end{pmatrix}
+  =& \lambda \begin{pmatrix} \bvec{y}_0 \\
+    \bvec{y}_0 \\
+    \vdots \\
+    \bvec{y}_0
+  \end{pmatrix}
+  + \lambda \Delta t \sum_{j=0}^{N-1} \begin{pmatrix}
+    \alpha_{0j}\bvec{k}_j \\
+    \alpha_{1j}\bvec{k}_j \\
+    \vdots \\
+    \alpha_{(N-1)j}\bvec{k}_j
+  \end{pmatrix} \\
+  =& \lambda \begin{pmatrix} \bvec{y}_0 \\
+    \bvec{y}_0 \\
+    \vdots \\
+    \bvec{y}_0
+  \end{pmatrix} + \lambda \Delta t \begin{pmatrix}
+    \alpha_{00}\bvec{I} &\alpha_{01}\bvec{I} &\hdots &\alpha_{0(N-1)}\bvec{I} \\
+    \alpha_{00}\bvec{I} &\alpha_{1j}\bvec{I} &\hdots &\alpha_{1(N-1)}\bvec{I} \\
+    \vdots & \vdots & \ddots & \vdots \\
+    \alpha_{00}\bvec{I} &\alpha_{(N-1)j}\bvec{I} &\hdots &\alpha_{(N-1)(N-1)}\bvec{I} \\
+  \end{pmatrix} \begin{pmatrix}
+    \bvec{k}_0 \\
+    \bvec{k}_1 \\
+    \vdots \\
+    \bvec{k}_{N-1} 
+  \end{pmatrix}
+\end{align*}
+and hence are given by
+\begin{align*}
+  \left[ \bvec{I}_{MN\times MN} - \lambda \Delta t \begin{pmatrix}
+    \alpha_{00}\bvec{I} &\alpha_{01}\bvec{I} &\hdots &\alpha_{0(N-1)}\bvec{I} \\
+    \alpha_{00}\bvec{I} &\alpha_{1j}\bvec{I} &\hdots &\alpha_{1(N-1)}\bvec{I} \\
+    \vdots & \vdots & \ddots & \vdots \\
+    \alpha_{00}\bvec{I} &\alpha_{(N-1)j}\bvec{I} &\hdots &\alpha_{(N-1)(N-1)}\bvec{I} \\
+  \end{pmatrix}\right] \begin{pmatrix} \bvec{k}_0 \\
+    \bvec{k}_1 \\
+    \vdots \\
+    \bvec{k}_{N-1} 
+  \end{pmatrix} = \lambda
+  \begin{pmatrix}
+    \bvec{y}_0 \\
+    \bvec{y}_0 \\
+    \vdots \\
+    \bvec{y}_0 \\
+  \end{pmatrix},
+\end{align*}
+where $\bvec{I}_{MN\times MN}$ is a $MN$ ny $MN$ identity matrix, as opposed to $\bvec{I}$, which is an $N\times N$ identity matrix, with $M$ the number of equations (1 for our problem) and $N$ the number of stages.
+From the solution of this system the new value of $\bvec{y}$ is computed as
+\begin{equation*}
+  \bvec{y}_1 = \bvec{y}_0 + \Delta t
+  \begin{pmatrix}
+    \vert & \vert & \hdots & \vert \\
+    \bvec{k}_0 & \bvec{k}_1 & \hdots & \bvec{k}_{N-1}\\
+        \vert & \vert & \hdots & \vert \\
+  \end{pmatrix}\begin{pmatrix}
+    b_0 \\
+    b_1 \\
+    \vdots \\
+    b_{N-1}
+  \end{pmatrix}
+\end{equation*}.
+Since we only have one equation, the solution for $\bvec{K} := \left(k_0, k_1, \hdots, k_{N-1}\right)^T$ becomes
+\begin{equation*}
+  \bvec{K} = \lambda \left[ \bvec{I} - \lambda \Delta t \bvec{A}  \right]^{-1}
+  \begin{pmatrix}
+    y_0 \\
+    y_0 \\
+    \vdots \\
+    y_0
+  \end{pmatrix}
+\end{equation*}
+and so
+\begin{equation*}
+  y_1/y_0 = 1 + \lambda \Delta t \left(b_0, b_1, \hdots, b_{N-1}\right)\left[\bvec{I} - \lambda \Delta t \bvec{A}\right]^{-1}\left(1, 1, \hdots, 1\right)^T
+\end{equation*}
+
 \end{document}
