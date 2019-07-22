@@ -310,9 +310,12 @@ solver_coeffs get_coefficients( int method )
 		         0.3214814814814818,
 		         -0.1576509814471765,
 		         0.05458333333333142};
-		sc.gamma = 0.18949720064649575035;
-		sc.order = 8;
+		sc.gamma  = 0.18949720064649575035;
+		sc.order  = 8;
 		sc.order2 = 5;
+
+		sc.b_interp = collocation_interpolate_coeffs( sc.c );
+				
 		
 		break;
 		// case LOBATTO_IIIC_127:
@@ -329,6 +332,8 @@ solver_coeffs get_coefficients( int method )
 		sc.b2= { (3*sqrt3 + 1)/12.0, (7-sqrt3)/12.0, (2-sqrt3)/6.0 };
 		sc.order = 4;
 		sc.order2 = 2;
+
+
 		break;
 
 		// case GAUSS_LEGENDRE_84:
