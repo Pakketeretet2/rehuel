@@ -679,7 +679,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 			
 			double min_scales = std::min( scale_27, scale_28 );
 			// When growing dt, don't grow more than a factor 4:
-			double new_dt = fac * dt * std::min( 4.0, min_scales );
+			new_dt = fac * dt * std::min( 4.0, min_scales );
 			if( solver_opts.max_dt > 0 ){
 				new_dt = std::min( solver_opts.max_dt, new_dt );
 			}
