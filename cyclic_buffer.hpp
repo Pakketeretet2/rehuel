@@ -57,7 +57,13 @@ public:
 	T* data() { return storage_.data(); }
 	const T* data() const { return storage_.data(); }
 
-	bool empty() const { return storage_.empty(); }
+	/**
+	   \brief is the buffer empty?
+	   \returns true if buffer is empty, false otherwise.
+	*/
+	bool empty() const {
+		return storage_.empty();
+	}
 
 	T operator[]( std::size_t i ) const
 	{
@@ -106,10 +112,9 @@ public:
 		period_  = size;
 		current_ = 0;
 	}
-
+	
 	/*
 	max_size
-	resize
 	capacity
 	empty
 	reserve

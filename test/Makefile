@@ -1,12 +1,13 @@
-CC = clang++
+CC = g++
 FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -fopenmp -march=native \
         -Werror=return-type -Werror=uninitialized -Wall 
 
+CATCH_DIR = /home/stefan/projects/Catch/single_include/catch2/
 REHUEL_DIR="../"
 TIMER_DIR="../my_timer/"
 
-LNK = -L./ -larmadillo -lrehuel
-INC = -I./ -I$(TIMER_DIR) -I$(REHUEL_DIR) -I$(CATCH2_DIR) -I$(MATRIX_VECTOR_DIR)
+LNK = -L./ -lrehuel -larmadillo
+INC = -I./ -I$(TIMER_DIR) -I$(REHUEL_DIR) -I$(CATCH_DIR)
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
