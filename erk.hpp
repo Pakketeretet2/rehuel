@@ -37,6 +37,7 @@
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
+#include "output.hpp"
 
 
 
@@ -123,7 +124,7 @@ static std::map<std::string,int> rk_string_to_method = {
    \brief a struct that contains time stamps and stages that can be used for
    constructing the solution all time points in the interval (dense output).
 */
-struct rk_output
+struct rk_output : basic_output
 {
 	struct counters {
 		counters() : attempt(0), reject_err(0), fun_evals(0) {}
@@ -132,10 +133,6 @@ struct rk_output
 		std::size_t fun_evals;
 	};
 
-	int status;
-
-	std::vector<double> t_vals;
-	std::vector<vec_type> y_vals;
 	std::vector<vec_type> stages;
 
 	std::vector<vec_type> err_est;
