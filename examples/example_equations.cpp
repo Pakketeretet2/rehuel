@@ -45,6 +45,7 @@ struct user_options {
 
 	double t0, t1, dt;
 	double rel_tol, abs_tol;
+	bool time_internals;
 };
 
 
@@ -55,7 +56,8 @@ void print_usage()
 	std::cerr << "Usage:\n"
 	          << exe_name << " --equation <equation> --method <method>\n"
 	          << w << " --time-span <t0> <t1> --dt <dt>\n"
-	          << w << " --rel-tol <rtol> --abs-tol <atol>,\n"
+	          << w << " --rel-tol <rtol> --abs-tol <atol>\n"
+	          << w << " --time-internals <0/1>,\n"
 	          << "with\n"
 	          << "\t<equation>: Equation to solve. Possible values:\n"
 	          << "\t            values: exponential, stiff-equation,\n"
@@ -68,7 +70,8 @@ void print_usage()
 	          << "\t<dt>        Initial time step size to use. Adaptive\n"
 	          << "\t            integrators change this during integration\n\n"
 	          << "\t<rtol>:     Relative error tolerance for integration\n\n"
-	          << "\t<atol>:     Absolute error tolerance for integration\n\n";
+	          << "\t<atol>:     Absolute error tolerance for integration\n\n"
+	          << "\t<0/1>:      0 or 1 (for booleans)\n\n";
 }
 
 
@@ -79,11 +82,14 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 	int i = 1;
 	while (i < argc) {
 		std::string arg = argv[i];
-
-		if (arg == "--equation") {
+		if (arg == "-h" || arg == "--help") {
+			print_usage();
+			return 1;
+		} else if (arg == "--equation") {
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.eq = argv[i+1];
 			i += 2;
@@ -91,6 +97,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.method = argv[i+1];
 			i += 2;
@@ -98,6 +105,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+2 >= argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs two values!\n";
+				return -1;
 			}
 			u_opts.t0 = std::stof(argv[i+1]);
 			u_opts.t1 = std::stof(argv[i+2]);
@@ -106,6 +114,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.dt = std::stof(argv[i+1]);
 			i += 2;
@@ -113,6 +122,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.rel_tol = std::stof(argv[i+1]);
 			i += 2;
@@ -120,9 +130,24 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.abs_tol = std::stof(argv[i+1]);
 			i += 2;
+		} else if (arg == "--time-internals") {
+			if (i+1 == argc) {
+				std::cerr << "Option \"" << arg
+				          << "\" needs 0 or 1.\n";
+				return -1;
+			}
+			int val = std::stoi(argv[i+1]);
+			i += 2;
+			if (val != 0 && val != 1) {
+				std::cerr << "Got an ambiguous value for a "
+				          << "bool! Please use 0 or 1 only!\n";
+				return -2;
+			}
+			u_opts.time_internals = val;
 		} else {
 			std::cerr << "Unrecognized arg \"" << arg << "\"!\n";
 			return -1;
@@ -168,6 +193,7 @@ void set_irk_options(irk::solver_options &s_opts, newton::options &n_opts,
 	s_opts.newton_opts = &n_opts;
 	s_opts.rel_tol = u_opts.rel_tol;
 	s_opts.abs_tol = u_opts.abs_tol;
+	s_opts.time_internals = u_opts.time_internals;
 	n_opts.tol = 0.1*std::min(s_opts.rel_tol, s_opts.abs_tol);
 }
 
@@ -176,6 +202,7 @@ void set_erk_options(erk::solver_options &s_opts, const user_options &u_opts)
 {
 	s_opts.rel_tol = u_opts.rel_tol;
 	s_opts.abs_tol = u_opts.abs_tol;
+	s_opts.time_internals = u_opts.time_internals;
 }
 
 
@@ -356,10 +383,12 @@ int main(int argc, char **argv)
 		print_usage();
 		return 3;
 	}
-	
-	if (parse_opts(argc, argv, u_opts)) {
+	int parse_status = parse_opts(argc, argv, u_opts);
+	if (parse_status < 0) {
 		std::cerr << "Error parsing user options!\n";
 		return -1;
+	} else if (parse_status > 0) {
+		return 0;
 	}
 
 	// Determine the equation:

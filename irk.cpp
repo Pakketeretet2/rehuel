@@ -274,11 +274,9 @@ solver_coeffs get_coefficients( int method )
 
 	case LOBATTO_IIIC_85:
 		
+	        
 		
-		// case LOBATTO_IIIC_127:
-
-		
-
+		break;
 	case GAUSS_LEGENDRE_42:
 
 		sc.A = { { 0.25, 0.25 - sqrt3/6.0, 0.0 },
