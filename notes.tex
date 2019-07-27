@@ -133,6 +133,9 @@ which, in ``prettier'' notation, is
   \end{pmatrix} - \bvec{I}
 \end{equation*}
 
+Since we have now deduced a general form for the non-linear function that defines all the stages as well as its Jacobi matrix, we can use Newton iteration to solve the system of equations.
+For explicit methods, we will of course not resort to Newton iteration because the stages can be computed in a single step.
+
 \section{A test case}
 A simple way to test the integrators is to apply them to an ODE whose solution is known.
 We consider
@@ -242,5 +245,62 @@ and so
 \begin{equation*}
   y_1/y_0 = 1 + \lambda \Delta t \left(b_0, b_1, \hdots, b_{N-1}\right)\left[\bvec{I} - \lambda \Delta t \bvec{A}\right]^{-1}\left(1, 1, \hdots, 1\right)^T
 \end{equation*}
+
+\section{General linear methods}
+A generalization to Runge-Kutta methods is the family of so-called general linear methods (GLM).
+They can be thought of as a combination of RK and multistep methods.
+A GLM consists of $s$ stages and $r$ history points. For $r=1$ we recover normal Runge-Kutta methods.
+The $s$ stage points $Y_i,~0<i<s-1$ and stage derivatives $F_i$ are defined as follows:
+\begin{align*}
+  Y_i = \sum_{j=0}^{s-1} a_{ij}\Delta t F_j + \sum_{j=0}^{r-1}u_{ij} y_{n-j}, \qquad F_j := f(t+\Delta t c_i, Y_j).
+\end{align*}
+As one can see, we now have two matrices $\bvec{A} = (a_{ij})$ and $\bvec{U} = (u_{ij})$ that define the stages.
+For the update to the numerical solution we similarly have two vectors $\bvec{b}$ and $\bvec{v}$:
+\begin{align*}
+  y_{n+1} = \sum_{i=0}^{s-1} b_i\Delta t F_i + \sum_{i=0}^{r-1}v_i y_{n-i}.
+\end{align*}
+Applying a GLM to the test problem $f(t,y) = \lambda y$ leads to the following:
+\begin{align*}
+  Y_i =& \sum_{j=0}^{s-1} z a_{ij} Y_j + \sum_{j=0}^{r-1} u_{ij}y_{n-j} \\
+  y_{n+1} =& \sum_{i=0}^{s-1} z b_i Y_i + \sum_{i=0}^{r-1} v_iy_{n-i},
+\end{align*}
+where $z:=\lambda \Delta t.$
+Applying some linear algebra we can write the stage values the following way:
+\begin{align*}
+  \bvec{Y} := \begin{pmatrix}
+    Y_0 \\
+    Y_1 \\
+    Y_2 \\
+    \vdots \\
+    Y_{s-1} 
+  \end{pmatrix} = z \bvec{A} \bvec{Y} + \bvec{U}\begin{pmatrix}
+    y_n \\
+    y_{n-1} \\
+    y_{n-2} \\
+    \vdots \\
+    y_{n-r+1}
+  \end{pmatrix},
+\end{align*}
+which can be compacted into $(\bvec{I} - z \bvec{A})\bvec{Y} = \bvec{U} \bvec{y},$ with $\bvec{y} = (y_n, y_{n-1}, y_{n-2}, \hdots, y_{n-r+1})^T.$
+Thus, for the stage points we simply find
+\begin{equation*}
+  \bvec{Y} = (\bvec{I} - z\bvec{A})^{-1}\bvec{Uy}
+\end{equation*}
+and hence the update becomes
+\begin{equation*}
+  \bvec{y}(t_{n+1}) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}\bvec{Uy} + \bvec{v}\cdot\bvec{y}.
+\end{equation*}
+As a check, consider $\bvec{U}=1$ and $\bvec{v} = 1$ and $r=1,$ in which case we should recover the result for RK methods.
+We see that in this case
+\begin{equation*}
+  \bvec{y}(t_{n+1}) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}\bvec{y}(t_n) + \bvec{y}(t_n).
+\end{equation*}
+If we have $y(t_n) = 1$ and divide by it, we recover the stability function:
+\begin{equation*}
+  y(t_{n+1})/y(t_n) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}(1,1,1,\hdots,1)^T + 1,
+\end{equation*}
+which indeed is the stability function for RK methods.
+
+
 
 \end{document}
