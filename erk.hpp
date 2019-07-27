@@ -37,6 +37,7 @@
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
+#include "output.hpp"
 
 
 
@@ -123,18 +124,15 @@ static std::map<std::string,int> rk_string_to_method = {
    \brief a struct that contains time stamps and stages that can be used for
    constructing the solution all time points in the interval (dense output).
 */
-struct rk_output
+struct rk_output : basic_output
 {
 	struct counters {
-		counters() : attempt(0), reject_err(0) {}
+		counters() : attempt(0), reject_err(0), fun_evals(0) {}
 
 		std::size_t attempt, reject_err;
+		std::size_t fun_evals;
 	};
 
-	int status;
-
-	std::vector<double> t_vals;
-	std::vector<vec_type> y_vals;
 	std::vector<vec_type> stages;
 
 	std::vector<vec_type> err_est;
@@ -222,6 +220,30 @@ const char *method_to_name( int method );
 vec_type project_b( double theta, const erk::solver_coeffs &sc );
 
 
+
+/**
+   \brief Takes stage matrix and assigns the last to the first.
+
+   \param Ks stage matrix
+   \param Ns number of stages.
+*/
+void apply_fsal(mat_type &Ks, std::size_t Ns)
+{
+	Ks.col(0) = std::move(Ks.col(Ns-1));
+}
+
+
+/**
+   \brief Takes stage matrix does nothing.
+
+   \param Ks stage matrix
+   \param Ns number of stages.
+*/
+void no_apply_fsal_dummy(mat_type &Ks, std::size_t Ns)
+{ }
+
+
+
 /**
    \brief Guts of the explicit RK integrator.
    Time-integrates a given ODE from t0 to t1, starting at y0
@@ -289,6 +311,21 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 	// This will keep track of error estimates during integration.
 	std::size_t min_order = std::min( sc.order, sc.order2 );
 
+	// If your method has FSAL, you never have to compute the first stage
+	// after the first step.
+	std::size_t stage_iter_start = 0;
+	auto fsal_hook_fptr = no_apply_fsal_dummy;
+
+	// By wrapping the function call in this lambda, you can more easily
+	// count the number of function evaluations.
+	auto eval_fun = [&func,&sol](double t, const vec_type &Y)
+	                { ++sol.count.fun_evals; return func.fun(t, Y); };
+	if (sc.FSAL) {
+		stage_iter_start = 1;
+		Ks.col(0) = eval_fun(t, y0);
+		fsal_hook_fptr = apply_fsal;
+	}
+
 	while( t < t1 ) {
 		// ****************  Calculate stages:   ************
 		// Make sure you stop exactly at t = t1.
@@ -300,18 +337,18 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 
 		// Formula for explicit stages are
 		// k_i = f(t + ci*dt, y0 + sum_{j=1}^{i-1} A(i,j)*k_j)
-		for (std::size_t i = 0; i < Ns; ++i) {
+		for (std::size_t i = stage_iter_start; i < Ns; ++i) {
 			vec_type tmp = y;
 			for (std::size_t j = 0; j < i; ++j) {
 				tmp += dt*sc.A(i,j)*Ks.col(j);
 			}
-			Ks.col(i) = func.fun(t + sc.c(i)*dt, tmp);
+			Ks.col(i) = eval_fun(t + sc.c(i)*dt, tmp);
 		}
 	
 		// ************* Form solution at t + dt: ***********
 		vec_type delta_y = Ks*sc.b;
-		vec_type y_n   = y + dt*delta_y;
-		double new_dt = dt;
+		vec_type y_n     = y + dt*delta_y;
+		double new_dt    = dt;
 		
 		// If you have no adaptive step size, error calculation
 		// might not be very sensible.
@@ -369,13 +406,14 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			}
 		}
 		
-		// ********************* Update y and time ***************
+		// ********************* Output if user requested **************
 		if (solver_opts.out_interval > 0 &&
 		    (step % solver_opts.out_interval == 0) ) {
 			std::cerr << "    Rehuel: " << step << " " << t
 			          << " " <<  dt << " " << err << "\n";
 		}
 		
+		// ********************* Update y and time ***************
 		if (!solver_opts.adaptive_step_size || integrator_status == 0) {
 			y  = y_n;
 			t += dt;
@@ -387,6 +425,11 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			sol.stages.push_back(arma::vectorise(Ks));
 			sol.err_est.push_back(err_est);
 			sol.err.push_back(err);
+
+			// If you reach here, your new time step has been
+			// accepted and your last stage can now be uesd
+			// as your first stage:
+			fsal_hook_fptr(Ks, Ns);
 		}
 
 		// **************** Set the new time step size. *********************
@@ -440,7 +483,7 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
    \brief Time-integrate a given ODE from t0 to t1, starting at y0.
 
    This function is supposed to provide a sane "default" explicit solver,
-   à la ode45 in Matlab.
+   a la ode45 in Matlab.
 
    \param func         Functor of the ODE to integrate
    \param t0           Starting time

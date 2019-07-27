@@ -1,16 +1,16 @@
 CC = clang++
-FLAGS = -O3 -std=c++11 -pedantic -g -fopenmp \
+FLAGS = -O3 -std=c++11 -pedantic -g \
         -Werror=return-type -Werror=uninitialized -Wall
 
 LNK = -L./ -lrehuel -larmadillo
-INC = -I./ -I../ 
+INC = -I./ -I../
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
 
-EXE = rehuel_example
+EXE = stability_region
 EXT = cpp
-SRC = example_equations.cpp
+SRC = $(wildcard *.$(EXT))
 
 # For windows:
 #MAKE_DIR = $(if exist $(1),,mkdir $(1))

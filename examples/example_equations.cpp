@@ -40,11 +40,14 @@
 struct user_options {
 	user_options() : eq("exponential"), method("LOBATTO_IIIC_85"),
 	                 t0(0.0), t1(10.0), dt(1e-2),
-	                 rel_tol(1e-5), abs_tol(1e-4) {}
+	                 rel_tol(1e-5), abs_tol(1e-4), out_interval(0) {}
 	std::string eq, method;
 
 	double t0, t1, dt;
 	double rel_tol, abs_tol;
+
+	bool time_internals;
+	int out_interval;
 };
 
 
@@ -55,7 +58,8 @@ void print_usage()
 	std::cerr << "Usage:\n"
 	          << exe_name << " --equation <equation> --method <method>\n"
 	          << w << " --time-span <t0> <t1> --dt <dt>\n"
-	          << w << " --rel-tol <rtol> --abs-tol <atol>,\n"
+	          << w << " --rel-tol <rtol> --abs-tol <atol>\n"
+	          << w << " --out-interval <interval> --time-internals <0/1>,\n"
 	          << "with\n"
 	          << "\t<equation>: Equation to solve. Possible values:\n"
 	          << "\t            values: exponential, stiff-equation,\n"
@@ -68,7 +72,9 @@ void print_usage()
 	          << "\t<dt>        Initial time step size to use. Adaptive\n"
 	          << "\t            integrators change this during integration\n\n"
 	          << "\t<rtol>:     Relative error tolerance for integration\n\n"
-	          << "\t<atol>:     Absolute error tolerance for integration\n\n";
+	          << "\t<atol>:     Absolute error tolerance for integration\n\n"
+	          << "\t<interval>: Output interval.\n\n"
+	          << "\t<0/1>:      0 or 1 (for booleans)\n\n";
 }
 
 
@@ -79,11 +85,14 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 	int i = 1;
 	while (i < argc) {
 		std::string arg = argv[i];
-
-		if (arg == "--equation") {
+		if (arg == "-h" || arg == "--help") {
+			print_usage();
+			return 1;
+		} else if (arg == "--equation") {
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.eq = argv[i+1];
 			i += 2;
@@ -91,6 +100,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.method = argv[i+1];
 			i += 2;
@@ -98,6 +108,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+2 >= argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs two values!\n";
+				return -1;
 			}
 			u_opts.t0 = std::stof(argv[i+1]);
 			u_opts.t1 = std::stof(argv[i+2]);
@@ -106,6 +117,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.dt = std::stof(argv[i+1]);
 			i += 2;
@@ -113,6 +125,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.rel_tol = std::stof(argv[i+1]);
 			i += 2;
@@ -120,9 +133,31 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs a value!\n";
+				return -1;
 			}
 			u_opts.abs_tol = std::stof(argv[i+1]);
 			i += 2;
+		} else if (arg == "--out-interval") {
+			if (i+1 == argc) {
+				std::cerr << "Option \"" << arg
+				          << "\" needs a value!\n";
+			}
+			u_opts.out_interval = std::stoi(argv[i+1]);
+			i += 2;
+		} else if (arg == "--time-internals") {
+					if (i+1 == argc) {
+				std::cerr << "Option \"" << arg
+				          << "\" needs 0 or 1.\n";
+				return -1;
+			}
+			int val = std::stoi(argv[i+1]);
+			i += 2;
+			if (val != 0 && val != 1) {
+				std::cerr << "Got an ambiguous value for a "
+				          << "bool! Please use 0 or 1 only!\n";
+				return -2;
+			}
+			u_opts.time_internals = val;
 		} else {
 			std::cerr << "Unrecognized arg \"" << arg << "\"!\n";
 			return -1;
@@ -168,6 +203,8 @@ void set_irk_options(irk::solver_options &s_opts, newton::options &n_opts,
 	s_opts.newton_opts = &n_opts;
 	s_opts.rel_tol = u_opts.rel_tol;
 	s_opts.abs_tol = u_opts.abs_tol;
+	s_opts.out_interval = u_opts.out_interval;
+	s_opts.time_internals = u_opts.time_internals;
 	n_opts.tol = 0.1*std::min(s_opts.rel_tol, s_opts.abs_tol);
 }
 
@@ -176,16 +213,34 @@ void set_erk_options(erk::solver_options &s_opts, const user_options &u_opts)
 {
 	s_opts.rel_tol = u_opts.rel_tol;
 	s_opts.abs_tol = u_opts.abs_tol;
+	s_opts.out_interval = u_opts.out_interval;
+	s_opts.time_internals = u_opts.time_internals;
 }
+
+
+
+void print_fun_jac_counters(const irk::rk_output &sol)
+{
+	std::cerr << sol.count.fun_evals << " function evaluations.\n"
+	          << sol.count.jac_evals << " Jacobi matrix evaluations.\n";
+}
+
+
+void print_fun_jac_counters(const erk::rk_output &sol)
+{
+	std::cerr << sol.count.fun_evals << " function evaluations.\n";
+}
+
 
 
 template <typename rk_output>
 void print_performance(const rk_output &sol)
 {
 	double n_steps = sol.t_vals.size();
-	double elapsed_time, accept_frac;
 	std::cerr << "Solved equation with " << n_steps << " time steps in "
 	          << sol.elapsed_time << " ms.\n";
+	std::cerr << "Accepted " << 100*sol.accept_frac << "% of the steps\n";
+	print_fun_jac_counters(sol);
 }
 
 
@@ -254,7 +309,9 @@ int solve_robertson(const user_options &opts)
 }
 
 
-int solve_three_body(const user_options &u_opts)
+int solve_three_body(const user_options &u_opts,
+                     vec_type Y0 = { 1.0, 0.0,  3.0, 2.0,  0.0, 3.0,
+                                     0.0, 2.0, -1.0, 0.0, -1.0, 0.0})
 {
 	std::cerr << "Solving the three body problem. Both explicit and "
 	          << "implicit methods should work reasonably well, unless "
@@ -267,10 +324,7 @@ int solve_three_body(const user_options &u_opts)
 	TB.set_m1(m1);
 	TB.set_m2(m2);
 	TB.set_m3(m3);
-	// Y contains ( q0, q1, q2, q3, q4, q5,
-	//            ( p0, p1, p2, p3, p4, p5 )
-	vec_type Y0 = { 1.0, 0.0,  3.0, 2.0,  0.0, 3.0,
-	                0.0, 2.0, -1.0, 0.0, -1.0, 0.0};
+
 	return int_equation(TB, u_opts, Y0);
 }
 
@@ -341,10 +395,12 @@ int main(int argc, char **argv)
 		print_usage();
 		return 3;
 	}
-	
-	if (parse_opts(argc, argv, u_opts)) {
+	int parse_status = parse_opts(argc, argv, u_opts);
+	if (parse_status < 0) {
 		std::cerr << "Error parsing user options!\n";
 		return -1;
+	} else if (parse_status > 0) {
+		return 0;
 	}
 
 	// Determine the equation:
@@ -356,10 +412,18 @@ int main(int argc, char **argv)
 		return solve_robertson(u_opts);	
 	} else if (u_opts.eq == "three-body") {
 		return solve_three_body(u_opts);
+	} else if (u_opts.eq == "three-body-resume") {
+		vec_type Y0 = { -161.263, 195.287, -161.26,
+		                195.316, -1940.43, -2519.87,
+		                21.0719, -1.56866, -21.7366,
+		                2.36384, -1.33533, -1.73402 };
+		return solve_three_body(u_opts, Y0);
 	} else if (u_opts.eq == "van-der-pol") {
 		return solve_van_der_pol(u_opts);
 	} else if (u_opts.eq == "brusselator") {
 		return solve_brusselator(u_opts);
+	} else if (u_opts.eq == "lorenz") {
+		return solve_lorenz(u_opts);
 	} else {
 		std::cerr << "Equation \"" << u_opts.eq
 		          << "\" not recognized!\n";

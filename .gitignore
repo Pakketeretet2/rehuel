@@ -1,4 +1,6 @@
 auto
+*.wxmx
+*.orig
 *.dat
 *.*~
 *.so

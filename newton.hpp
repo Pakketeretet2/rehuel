@@ -420,7 +420,6 @@ vec_type newton_iterate_impl( functor_type &func, vec_type x,
 			lambda = 1.0 / (1.0 + res2);
 		}
 
-		// solve_impl might throw.
 		try{
 			if( precondition ){
 				for( std::size_t i = 0; i < N; ++i ){

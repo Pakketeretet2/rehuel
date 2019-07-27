@@ -36,13 +36,19 @@
 #include "my_timer.hpp"
 #include "newton.hpp"
 #include "options.hpp"
+#include "output.hpp"
 
 
 /**
+   \namespace irk
    \brief Contains functions related to implicit Runge-Kutta methods.
  */
 namespace irk {
+/**
+  \addtogroup Integrators
 
+  @{
+*/
 	
 #ifdef DEBUG_OUTPUT
 constexpr const bool debug = true;
@@ -130,26 +136,23 @@ static std::map<std::string,int> rk_string_to_method = {
    \brief a struct that contains time stamps and stages that can be used for
    constructing the solution all time points in the interval (dense output).
 */
-struct rk_output
+struct rk_output : basic_output
 {
 	struct counters {
 		counters() : attempt(0), reject_newton(0), reject_err(0),
 		             newton_success(0), newton_incr_diverge(0),
 		             newton_iter_error_too_large(0),
-		             newton_maxit_exceed(0) {}
+		             newton_maxit_exceed(0),
+		             fun_evals(0), jac_evals(0) {}
 
 		std::size_t attempt, reject_newton, reject_err;
 
 		std::size_t newton_success, newton_incr_diverge,
 			newton_iter_error_too_large, newton_maxit_exceed;
+		std::size_t fun_evals, jac_evals;
 	};
 
-	int status;
-
-	std::vector<double> t_vals;
-	std::vector<vec_type> y_vals;
 	std::vector<vec_type> stages;
-
 	std::vector<vec_type> err_est;
 	std::vector<double>   err;
 
@@ -335,7 +338,7 @@ mat_type collocation_interpolate_coeffs( const vec_type &c );
 template <typename functor_type> inline
 vec_type construct_F( double t, const vec_type &y, const vec_type &K,
                       double dt, const irk::solver_coeffs &sc,
-                      functor_type &func )
+                      functor_type &func, std::size_t &fun_evals )
 {
 	if (debug) std::cerr << "Constructing F...\n";
 	auto Ns  = sc.b.size();
@@ -350,6 +353,11 @@ vec_type construct_F( double t, const vec_type &y, const vec_type &K,
 
 	const vec_type &c = sc.c;
 	const mat_type &A = sc.A;
+	auto eval_fun = [&func,&fun_evals](double t, const vec_type &Y)
+	                {
+		                ++fun_evals;
+		                return func.fun(t,Y); 
+	                };
 
 	for( unsigned int i = 0; i < Ns; ++i ){
 		double ti = t + dt * c[i];
@@ -365,7 +373,9 @@ vec_type construct_F( double t, const vec_type &y, const vec_type &K,
 		if (debug) std::cerr << "Constructed delta...\n";
 		yi += dt*delta;
 		auto ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
-		vec_type tmp = func.fun( ti, yi );
+		// vec_type tmp = func.fun( ti, yi );
+		vec_type tmp = eval_fun(ti, yi);
+		
 		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
 	}
 	return F;
@@ -388,7 +398,8 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
                                              const vec_type &K,
                                              double dt,
                                              const irk::solver_coeffs &sc,
-                                             functor_type &func )
+                                             functor_type &func,
+                                             std::size_t &jac_evals)
 {
 	auto Ns  = sc.b.size();
 	auto Neq = y.size();
@@ -403,6 +414,11 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 	const mat_type &A = sc.A;
 
 	typename functor_type::jac_type J = -arma::eye( NN, NN );
+	auto eval_jac = [&func,&jac_evals](double t, const vec_type &Y)
+	                {
+		                ++jac_evals;
+		                return func.jac(t,Y); 
+	                };
 
 	// i is column, j is row.
 	for( unsigned int i = 0; i < Ns; ++i ){
@@ -413,7 +429,8 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 			unsigned int offset = j*Neq;
 			yi += dt*A(i,j)*K.subvec(offset, offset + Neq-1);
 		}
-		auto Ji = func.jac( ti, yi );
+		//auto Ji = func.jac( ti, yi );
+		auto Ji = eval_jac(ti, yi);
 
 		// j is row.
 		for( unsigned int j = 0; j < Ns; ++j ){
@@ -432,6 +449,34 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 	}
 
 	return J;
+}
+
+
+
+inline void print_timing_breakdown(const std::vector<double> &timings)
+{
+	double total_t = 0.0;
+	for (auto tt : timings) total_t += tt;
+	
+
+	auto print_line = [](double t, double total, const char *txt)
+	                  {
+		                  const char *w = "      ";
+		                  double prct = 100.0*t/total;
+		                  std::cerr << w << txt << std::setw(7) << t
+		                            << " | " << std::setprecision(3)
+		                            << prct << "\n";
+	                  };
+	
+
+	std::cerr << "    Rehuel: IRK done solving, timings (ms | %):\n";
+	print_line(total_t,    total_t, "Total time:                  ");
+	print_line(timings[0], total_t, "Vector setup:                ");
+	print_line(timings[1], total_t, "Stages update:               ");
+	print_line(timings[2], total_t, "Solution update:             ");
+	print_line(timings[3], total_t, "Store solution:              ");
+	print_line(timings[4], total_t, "Error estimate:              ");
+	print_line(timings[5], total_t, "Calculate optimal step:      ");
 }
 
 
@@ -467,7 +512,22 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	          << t0 << ", " << t1 << " ]...\n"
 	          << "            Method = " << sc.name << "\n";
 
+	const bool time_internals = solver_opts.time_internals;
 	my_timer timer;
+	timeval irk_start = timer.get_tic();
+	
+	// This table keeps track of internal timings (in ms):
+	enum timing_entries {
+	                     VECTOR_SETUP = 0,
+	                     UPDATE_STAGES,
+	                     UPDATE_Y,
+	                     STORE_SOL,
+	                     ESTIMATE_ERROR,
+	                     ESTIMATE_DT,
+	                      // Dummy for number of elements:
+	                     N_TIMING_ENTRIES
+	};
+	std::vector<double> timings(N_TIMING_ENTRIES, 0);
 
 	double t = t0;
 	rk_output sol;
@@ -477,20 +537,30 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	assert( dt > 0 && "Cannot use time step size <= 0!" );
 
 	const newton::options &newton_opts = *solver_opts.newton_opts;
-
+	
 	std::size_t Neq = y0.size();
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
 
+	if (time_internals) timer.tic();
 	vec_type y  = y0;
 	vec_type yo(N);
 	vec_type K_np = arma::zeros(N), K_n = arma::zeros(N);
-
+	if (time_internals) timings[VECTOR_SETUP] += timer.toc();
 	newton::status newton_stats;
 	long long int step = 0;
 
+	auto eval_fun = [&func,&sol](double t, const vec_type &Y)
+	{
+		++sol.count.fun_evals;
+		return func.fun(t,Y); 
+	};
+
+
 	double dts[3];
 	double errs[3];
+	double err = 0.0;
+	double new_dt = dt;
 	dts[0] = dts[1] = dts[2] = dt;
 	errs[0] = errs[1] = errs[2] = 0.9;
 
@@ -499,13 +569,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	}
 
 	vec_type err_est = arma::zeros( y.size() );
-
+	if (time_internals) timer.tic();
 	sol.t_vals.push_back(t);
 	sol.y_vals.push_back(y);
 	sol.stages.push_back(K_n);
 	sol.err_est.push_back( err_est );
 	sol.err.push_back( 0.0 );
-
+	if (time_internals) timings[STORE_SOL] += timer.toc();
 	bool alternative_error_formula = true;
 	std::size_t min_order = std::min( sc.order, sc.order2 );
 
@@ -520,23 +590,25 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		int integrator_status = 0;
 
 		// Use newton iteration to find the Ks for the next level:
-		auto stages_func = [&t, &y, &dt, &sc, &func]( const vec_type &K ){
-			return construct_F( t, y, K, dt, sc, func );
+		auto stages_func = [&t, &y, &dt, &sc, &func, &sol]( const vec_type &K ){
+			return construct_F( t, y, K, dt, sc, func, sol.count.fun_evals );
 		};
 
-		auto stages_jac = [&t, &y, &dt, &sc, &func]( const vec_type &K ){
-			return construct_J( t, y, K, dt, sc, func );
+		auto stages_jac = [&t, &y, &dt, &sc, &func, &sol]( const vec_type &K ){
+			return construct_J( t, y, K, dt, sc, func, sol.count.jac_evals );
 		};
 
+		if (time_internals) timer.tic();
 		newton::newton_lambda_wrapper<decltype(stages_func),
 		                              decltype(stages_jac),
 		                              typename functor_type::jac_type>
 			nw( stages_func, stages_jac );
-
+		
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
 		                               newton_stats,
 		                               !solver_opts.verbose_newton );
 		int newton_status = newton_stats.conv_status;
+		if (time_internals) timings[UPDATE_STAGES] += timer.toc();
 
 		// *********** Verify Newton iteration convergence ************
 		if( newton_status != newton::SUCCESS ){
@@ -567,6 +639,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 
 		// ****************  Construct solution at t + dt   ************
+		if (time_internals) timer.tic();
 		vec_type delta_y, delta_alt;
 		std::size_t Neq = y.size();
 		double gamma = sc.gamma;
@@ -589,12 +662,15 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		//	}
 		//}
 		
-		vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		// vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		vec_type dy_alt = gamma * eval_fun( t, y ) + delta_alt;
 		vec_type y_n    = y + dt*delta_y;
 		vec_type yp     = y + dt*dy_alt;
 		vec_type delta_delta = dy_alt - delta_y;
+		if (time_internals) timings[UPDATE_Y] += timer.toc();
 
 		// **************      Estimate error:    **********************
+		if (time_internals) timer.tic();
 		mat_type I, J0;
 		I = arma::eye(Neq, Neq);
 		J0 = func.jac( t, y );
@@ -606,7 +682,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		// Alternative formula 8.20:
 		if( alternative_error_formula ){
 			// Use the alternative formulation:
-			vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
+			// vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
+			vec_type dy_alt_alt = gamma*eval_fun(t, y + err_est);
 			dy_alt_alt += delta_alt;
 			vec_type err_alt = dy_alt_alt - delta_y;
 			err_est = dt*arma::solve(solve_tmp, err_alt);
@@ -628,7 +705,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		}
 
 		assert( err_tot >= 0.0 && "Error cannot be negative!" );
-		double err = std::sqrt( err_tot / n );
+		err = std::sqrt( err_tot / n );
 
 
 		if( err < machine_precision ){
@@ -638,6 +715,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		errs[2] = errs[1];
 		errs[1] = errs[0];
 		errs[0] = err;
+		if (time_internals) timings[ESTIMATE_ERROR] += timer.toc();
 
 		if( solver_opts.adaptive_step_size && (err > 1.0) ){
 			// This is bad.
@@ -648,7 +726,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 
 		// **************      Find new dt:    **********************
-
+		if (time_internals) timer.tic();
 		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
 		fac /= ( newton_opts.maxit + newton_stats.iters );
 
@@ -676,14 +754,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 		double min_scales = std::min( scale_27, scale_28 );
 		// When growing dt, don't grow more than a factor 4:
-		double new_dt = fac * dt * std::min( 4.0, min_scales );
+		new_dt = fac * dt * std::min( 8.0, min_scales );
 		if( solver_opts.max_dt > 0 ){
 			new_dt = std::min( solver_opts.max_dt, new_dt );
 		}
-
+		if (time_internals) timings[ESTIMATE_DT] += timer.toc();
 
 		// **************    Update y and time   ********************
-
 		if( solver_opts.out_interval > 0 &&
 		    (step % solver_opts.out_interval == 0) ){
 			std::cerr  << "    Rehuel: " << step << " " << t
@@ -693,20 +770,27 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 
 		if( !solver_opts.adaptive_step_size || integrator_status == 0 ){
+			if (time_internals) timer.tic();
 			yo = y;
 			y  = y_n;
 			t += dt;
 			++step;
-
+			
+			if (time_internals) {
+				timings[UPDATE_Y] += timer.toc();
+				timer.tic();
+			}
+			
 			sol.t_vals.push_back(t);
 			sol.y_vals.push_back(y_n);
 			sol.stages.push_back(K_np);
 			sol.err_est.push_back( err_est );
 			sol.err.push_back( err );
-
+			if (time_internals) timings[STORE_SOL] += timer.toc();
+			
 			alternative_error_formula = false;
 		}
-
+		
 		// **************      Actually set the new dt:    **********************
 
 		if( solver_opts.adaptive_step_size ) {
@@ -744,14 +828,16 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 				std::size_t i0 = i*Neq;
 				std::size_t i1 = (i+1)*Neq;
 				double ti = t + dt*ci;
-				K_n.subvec( i0, i1-1 ) = func.fun(ti,Yi);
+				K_n.subvec( i0, i1-1 ) = eval_fun(ti,Yi);
 			}
 		}
 	}
 
-	double elapsed = timer.toc();
+	double elapsed = timer.get_elapsed(irk_start);
 	sol.elapsed_time = elapsed;
 	sol.accept_frac = static_cast<double>(step) / sol.count.attempt;
+
+	if (time_internals) print_timing_breakdown(timings);
 
 	return sol;
 }
@@ -791,7 +877,7 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
    \brief Time-integrate a given ODE from t0 to t1, starting at y0.
 
    This function is supposed to provide a sane "default" implicit solver,
-   à la ode15s in Matlab.
+   a la ode15s in Matlab.
 
    \param func         Functor of the ODE to integrate
    \param t0           Starting time
@@ -809,6 +895,11 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 	
 	return odeint(func, t0, t1, y0, s_opts);
 }
+
+/**
+   @}
+*/
+
 
 } // namespace irk
 

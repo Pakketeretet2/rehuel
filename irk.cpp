@@ -218,11 +218,12 @@ solver_coeffs get_coefficients( int method )
 	double sqrt3 = sqrt(3.0);
 	// double sqrt5 = sqrt(5.0);
 	double sqrt6 = sqrt(6.0);
+	double sqrt21 = sqrt(21.0);
 	// double sqrt15 = sqrt(15.0);
 
 	// Methods that need adding:
-	// LOBATTO_IIA_{43,85},
-	// LOBATTO_IIIC_{43,85,127},
+	// LOBATTO_IIIA_85,
+	// LOBATTO_IIIC_127,
 	// GAUSS_LEGENDRE_{63,105}
 
 	sc.FSAL = false;
@@ -273,12 +274,49 @@ solver_coeffs get_coefficients( int method )
 		break;
 
 	case LOBATTO_IIIC_85:
-		
-		
-		// case LOBATTO_IIIC_127:
+		sc.A = { {1.0/20.0,
+		          -7.0/60.0,
+		          2.0/15.0,
+		          -7.0/60.0,
+		          1.0/20.0},
 
-		
+		         {1.0/20.0,
+		          29.0/180.0,
+		          (47.0  - 15*sqrt21)/315.0,
+		          (203.0 - 30*sqrt21)/1260.0,
+		          -3.0/140.0},
+		         
+		         {1.0/20.0,
+		          (329.0 + 105.0*sqrt21)/2880.0,
+		          73.0/360.0,
+		          (329.0 - 105.0*sqrt21)/2880.0,
+		          3.0/160.0},
 
+		         {1.0/20.0,
+		          (203.0 + 30*sqrt21)/1260.0,
+		          (47+15*sqrt21)/315.0,
+		          29/180.0,
+		          -3/140.0},
+
+		         {1.0/20.0,
+		          49/180.0,
+		          16/45.0,
+		          49/180.0,
+		          1.0/20.0}};
+		sc.c  = {0.0, 0.5 - sqrt21/14.0, 0.5, 0.5 + sqrt21/14.0, 1.0};
+		sc.b  = {0.05, 49/180.0, 16/45.0, 49/180.0, 0.05};
+		sc.b2 = {-0.3640805339798258,
+		         0.9561694999656932,
+		         0.3214814814814818,
+		         -0.1576509814471765,
+		         0.05458333333333142};
+		sc.gamma  = 0.18949720064649575035;
+		sc.order  = 8;
+		sc.order2 = 5;
+
+		sc.b_interp = collocation_interpolate_coeffs( sc.c );
+		
+		break;
 	case GAUSS_LEGENDRE_42:
 
 		sc.A = { { 0.25, 0.25 - sqrt3/6.0, 0.0 },
@@ -289,6 +327,8 @@ solver_coeffs get_coefficients( int method )
 		sc.b2= { (3*sqrt3 + 1)/12.0, (7-sqrt3)/12.0, (2-sqrt3)/6.0 };
 		sc.order = 4;
 		sc.order2 = 2;
+
+
 		break;
 
 		// case GAUSS_LEGENDRE_84:
