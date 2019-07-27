@@ -1,5 +1,3 @@
-NOTE: Development of Rehuel moved to Gitlab: https://gitlab.com/Pakketeretet2/rehuel
-
 Rehuel
 ==============
 A simple C++11 library for solving ordinary differential equations.
