@@ -18,20 +18,20 @@ For a quick tutorial/guide, see the guide in \ref guide.dox
 Recommended solvers
 ---------------
 
-<b>Non-stiff:</b> \n
-    DORMAND_PRINCE_54    (A good default explicit RK method (think ode45))\n
+<b>Non-stiff:</b>  
+    DORMAND_PRINCE_54    (A good default explicit RK method (think ode45))  
     CASH_KARP_54         (Ditto, might be optimized later to "fail early"
-                         on moderately stiff systems)\n
-<b>Moderately stiff</b>:\n
+                         on moderately stiff systems)  
+<b>Moderately stiff</b>:  
     It depends really. Try DORMAND_PRINCE_54, and monitor your RAM. If you are
 running out of RAM and/or the solution takes forever, integrate over a
-shorter interval. If the solution still takes too long, try a stiff solver.\n
-<b>Very stiff</b>:\n
-    RADAU_IIA_53     (this should probably be your default stiff solver)\n
-    RADAU_IIA_85     (if you need more strict tolerance or a lot of steps)\n
-    LOBATTO_IIIC_43  (similar to RADAU_IIA_53, but is symplectic)\n
-    LOBATTO_IIIC_85  (similar to RADAU_IIA_85, but solutions are less damped)\n
-\n
+shorter interval. If the solution still takes too long, try a stiff solver.  
+<b>Very stiff</b>:  
+    RADAU_IIA_53     (this should probably be your default stiff solver)  
+    RADAU_IIA_85     (if you need more strict tolerance or a lot of steps)  
+    LOBATTO_IIIC_43  (similar to RADAU_IIA_53, but is symplectic)  
+    LOBATTO_IIIC_85  (similar to RADAU_IIA_85, but solutions are less damped)  
+  
 In examples/example_equations.cpp we provide a small driver program that can
 apply various methods to various problems so you can get a feel for the
 strengths and weaknesses of each method.
