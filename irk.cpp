@@ -222,8 +222,8 @@ solver_coeffs get_coefficients( int method )
 	// double sqrt15 = sqrt(15.0);
 
 	// Methods that need adding:
-	// LOBATTO_IIA_{43,85},
-	// LOBATTO_IIIC_{43,85,127},
+	// LOBATTO_IIIA_85,
+	// LOBATTO_IIIC_127,
 	// GAUSS_LEGENDRE_{63,105}
 
 	sc.FSAL = false;
@@ -315,13 +315,8 @@ solver_coeffs get_coefficients( int method )
 		sc.order2 = 5;
 
 		sc.b_interp = collocation_interpolate_coeffs( sc.c );
-				
 		
 		break;
-		// case LOBATTO_IIIC_127:
-
-		
-
 	case GAUSS_LEGENDRE_42:
 
 		sc.A = { { 0.25, 0.25 - sqrt3/6.0, 0.0 },

@@ -40,10 +40,15 @@
 
 
 /**
+   \namespace irk
    \brief Contains functions related to implicit Runge-Kutta methods.
  */
 namespace irk {
+/**
+  \addtogroup Integrators
 
+  @{
+*/
 	
 #ifdef DEBUG_OUTPUT
 constexpr const bool debug = true;
@@ -448,6 +453,34 @@ typename functor_type::jac_type construct_J( double t, const vec_type &y,
 
 
 
+inline void print_timing_breakdown(const std::vector<double> &timings)
+{
+	double total_t = 0.0;
+	for (auto tt : timings) total_t += tt;
+	
+
+	auto print_line = [](double t, double total, const char *txt)
+	                  {
+		                  const char *w = "      ";
+		                  double prct = 100.0*t/total;
+		                  std::cerr << w << txt << std::setw(7) << t
+		                            << " | " << std::setprecision(3)
+		                            << prct << "\n";
+	                  };
+	
+
+	std::cerr << "    Rehuel: IRK done solving, timings (ms | %):\n";
+	print_line(total_t,    total_t, "Total time:                  ");
+	print_line(timings[0], total_t, "Vector setup:                ");
+	print_line(timings[1], total_t, "Stages update:               ");
+	print_line(timings[2], total_t, "Solution update:             ");
+	print_line(timings[3], total_t, "Store solution:              ");
+	print_line(timings[4], total_t, "Error estimate:              ");
+	print_line(timings[5], total_t, "Calculate optimal step:      ");
+}
+
+
+
 
 
 /**
@@ -479,7 +512,22 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	          << t0 << ", " << t1 << " ]...\n"
 	          << "            Method = " << sc.name << "\n";
 
+	const bool time_internals = solver_opts.time_internals;
 	my_timer timer;
+	timeval irk_start = timer.get_tic();
+	
+	// This table keeps track of internal timings (in ms):
+	enum timing_entries {
+	                     VECTOR_SETUP = 0,
+	                     UPDATE_STAGES,
+	                     UPDATE_Y,
+	                     STORE_SOL,
+	                     ESTIMATE_ERROR,
+	                     ESTIMATE_DT,
+	                      // Dummy for number of elements:
+	                     N_TIMING_ENTRIES
+	};
+	std::vector<double> timings(N_TIMING_ENTRIES, 0);
 
 	double t = t0;
 	rk_output sol;
@@ -489,15 +537,16 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	assert( dt > 0 && "Cannot use time step size <= 0!" );
 
 	const newton::options &newton_opts = *solver_opts.newton_opts;
-
+	
 	std::size_t Neq = y0.size();
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
 
+	if (time_internals) timer.tic();
 	vec_type y  = y0;
 	vec_type yo(N);
 	vec_type K_np = arma::zeros(N), K_n = arma::zeros(N);
-
+	if (time_internals) timings[VECTOR_SETUP] += timer.toc();
 	newton::status newton_stats;
 	long long int step = 0;
 
@@ -520,13 +569,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	}
 
 	vec_type err_est = arma::zeros( y.size() );
-
+	if (time_internals) timer.tic();
 	sol.t_vals.push_back(t);
 	sol.y_vals.push_back(y);
 	sol.stages.push_back(K_n);
 	sol.err_est.push_back( err_est );
 	sol.err.push_back( 0.0 );
-
+	if (time_internals) timings[STORE_SOL] += timer.toc();
 	bool alternative_error_formula = true;
 	std::size_t min_order = std::min( sc.order, sc.order2 );
 
@@ -549,15 +598,17 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 			return construct_J( t, y, K, dt, sc, func, sol.count.jac_evals );
 		};
 
+		if (time_internals) timer.tic();
 		newton::newton_lambda_wrapper<decltype(stages_func),
 		                              decltype(stages_jac),
 		                              typename functor_type::jac_type>
 			nw( stages_func, stages_jac );
-
+		
 		K_np = newton::newton_iterate( nw, K_n, newton_opts,
 		                               newton_stats,
 		                               !solver_opts.verbose_newton );
 		int newton_status = newton_stats.conv_status;
+		if (time_internals) timings[UPDATE_STAGES] += timer.toc();
 
 		// *********** Verify Newton iteration convergence ************
 		if( newton_status != newton::SUCCESS ){
@@ -588,125 +639,158 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 
 		// ****************  Construct solution at t + dt   ************
-		vec_type delta_y, delta_alt, dy_alt;
+		if (time_internals) timer.tic();
+		vec_type delta_y, delta_alt;
 		std::size_t Neq = y.size();
 		double gamma = sc.gamma;
 
 		// Vectorized version of the loop below:
 		mat_type Ks = arma::reshape(K_np, Neq, Ns);
 		delta_y = Ks*sc.b;
-		vec_type y_n    = y + dt*delta_y;
-		
 		if (solver_opts.adaptive_step_size) {
 			delta_alt = Ks*sc.b2;
-			dy_alt = gamma * eval_fun( t, y ) + delta_alt;
-			vec_type yp     = y + dt*dy_alt;
-			vec_type delta_delta = dy_alt - delta_y;
-
-			// **************      Estimate error:    **************
-			mat_type I, J0;
-			I = arma::eye(Neq, Neq);
-			J0 = func.jac( t, y );
-			// Formula 8.19:
-			mat_type solve_tmp = I - gamma*dt*J0;
-			vec_type err_8_19 = dt*arma::solve(solve_tmp, delta_delta);
-			err_est = err_8_19;
-			
-			// Alternative formula 8.20:
-			if( alternative_error_formula ){
-				// Use the alternative formulation:
-				// vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
-				vec_type dy_alt_alt = gamma*eval_fun(t, y + err_est);
-				dy_alt_alt += delta_alt;
-				vec_type err_alt = dy_alt_alt - delta_y;
-				err_est = dt*arma::solve(solve_tmp, err_alt);
-			}
-			
-			double err_tot = 0.0;
-			double n = 0.0;
-			double atol = solver_opts.abs_tol;
-			double rtol = solver_opts.rel_tol;
-			for( std::size_t i = 0; i < err_est.size(); ++i ){
-				double erri = err_est[i];
-				double y0i  = std::fabs( y[i] );
-				double y1i  = std::fabs( y_n[i] );
-				double sci  = atol + rtol * std::max( y0i, y1i );
-				
-				double add = erri / sci;
-				err_tot += add * add;
-				n += 1.0;
-			}
-			
-			assert( err_tot >= 0.0 && "Error cannot be negative!" );
-		        err = std::sqrt( err_tot / n );
-			
-			
-			if( err < machine_precision ){
-				err = machine_precision;
-			}
-			
-			errs[2] = errs[1];
-			errs[1] = errs[0];
-			errs[0] = err;
-			
-			if(err > 1.0){
-				// This is bad.
-				alternative_error_formula = true;
-				integrator_status = 1;
-				sol.count.reject_err++;
-			}
-
-			
-			// **************      Find new dt:    **********************
-			
-			double fac = 0.9 * ( newton_opts.maxit + 1.0 );
-			fac /= ( newton_opts.maxit + newton_stats.iters );
-			
-			double expt = 1.0 / ( 1.0 + min_order );
-			double err_inv = 1.0 / err;
-			double scale_27 = std::pow( err_inv, expt );
-			double dt_rat = dts[0] / dts[1];
-			double err_frac = errs[1] / errs[0];
-			if( errs[1] == 0 || errs[0] == 0 ){
-				err_frac = 1.0;
-			}
-			double err_rat = std::pow( err_frac, expt );
-			double scale_28 = scale_27 * dt_rat * err_rat;
-			
-			double min_scales = std::min( scale_27, scale_28 );
-			// When growing dt, don't grow more than a factor 4:
-			new_dt = fac * dt * std::min( 4.0, min_scales );
-			if( solver_opts.max_dt > 0 ){
-				new_dt = std::min( solver_opts.max_dt, new_dt );
-			}
-			
 		}
+		//delta_y = arma::zeros( Neq );
+		//delta_alt = arma::zeros( Neq );
+		//for( std::size_t i = 0; i < Ns; ++i ){
+		//	std::size_t i0 = i*Neq;
+		//	std::size_t i1 = (i+1)*Neq;
+		//	auto Ki = K_np.subvec( i0, i1 - 1 );
+		//	delta_y   += sc.b[i]  * Ki;
+		//	if (solver_opts.adaptive_step_size) {
+		//		delta_alt += sc.b2[i] * Ki;
+		//	}
+		//}
 		
-		// **************    Update y and time   ********************
+		// vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
+		vec_type dy_alt = gamma * eval_fun( t, y ) + delta_alt;
+		vec_type y_n    = y + dt*delta_y;
+		vec_type yp     = y + dt*dy_alt;
+		vec_type delta_delta = dy_alt - delta_y;
+		if (time_internals) timings[UPDATE_Y] += timer.toc();
 
+		// **************      Estimate error:    **********************
+		if (time_internals) timer.tic();
+		mat_type I, J0;
+		I = arma::eye(Neq, Neq);
+		J0 = func.jac( t, y );
+		// Formula 8.19:
+		mat_type solve_tmp = I - gamma*dt*J0;
+		vec_type err_8_19 = dt*arma::solve(solve_tmp, delta_delta);
+		err_est = err_8_19;
+
+		// Alternative formula 8.20:
+		if( alternative_error_formula ){
+			// Use the alternative formulation:
+			// vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
+			vec_type dy_alt_alt = gamma*eval_fun(t, y + err_est);
+			dy_alt_alt += delta_alt;
+			vec_type err_alt = dy_alt_alt - delta_y;
+			err_est = dt*arma::solve(solve_tmp, err_alt);
+		}
+
+		double err_tot = 0.0;
+		double n = 0.0;
+		double atol = solver_opts.abs_tol;
+		double rtol = solver_opts.rel_tol;
+		for( std::size_t i = 0; i < err_est.size(); ++i ){
+			double erri = err_est[i];
+			double y0i  = std::fabs( y[i] );
+			double y1i  = std::fabs( y_n[i] );
+			double sci  = atol + rtol * std::max( y0i, y1i );
+
+			double add = erri / sci;
+			err_tot += add * add;
+			n += 1.0;
+		}
+
+		assert( err_tot >= 0.0 && "Error cannot be negative!" );
+		err = std::sqrt( err_tot / n );
+
+
+		if( err < machine_precision ){
+			err = machine_precision;
+		}
+
+		errs[2] = errs[1];
+		errs[1] = errs[0];
+		errs[0] = err;
+		if (time_internals) timings[ESTIMATE_ERROR] += timer.toc();
+
+		if( solver_opts.adaptive_step_size && (err > 1.0) ){
+			// This is bad.
+			alternative_error_formula = true;
+			integrator_status = 1;
+			sol.count.reject_err++;
+		}
+
+
+		// **************      Find new dt:    **********************
+		if (time_internals) timer.tic();
+		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
+		fac /= ( newton_opts.maxit + newton_stats.iters );
+
+		double expt = 1.0 / ( 1.0 + min_order );
+		double err_inv = 1.0 / err;
+		double scale_27 = std::pow( err_inv, expt );
+		double dt_rat = dts[0] / dts[1];
+		double err_frac = errs[1] / errs[0];
+		if( errs[1] == 0 || errs[0] == 0 ){
+			err_frac = 1.0;
+		}
+		double err_rat = std::pow( err_frac, expt );
+		double scale_28 = scale_27 * dt_rat * err_rat;
+
+		/*
+		std::cerr << "    Rehuel: Time step controller:\n"
+		          << "            err      = " << err << "\n"
+		          << "            err_inv  = " << err_inv << "\n"
+		          << "            dt_rat   = " << dt_rat << "\n"
+		          << "            err_frac = " << err_frac << "\n"
+		          << "            err_rat  = " << err_rat << "\n"
+		          << "            scale_27 = " << scale_27 << "\n"
+		          << "            scale_28 = " << scale_28 << "\n\n";
+		*/
+
+		double min_scales = std::min( scale_27, scale_28 );
+		// When growing dt, don't grow more than a factor 4:
+		new_dt = fac * dt * std::min( 8.0, min_scales );
+		if( solver_opts.max_dt > 0 ){
+			new_dt = std::min( solver_opts.max_dt, new_dt );
+		}
+		if (time_internals) timings[ESTIMATE_DT] += timer.toc();
+
+		// **************    Update y and time   ********************
 		if( solver_opts.out_interval > 0 &&
 		    (step % solver_opts.out_interval == 0) ){
 			std::cerr  << "    Rehuel: " << step << " " << t
 			           << " " <<  dt << " " << err << " "
 			           << newton_stats.iters << "\n";
 		}
-		
+
 
 		if( !solver_opts.adaptive_step_size || integrator_status == 0 ){
+			if (time_internals) timer.tic();
 			yo = y;
 			y  = y_n;
 			t += dt;
 			++step;
-
+			
+			if (time_internals) {
+				timings[UPDATE_Y] += timer.toc();
+				timer.tic();
+			}
+			
 			sol.t_vals.push_back(t);
 			sol.y_vals.push_back(y_n);
 			sol.stages.push_back(K_np);
 			sol.err_est.push_back( err_est );
 			sol.err.push_back( err );
-
+			if (time_internals) timings[STORE_SOL] += timer.toc();
+			
 			alternative_error_formula = false;
 		}
-
+		
 		// **************      Actually set the new dt:    **********************
 
 		if( solver_opts.adaptive_step_size ) {
@@ -749,9 +833,11 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		}
 	}
 
-	double elapsed = timer.toc();
+	double elapsed = timer.get_elapsed(irk_start);
 	sol.elapsed_time = elapsed;
 	sol.accept_frac = static_cast<double>(step) / sol.count.attempt;
+
+	if (time_internals) print_timing_breakdown(timings);
 
 	return sol;
 }
@@ -810,9 +896,9 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 	return odeint(func, t0, t1, y0, s_opts);
 }
 
-
-
-
+/**
+   @}
+*/
 
 
 } // namespace irk

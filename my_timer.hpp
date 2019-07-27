@@ -41,9 +41,11 @@
 */
 class my_timer_linux {
 public:
+
+	
 	/// Default constructor, no output.
-	my_timer_linux() : out(nullptr), t_tic{0,0}, t_toc{0,0}
-	{ init_tic_toc(); }
+	my_timer_linux() : out(nullptr), t_tic{0,0}
+	{ init(); }
 
 	/**
 	   \brief Constructor that sets an std::ostream for output printing.
@@ -51,8 +53,8 @@ public:
 	   \param out_stream  Print output to here.
 	*/
 	explicit my_timer_linux(std::ostream &out_stream)
-		: out(&out_stream), t_tic{0,0}, t_toc{0,0}
-	{ init_tic_toc(); }
+		: out(&out_stream), t_tic{0,0}
+	{ init(); }
 
 	/// Empty destructor
 	~my_timer_linux(){}
@@ -73,9 +75,7 @@ public:
 	*/
 	double toc( const std::string &msg, const std::string &post )
 	{
-		gettimeofday(&t_toc, nullptr);
-		double diff_msec = (t_toc.tv_usec - t_tic.tv_usec)*1e-3 +
-			(t_toc.tv_sec  - t_tic.tv_sec)*1000.0;
+		double diff_msec = get_elapsed(t_tic);
 		double diff_sec  = diff_msec*1e-3;
 		if( out ){
 			if( !msg.empty() ){
@@ -130,19 +130,35 @@ public:
 	void disable_output()
 	{ out = nullptr; }
 
+	/**
+	   \brief Returns the current "tic" so you can store it.
+	*/
+	timeval get_tic() const { return t_tic; }
+
+
+	/**
+	   \brief Returns the elapsed time (in ms) between given tic and now.
+	*/
+	double get_elapsed(const timeval &user_tic) const
+	{
+		timeval t_toc;
+		gettimeofday(&t_toc, nullptr);
+		
+		return (t_toc.tv_usec - user_tic.tv_usec)*1e-3 +
+			(t_toc.tv_sec  - user_tic.tv_sec)*1000.0;
+	}
+
 
 private:
 	std::ostream *out;  ///< Pointer to the output stream to use
-	timeval t_tic;      ///< The time stamp at which tic was called
-	timeval t_toc;      ///< The time stamp at which toc was called
+	timeval t_tic;      ///< The time stamp at which tic was last called
 
 	/**
-	   \brief Initializes t_tic and t_toc to current time.
+	   \brief Initializes t_tic to current time.
 	*/
-	void init_tic_toc()
+	void init()
 	{
 		gettimeofday(&t_tic, nullptr);
-		gettimeofday(&t_toc, nullptr);
 	}
 
 	/// Deleted copy-constructor
@@ -179,7 +195,7 @@ public:
 	void disable_output() { }
 
 private:
-	// void init_tic_toc() { }
+	// void init() { }
 	my_timer_windows( const my_timer_windows &o ) = delete;
 	my_timer_windows &operator=( const my_timer_windows &o ) = delete;
 };

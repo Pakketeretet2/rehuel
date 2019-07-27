@@ -50,9 +50,10 @@ struct common_solver_options
 		: internal_solver(NEWTON),
 		  rel_tol(1e-5),
 		  abs_tol(10*rel_tol),
-		  max_dt( 0.0 ),
-		  newton_opts( nullptr ),
-		  out_interval( 0 )
+		  max_dt(0.0),
+		  newton_opts(nullptr),
+		  out_interval(0),
+		  time_internals(false)
 	{ }
 
 	~common_solver_options()
@@ -74,6 +75,9 @@ struct common_solver_options
 
 	/// Output interval for error and step:
 	int out_interval;
+
+	/// Keep track of the timings of various parts in solver?
+	bool time_internals;
 };
 
 

@@ -1,4 +1,4 @@
-CC = g++
+CC = clang++
 FLAGS = -O3 -std=c++11 -pedantic -g -fopenmp \
         -Werror=return-type -Werror=uninitialized -Wall
 
