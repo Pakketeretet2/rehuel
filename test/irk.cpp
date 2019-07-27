@@ -224,11 +224,11 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 		test_equations::exponential func( -0.4 );
 		so.out_interval = 1;
 		so.newton_opts = &opts;
-		rk_output soltmp1 = irk::radau_IIA_53( func, 0.0, 2.0, Y0, so );
+		rk_output soltmp1 = irk::odeint( func, 0.0, 2.0, Y0, so );
 		std::size_t nsol1 = soltmp1.t_vals.size();
 	        vec_type Y1 = soltmp1.y_vals[nsol1-1];
 		double dt = soltmp1.t_vals[nsol1-1] - soltmp1.t_vals[nsol1-2];
-		rk_output soltmp2 = irk::radau_IIA_53( func, 2.0, 4.0,
+		rk_output soltmp2 = irk::odeint( func, 2.0, 4.0,
 		                                       Y1, so, dt );
 
 		auto merge = merge_rk_output( soltmp1, soltmp2 );
