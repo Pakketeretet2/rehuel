@@ -264,8 +264,12 @@ TEST_CASE("Calculate stages for the robertson problem.", "[irk_calc_stages]")
 	auto NN  = Ns*Neq;
 	arma::mat J(Neq, Neq);
 	vec_type Y(NN);
+
+	int refresh_jac = 25;
+	std::size_t fun_calls = 0, jac_calls = 0;
 	int status = irk::newton_solve_stages(r, y, t, dt, sc, maxit,
-	                                      xtol, Rtol, Y, J, stats);
+	                                      refresh_jac, xtol, Rtol, Y, J,
+	                                      stats, fun_calls, jac_calls);
 	std::cerr << "Y = " << Y << "\n";
 	std::cerr << "Status was " << status << "\n";
 

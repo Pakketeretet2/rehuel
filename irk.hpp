@@ -385,9 +385,11 @@ void construct_R(functor_type &func,
 */
 template <typename functor_type> inline
 int newton_solve_stages(functor_type &func, const vec_type &y, double t,
-                        double dt, const solver_coeffs &sc, int maxit,
+                        double dt, const solver_coeffs &sc,
+                        int maxit, int refresh_jac,
                         double xtol, double Rtol, vec_type &Y, mat_type &J,
-                        newton::status &stats)
+                        newton::status &stats,
+                        std::size_t &fun_evals, std::size_t &jac_evals)
 {
 	std::size_t Neq = y.size();
 	std::size_t Ns  = sc.b.size();
@@ -395,36 +397,42 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 	
 	mat_type I_neq   = arma::eye(Neq, Neq);
 
-	J = func.jac(t,y);
-	mat_type J_Y = arma::eye(NN,NN);
-
-	assert(J_Y.n_cols == NN && "n_cols in J_Y inconsistent!");
-	assert(J_Y.n_rows == NN && "n_rows in J_Y inconsistent!");
 
 	// Construct the initial system:
 	Y = arma::zeros(NN);
-	J_Y -= dt*kron(sc.A,J);
 
-	// Since we re-use the same Jacobi matrix,
-	// pre-construct the LU decomposition:
+	// Jacobi matrix:
+	// Idea: Refresh Jacobi matrix after every so many iterations.
+	mat_type J_Y;
 	mat_type L, U, P;
-	my_timer timer;
-	assert(arma::lu(L,U,P, J_Y) &&
-	       "LU decomposition of Jacobi matrix failed!");
-	timer.toc("LU decomposing Jacobi matrix.");
+
+	auto refresh_jacobi_matrix =
+		[&func, &J, &J_Y, NN, &L, &U, &P, t, dt, y, sc, &jac_evals]()
+		{
+			J = func.jac(t,y);
+			J_Y = arma::eye(NN,NN);	
+			J_Y -= dt*kron(sc.A,J);
+			
+			// Since we re-use the same Jacobi matrix,
+			// pre-construct the LU decomposition:
+			assert(arma::lu(L,U,P, J_Y) &&
+			       "LU decomposition of Jacobi matrix failed!");
+			++jac_evals;
+		};
+	
+	refresh_jacobi_matrix();
 	
 	// Start iterating:
 	double xtol2 = xtol*xtol;
 	double Rtol2 = Rtol*Rtol;
 	vec_type R(Y.size());
 	construct_R(func, y, t, dt, sc, Y, I_neq, R);
+	fun_evals += Ns;
 	double Rnorm2 = arma::dot(R,R);
 	double step = 1.0 / sqrt(1.0 + Rnorm2);
 	double xnorm2_o = 0;
 	double xnorm2   = 0;
 	
-	timer.tic();
-
 	int status = newton::MAXIT_EXCEEDED;
 	stats.iters = 1;
 	for ( ; stats.iters < maxit; ++stats.iters) {
@@ -440,6 +448,8 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 		
 		Y += step*dY;
 		construct_R(func, y, t, dt, sc, Y, I_neq, R);
+		
+		fun_evals += Ns;
 		Rnorm2 = arma::dot(R,R);
 		if (Rnorm2 < Rtol2) {
 			status = newton::SUCCESS;
@@ -450,6 +460,10 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 			break;
 		}
 		step = 1.0 / sqrt(1.0 + Rnorm2);
+
+		if (stats.iters % refresh_jac == 0) {
+			refresh_jacobi_matrix();
+		}
 	}
 	stats.res = Rnorm2;
 	stats.conv_status = status;
@@ -573,14 +587,16 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		int integrator_status = 0;
 		
 		// Use newton iteration to find the Ks for the next level:
+
 		int newton_status = newton_solve_stages(func, y, t, dt, sc,
 		                                        newton_opts.maxit,
-		                                        xtol, Rtol,
-		                                        Y, J, newton_stats );
-		// Each call to newton solve is 1 jacobi evaluation and
-		// Ns*newton.iters function calls.
-		sol.count.jac_evals++;
-		sol.count.fun_evals += Ns*newton_stats.iters;
+		                                        newton_opts.refresh_jac,
+		                                        xtol, Rtol, Y, J,
+		                                        newton_stats,
+		                                        sol.count.fun_evals,
+		                                        sol.count.jac_evals);
+
+
 		
 		if (time_internals) timings[UPDATE_STAGES] += timer.toc();
 

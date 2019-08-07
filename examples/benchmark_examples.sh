@@ -30,5 +30,5 @@ done
 for METHOD in RADAU_IIA_53 RADAU_IIA_95 RADAU_IIA_137 LOBATTO_IIIC_43 LOBATTO_IIIC_85;
 do
 	OUTPUT=$OUTPUT_DIR"/robertson_"$METHOD".dat"
-	./rehuel_example --method $METHOD --equation robertson --timespan 0 1e12 > $OUTPUT
+	./rehuel_example --method $METHOD --equation robertson --time-span 0 1e12 > $OUTPUT
 done
