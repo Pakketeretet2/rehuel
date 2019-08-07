@@ -1,0 +1,14 @@
+\page guide.dox
+
+
+This is a short tutorial on how to use Rehuel in your C++ project.
+
+This should have a \f$ formula \f$.
+
+\f$(x_1,y_1)\f$ and \f$(x_2,y_2)\f$
+            
+Suppose you want to integrate the Van der Pol oscillator:  
+
+\f[ y' = w \\
+  w' = \mu (1 - y^2)w + y
+\f]
