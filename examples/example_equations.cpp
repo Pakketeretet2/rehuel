@@ -332,7 +332,7 @@ int solve_three_body(const user_options &u_opts,
 int solve_van_der_pol(const user_options &opts)
 {
 	std::cerr << "Solving the Van der Pol oscillator. It has a limit cycle "
-	          << "for mu > 0. For very large mu the equation is stiff.\n";
+	          << "for mu > 0. For very small mu the equation is stiff.\n";
 	test_equations::vdpol V;
 	read_param("mu", "Van der Pol", V.mu);
 	return int_equation(V, opts, {2.0, 0.0});

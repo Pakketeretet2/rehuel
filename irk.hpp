@@ -47,7 +47,6 @@ namespace irk {
 /**
   \addtogroup Integrators
 
-  @{
 */
 	
 #ifdef DEBUG_OUTPUT
@@ -323,135 +322,6 @@ mat_type collocation_interpolate_coeffs( const vec_type &c );
 
 
 
-/**
-   \brief Constructs a non-linear system the stages have to satisfy.
-
-   \param t    Current time
-   \param y    Current solution to the ODE at t
-   \param K    Initial guess for the stages
-   \param sc   Solver coefficients
-   \param fun  The RHS of the ODE
-   \param jac  The Jacobian of the RHS of the ODE.
-
-   \returns the value for the non-linear system whose root is the new stages.
-*/
-template <typename functor_type> inline
-vec_type construct_F( double t, const vec_type &y, const vec_type &K,
-                      double dt, const irk::solver_coeffs &sc,
-                      functor_type &func, std::size_t &fun_evals )
-{
-	if (debug) std::cerr << "Constructing F...\n";
-	auto Ns  = sc.b.size();
-	auto Neq = y.size();
-	auto NN = Ns*Neq;
-
-	if (debug) std::cerr << "NN = " << NN << ", K.size() is " << K.size() << "\n";
-	vec_type F(NN);
-	if (debug) std::cerr << "Done constructing F...\n";
-	assert( K.size() == NN  && "Size of K is not right!" );
-	assert( y.size() == Neq && "Size of y is not right!" );
-
-	const vec_type &c = sc.c;
-	const mat_type &A = sc.A;
-	auto eval_fun = [&func,&fun_evals](double t, const vec_type &Y)
-	                {
-		                ++fun_evals;
-		                return func.fun(t,Y); 
-	                };
-
-	for( unsigned int i = 0; i < Ns; ++i ){
-		double ti = t + dt * c[i];
-		if (debug) std::cerr << "Constructing yi and delta...\n";
-		vec_type yi = y;
-		vec_type delta = arma::zeros(Neq);
-		for( unsigned int j = 0; j < Ns; ++j ){
-			unsigned int offset = j*Neq;
-			// vec_eigen needs a read-only segment function.
-			//auto K_part = K.segment(offset, offset+Neq);
-			delta += A(i,j) * K.subvec(offset, offset+Neq-1);
-		}
-		if (debug) std::cerr << "Constructed delta...\n";
-		yi += dt*delta;
-		auto ki = K.subvec( i*Neq, i*Neq + Neq - 1 );
-		// vec_type tmp = func.fun( ti, yi );
-		vec_type tmp = eval_fun(ti, yi);
-		
-		F.subvec( i*Neq, i*Neq + Neq - 1 ) = tmp - ki;
-	}
-	return F;
-}
-
-/**
-   \brief Constructs the Jacobi matrix of the non-linear system for the stages
-
-   \param t    Current time
-   \param y    Current solution to the ODE at t
-   \param K    Initial guess for the stages
-   \param sc   Solver coefficients
-   \param fun  The RHS of the ODE
-   \param jac  The Jacobian of the RHS of the ODE.
-
-   \returns the Jacobi matrix of the non-linear system for the new stages.
-*/
-template <typename functor_type> inline
-typename functor_type::jac_type construct_J( double t, const vec_type &y,
-                                             const vec_type &K,
-                                             double dt,
-                                             const irk::solver_coeffs &sc,
-                                             functor_type &func,
-                                             std::size_t &jac_evals)
-{
-	auto Ns  = sc.b.size();
-	auto Neq = y.size();
-	auto NN = Ns*Neq;
-
-	vec_type F( NN );
-
-	assert( K.size() == NN  && "Size of K is not right!" );
-	assert( y.size() == Neq && "Size of y is not right!" );
-
-	const vec_type &c = sc.c;
-	const mat_type &A = sc.A;
-
-	typename functor_type::jac_type J = -arma::eye( NN, NN );
-	auto eval_jac = [&func,&jac_evals](double t, const vec_type &Y)
-	                {
-		                ++jac_evals;
-		                return func.jac(t,Y); 
-	                };
-
-	// i is column, j is row.
-	for( unsigned int i = 0; i < Ns; ++i ){
-		double ti = t + dt * c[i];
-		vec_type yi = y;
-
-		for( unsigned int j = 0; j < Ns; ++j ){
-			unsigned int offset = j*Neq;
-			yi += dt*A(i,j)*K.subvec(offset, offset + Neq-1);
-		}
-		//auto Ji = func.jac( ti, yi );
-		auto Ji = eval_jac(ti, yi);
-
-		// j is row.
-		for( unsigned int j = 0; j < Ns; ++j ){
-			// Block i*Neq by j*Neq has to be filled with
-			// d F(t + ci, y + dt*sum_{k=0}^N-1 (a_{i,k}*k_k)) / d k_j
-			// which is
-			// F(t + ci, y + sum_{k=0}^N-1 (a_{i,k}*k_k))' * a_{i,j}*dt
-			// Armadillo syntax is (from, to)
-			auto Jc = J.submat( i*Neq, j*Neq,
-			                    i*Neq + Neq - 1,
-			                    j*Neq + Neq - 1 );
-			//auto Jc = J.block(i*Neq, j*Neq, Neq, Neq);
-			double a_part = dt * A(i,j);
-			Jc += Ji * a_part;
-		}
-	}
-
-	return J;
-}
-
-
 
 inline void print_timing_breakdown(const std::vector<double> &timings)
 {
@@ -480,6 +350,112 @@ inline void print_timing_breakdown(const std::vector<double> &timings)
 }
 
 
+template <typename functor_type> inline
+void construct_R(functor_type &func,
+                 const vec_type &y, double t, double dt,
+                 const solver_coeffs &sc, const vec_type &Y,
+                 const mat_type &I_neq, vec_type &R)
+{
+	vec_type F(Y.size());
+	std::size_t Ns = sc.b.size();
+	std::size_t Neq = y.size();
+	vec_type e = arma::ones(Ns);
+	R = Y;
+	for (std::size_t i = 0; i < Ns; ++i) {
+		std::size_t i0 = Neq*i;
+		std::size_t i1 = i0 + Neq - 1;
+		
+		auto Yi = Y.subvec(i0,i1);
+		F.subvec(i0, i1) = func.fun(t + sc.c(i)*dt, y + Yi);
+	}
+	R -= dt*arma::kron(sc.A, I_neq)*F;
+}
+
+
+
+/**
+   \brief Performs simplified Newton iteration for IRKs to find stages
+
+   Stages are defined by (Y_1, Y_2, ...)^T = dt*(kron(A,I)*(k_1, k_2, ...)^T
+   with k_i the original stages.
+   
+
+
+   \param Y Contains the stages
+*/
+template <typename functor_type> inline
+int newton_solve_stages(functor_type &func, const vec_type &y, double t,
+                        double dt, const solver_coeffs &sc, int maxit,
+                        double xtol, double Rtol, vec_type &Y, mat_type &J,
+                        newton::status &stats)
+{
+	std::size_t Neq = y.size();
+	std::size_t Ns  = sc.b.size();
+	std::size_t NN  = Ns*Neq;
+	
+	mat_type I_neq   = arma::eye(Neq, Neq);
+
+	J = func.jac(t,y);
+	mat_type J_Y = arma::eye(NN,NN);
+
+	assert(J_Y.n_cols == NN && "n_cols in J_Y inconsistent!");
+	assert(J_Y.n_rows == NN && "n_rows in J_Y inconsistent!");
+
+	// Construct the initial system:
+	Y = arma::zeros(NN);
+	J_Y -= dt*kron(sc.A,J);
+
+	// Since we re-use the same Jacobi matrix,
+	// pre-construct the LU decomposition:
+	mat_type L, U, P;
+	my_timer timer;
+	assert(arma::lu(L,U,P, J_Y) &&
+	       "LU decomposition of Jacobi matrix failed!");
+	timer.toc("LU decomposing Jacobi matrix.");
+	
+	// Start iterating:
+	double xtol2 = xtol*xtol;
+	double Rtol2 = Rtol*Rtol;
+	vec_type R(Y.size());
+	construct_R(func, y, t, dt, sc, Y, I_neq, R);
+	double Rnorm2 = arma::dot(R,R);
+	double step = 1.0 / sqrt(1.0 + Rnorm2);
+	double xnorm2_o = 0;
+	double xnorm2   = 0;
+	
+	timer.tic();
+
+	int status = newton::MAXIT_EXCEEDED;
+	stats.iters = 1;
+	for ( ; stats.iters < maxit; ++stats.iters) {
+		vec_type tmp = arma::solve(arma::trimatl(-L), P*R);
+		vec_type dY  = arma::solve(arma::trimatu(U), tmp);
+		xnorm2_o = xnorm2;
+		xnorm2   = arma::dot(dY,dY);
+
+		if (stats.iters > 1 && (xnorm2_o < 0.81*xnorm2)) {
+			status = newton::INCREMENT_DIVERGE;
+			break;
+		}
+		
+		Y += step*dY;
+		construct_R(func, y, t, dt, sc, Y, I_neq, R);
+		Rnorm2 = arma::dot(R,R);
+		if (Rnorm2 < Rtol2) {
+			status = newton::SUCCESS;
+			break;
+		}
+		if (xnorm2 < xtol2) {
+			status = newton::SUCCESS;
+			break;
+		}
+		step = 1.0 / sqrt(1.0 + Rnorm2);
+	}
+	stats.res = Rnorm2;
+	stats.conv_status = status;
+	
+	return status;
+}
 
 
 
@@ -542,20 +518,13 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
 
+
 	if (time_internals) timer.tic();
 	vec_type y  = y0;
 	vec_type yo(N);
 	vec_type K_np = arma::zeros(N), K_n = arma::zeros(N);
 	if (time_internals) timings[VECTOR_SETUP] += timer.toc();
-	newton::status newton_stats;
 	long long int step = 0;
-
-	auto eval_fun = [&func,&sol](double t, const vec_type &Y)
-	{
-		++sol.count.fun_evals;
-		return func.fun(t,Y); 
-	};
-
 
 	double dts[3];
 	double errs[3];
@@ -579,6 +548,20 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	bool alternative_error_formula = true;
 	std::size_t min_order = std::min( sc.order, sc.order2 );
 
+
+	// Variables/parameters for Newton iteration:
+	vec_type Y; // Contains the stages.
+	mat_type J; // Contains Jacobi matrix
+	double xtol = newton_opts.dx_delta;
+	double Rtol = newton_opts.tol;
+	newton::status newton_stats;
+
+	// Construct the alternative weights:
+	mat_type Ai = arma::inv(sc.A);
+	vec_type d_weights  = (Ai.t())*sc.b;
+	vec_type d2_weights = (Ai.t())*sc.b2;
+	
+	
 	while( t < t1 ){
 		// ****************  Calculate stages:   ************
 		// Make sure you stop exactly at t = t1.
@@ -588,26 +571,17 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		sol.count.attempt++;
 
 		int integrator_status = 0;
-
-		// Use newton iteration to find the Ks for the next level:
-		auto stages_func = [&t, &y, &dt, &sc, &func, &sol]( const vec_type &K ){
-			return construct_F( t, y, K, dt, sc, func, sol.count.fun_evals );
-		};
-
-		auto stages_jac = [&t, &y, &dt, &sc, &func, &sol]( const vec_type &K ){
-			return construct_J( t, y, K, dt, sc, func, sol.count.jac_evals );
-		};
-
-		if (time_internals) timer.tic();
-		newton::newton_lambda_wrapper<decltype(stages_func),
-		                              decltype(stages_jac),
-		                              typename functor_type::jac_type>
-			nw( stages_func, stages_jac );
 		
-		K_np = newton::newton_iterate( nw, K_n, newton_opts,
-		                               newton_stats,
-		                               !solver_opts.verbose_newton );
-		int newton_status = newton_stats.conv_status;
+		// Use newton iteration to find the Ks for the next level:
+		int newton_status = newton_solve_stages(func, y, t, dt, sc,
+		                                        newton_opts.maxit,
+		                                        xtol, Rtol,
+		                                        Y, J, newton_stats );
+		// Each call to newton solve is 1 jacobi evaluation and
+		// Ns*newton.iters function calls.
+		sol.count.jac_evals++;
+		sol.count.fun_evals += Ns*newton_stats.iters;
+		
 		if (time_internals) timings[UPDATE_STAGES] += timer.toc();
 
 		// *********** Verify Newton iteration convergence ************
@@ -640,42 +614,39 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 		// ****************  Construct solution at t + dt   ************
 		if (time_internals) timer.tic();
+
+		// At this point, Y contains the stages defined by
+		// Y_i = dt*(a_i1*k1 + a_i2*k2)...
+		// The update to y is given by d := b*inv(A);
+		
+
 		vec_type delta_y, delta_alt;
 		std::size_t Neq = y.size();
-		double gamma = sc.gamma;
+		double gam = sc.gamma*dt;
 
 		// Vectorized version of the loop below:
-		mat_type Ks = arma::reshape(K_np, Neq, Ns);
-		delta_y = Ks*sc.b;
-		if (solver_opts.adaptive_step_size) {
-			delta_alt = Ks*sc.b2;
-		}
-		//delta_y = arma::zeros( Neq );
-		//delta_alt = arma::zeros( Neq );
-		//for( std::size_t i = 0; i < Ns; ++i ){
-		//	std::size_t i0 = i*Neq;
-		//	std::size_t i1 = (i+1)*Neq;
-		//	auto Ki = K_np.subvec( i0, i1 - 1 );
-		//	delta_y   += sc.b[i]  * Ki;
-		//	if (solver_opts.adaptive_step_size) {
-		//		delta_alt += sc.b2[i] * Ki;
-		//	}
-		//}
+		mat_type YYs = arma::reshape(Y, Neq, Ns);
+		delta_y = YYs*d_weights;
 		
-		// vec_type dy_alt = gamma * func.fun( t, y ) + delta_alt;
-		vec_type dy_alt = gamma * eval_fun( t, y ) + delta_alt;
-		vec_type y_n    = y + dt*delta_y;
-		vec_type yp     = y + dt*dy_alt;
+		if (solver_opts.adaptive_step_size) {
+			delta_alt = YYs*d2_weights;
+		}
+
+		vec_type dy_alt = gam * func.fun(t,y) + delta_alt;
+		++sol.count.fun_evals;
+		
+		vec_type y_n    = y + delta_y;
+		vec_type yp     = y + dy_alt;
 		vec_type delta_delta = dy_alt - delta_y;
 		if (time_internals) timings[UPDATE_Y] += timer.toc();
 
 		// **************      Estimate error:    **********************
 		if (time_internals) timer.tic();
-		mat_type I, J0;
-		I = arma::eye(Neq, Neq);
-		J0 = func.jac( t, y );
+
 		// Formula 8.19:
-		mat_type solve_tmp = I - gamma*dt*J0;
+		// J0 = func.jac( t, y );
+		// J was already calculated for us in newton_solve_stages:
+		mat_type solve_tmp = arma::eye(Neq,Neq) - gam*J;
 		vec_type err_8_19 = dt*arma::solve(solve_tmp, delta_delta);
 		err_est = err_8_19;
 
@@ -683,7 +654,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		if( alternative_error_formula ){
 			// Use the alternative formulation:
 			// vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
-			vec_type dy_alt_alt = gamma*eval_fun(t, y + err_est);
+			vec_type dy_alt_alt = gam*func.fun(t, y + err_est);
+			++sol.count.fun_evals;
+		
 			dy_alt_alt += delta_alt;
 			vec_type err_alt = dy_alt_alt - delta_y;
 			err_est = dt*arma::solve(solve_tmp, err_alt);
@@ -801,35 +774,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		dts[0] = dt;
 
 		if( solver_opts.extrapolate_stage && (integrator_status == 0) ){
-			// ***************   Estimate new stages:  *************
-			// NOTE: This depends on the definition of the variables
-			// that are the stages. If the code is later changed to
-			// solve the stages according to Hairer & Wanner, this
-			// too needs to change.
-			double dt_frac = dts[0]/dts[1];
-			for( std::size_t i = 0; i < Ns; ++i ){
-				double ci = sc.c(i);
-
-				double theta = 1.0 + dt_frac * ci;
-				vec_type bs = project_b( theta, sc );
-
-				vec_type Yi = yo;
-				for( std::size_t j = 0; j < Ns; ++j ){
-					std::size_t j0 = j*Neq;
-					std::size_t j1 = (j+1)*Neq;
-					auto Kj = K_np.subvec( j0, j1-1 );
-					Yi += dt * bs[j] * Kj;
-				}
-
-				// Now you have an approximation for the time
-				// point at t + ci*dt. Use the rhs evaluated
-				// at this point as an approximation for the
-				// next stage.
-				std::size_t i0 = i*Neq;
-				std::size_t i1 = (i+1)*Neq;
-				double ti = t + dt*ci;
-				K_n.subvec( i0, i1-1 ) = eval_fun(ti,Yi);
-			}
+			// TODO
 		}
 	}
 
@@ -892,7 +837,7 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 	solver_options s_opts = default_solver_options();
 	newton::options n_opts;
 	n_opts.tol = 0.1*std::min(s_opts.abs_tol, s_opts.rel_tol);
-	
+	s_opts.newton_opts = &n_opts;
 	return odeint(func, t0, t1, y0, s_opts);
 }
 
