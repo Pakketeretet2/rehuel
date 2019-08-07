@@ -50,12 +50,12 @@ public:
 
 	   \note This function should satisfy the following code:
 	   \code{
-	   functor F;
-	   arma::vec y0 = <initial conditions>;
-	   F::jac_type J(y0.size(), y0.size());
-	   evaluate(t, y, J) == fun(t,y);
-	   J == jac(t,y);
-	   }
+	     functor F;
+	     arma::vec y0 = <initial conditions>;
+	     F::jac_type J(y0.size(), y0.size());
+	     evaluate(t, y, J) == fun(t,y);
+	     J == jac(t,y);
+	   \code}
 	   
 	   \param t       Current time
 	   \param y       Current y-vector

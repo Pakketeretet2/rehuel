@@ -48,9 +48,10 @@ struct common_solver_options
 	/// \brief Constructor with default values.
 	common_solver_options()
 		: internal_solver(NEWTON),
-		  rel_tol(1e-5),
+		  rel_tol(1e-4),
 		  abs_tol(10*rel_tol),
 		  max_dt(0.0),
+		  max_steps(-1),
 		  newton_opts(nullptr),
 		  out_interval(0),
 		  time_internals(false)
@@ -69,6 +70,9 @@ struct common_solver_options
 	double abs_tol;
 	/// Maximum time step size
 	double max_dt;
+
+	/// Maximum number of time steps to take (negative to allow infinite).
+	long long int max_steps;
 
 	/// Options for the internal solver.
 	const newton::options *newton_opts;

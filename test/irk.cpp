@@ -244,3 +244,49 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 
 
 }
+
+
+TEST_CASE("Calculate stages for the robertson problem.", "[irk_calc_stages]")
+{
+	test_equations::rober r;
+
+	newton::status stats;
+	arma::vec y = { 1.0, 0.0, 0.0 };
+	double dt = 1.5e-3;
+	double t  = 0.0;
+	int maxit = 100;
+	irk::solver_coeffs sc = irk::get_coefficients(irk::RADAU_IIA_53);
+	double Rtol = 1e-10;
+	double xtol = 1e-8;
+
+	auto Neq = y.size();
+	auto Ns  = sc.b.size();
+	auto NN  = Ns*Neq;
+	arma::mat J(Neq, Neq);
+	vec_type Y(NN);
+
+	int refresh_jac = 25;
+	std::size_t fun_calls = 0, jac_calls = 0;
+	int status = irk::newton_solve_stages(r, y, t, dt, sc, maxit,
+	                                      refresh_jac, xtol, Rtol, Y, J,
+	                                      stats, fun_calls, jac_calls);
+	std::cerr << "Y = " << Y << "\n";
+	std::cerr << "Status was " << status << "\n";
+
+	// We know what the answer should be from an Octave script:
+	arma::vec true_y1 = { 0.99994, 3.39216e-05, 2.60729e-05 };
+	arma::mat YYs = arma::reshape(Y, Neq, Ns);
+
+	mat_type Ai = arma::inv(sc.A);
+	std::cerr << "A:\n" << sc.A << "\nAi:\n" << Ai << "\n";
+	std::cerr << "y1 = \n" << y1 << "\nTrue y1 = \n" << true_y1 << "\n";
+	vec_type d_weights  = (Ai.t())*sc.b;
+	vec_type d2_weights = (Ai.t())*sc.b2;
+	arma::vec delta_y = YYs*d_weights;
+	arma::vec y1 = y + delta_y;
+	REQUIRE(y1(0) == Approx(true_y1(0)).epsilon(1e-2));
+	REQUIRE(y1(1) == Approx(true_y1(1)).epsilon(1e-2));
+	REQUIRE(y1(2) == Approx(true_y1(2)).epsilon(1e-2));
+	
+
+}

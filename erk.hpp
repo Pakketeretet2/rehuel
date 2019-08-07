@@ -333,6 +333,14 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			dt = t1 - t;
 		}
 		sol.count.attempt++;
+
+		if (solver_opts.max_steps >= 0 &&
+		    step > solver_opts.max_steps) {
+			std::cerr << "    Rehuel: Maximum number of attempts exceeded.\n";
+			sol.status = ERROR_MAX_STEPS_EXCEEDED;
+			return sol;
+		}
+
 		int integrator_status = 0;
 
 		// Formula for explicit stages are
@@ -464,7 +472,7 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 template <typename functor_type> inline
 rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
                  solver_options solver_opts,
-                 int method = erk::CASH_KARP_54, double dt = 1e-6)
+                 int method = erk::DORMAND_PRINCE_54, double dt = 1e-6)
 {
 	solver_coeffs sc = get_coefficients(method);
 	if (solver_opts.adaptive_step_size && sc.b2.size() == 0) {

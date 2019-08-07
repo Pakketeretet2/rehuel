@@ -56,7 +56,7 @@ enum newton_solve_ret_codes {
 */
 struct options {
 	options() : tol(1e-4), dx_delta(1e-4), maxit(500),
-	            time_internals(false), max_step(-1), refresh_jac(true),
+	            time_internals(false), max_step(-1), refresh_jac(10),
 	            precondition(false), limit_step(false) {}
 
 	double tol;           ///< Desired tolerance.
@@ -67,7 +67,8 @@ struct options {
 
 	/// When Using Newton's method, if this is false, the Jacobi matrix
 	/// is constructed only once at the beginning and never updated.
-	bool refresh_jac;
+	/// If non-zero, Jacobi matrix is updated every refresh_jac iterations.
+	int refresh_jac;
 
 	/// If true, precondition the Jacobi matrix.
 	bool precondition;

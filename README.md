@@ -12,7 +12,7 @@ into other projects, similar to Matlab's ode45 and ode15s.
 On the other hand, the project also provides me with an interesting test bed
 for the various methods out there.
 
-For a quick tutorial/guide, see the guide in \ref guide.dox
+For a quick tutorial/guide, see the guide in \ref guide.md
 
 ---------------
 Recommended solvers
@@ -29,8 +29,8 @@ shorter interval. If the solution still takes too long, try a stiff solver.
 <b>Very stiff</b>:  
     RADAU_IIA_53     (this should probably be your default stiff solver)  
     RADAU_IIA_85     (if you need more strict tolerance or a lot of steps)  
-    LOBATTO_IIIC_43  (similar to RADAU_IIA_53, but is symplectic)  
-    LOBATTO_IIIC_85  (similar to RADAU_IIA_85, but solutions are less damped)  
+    LOBATTO_IIIC_43  (similar to RADAU_IIA_53)  
+    LOBATTO_IIIC_85  (similar to RADAU_IIA_85)  
   
 In examples/example_equations.cpp we provide a small driver program that can
 apply various methods to various problems so you can get a feel for the

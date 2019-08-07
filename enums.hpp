@@ -119,7 +119,10 @@ enum odeint_status_codes {
 	ERROR_LARGER_THAN_RELTOL = 32,
 
 	/// The error exceeded the absolute tolerance
-	ERROR_LARGER_THAN_ABSTOL = 64
+	ERROR_LARGER_THAN_ABSTOL = 64,
+
+	ERROR_MAX_STEPS_EXCEEDED = 128
+	
 };
 
 static constexpr const double machine_precision = 1e-17;
