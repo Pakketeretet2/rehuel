@@ -28,7 +28,7 @@ running out of RAM and/or the solution takes forever, integrate over a
 shorter interval. If the solution still takes too long, try a stiff solver.  
 <b>Very stiff</b>:  
     RADAU_IIA_53     (this should probably be your default stiff solver)  
-    RADAU_IIA_85     (if you need more strict tolerance or a lot of steps)  
+    RADAU_IIA_95     (if you need more strict tolerance or a lot of steps)  
     LOBATTO_IIIC_43  (similar to RADAU_IIA_53)  
     LOBATTO_IIIC_85  (similar to RADAU_IIA_85)  
   
