@@ -30,6 +30,7 @@
 #include "enums.hpp"
 #include "irk.hpp"
 #include "erk.hpp"
+#include "multistep.hpp"
 
 
 #endif // REHUEL_HPP
