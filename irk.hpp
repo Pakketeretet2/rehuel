@@ -32,6 +32,8 @@
 #include <limits>
 #include <iomanip>
 
+#include <functional>
+
 #include "enums.hpp"
 #include "my_timer.hpp"
 #include "newton.hpp"
@@ -48,14 +50,14 @@ namespace irk {
   \addtogroup Integrators
 
 */
-	
+
 #ifdef DEBUG_OUTPUT
 constexpr const bool debug = true;
 #else
 constexpr const bool debug = false;
 #endif // DEBUG_OUTPUT
 
-	
+
 typedef arma::vec vec_type;
 typedef arma::mat mat_type;
 
@@ -66,9 +68,9 @@ typedef arma::mat mat_type;
 struct solver_coeffs
 {
 	const char *name; ///< Human-friendly name for the method.
-	vec_type b;      ///< weights for the new y-value
-	vec_type c;      ///< these set the intermediate time points
-	mat_type A;      ///< alpha coefficients in Butcher tableau
+	vec_type b;       ///< weights for the new y-value
+	vec_type c;       ///< these set the intermediate time points
+	mat_type A;       ///< alpha coefficients in Butcher tableau
 
 	vec_type b2; ///< weights for the new y-value of the embedded RK method
 
@@ -323,33 +325,43 @@ mat_type collocation_interpolate_coeffs( const vec_type &c );
 
 
 
-inline void print_timing_breakdown(const std::vector<double> &timings)
+inline void print_timing_breakdown(const std::vector<double> &timings,
+                                   std::ostream &out = std::cerr)
 {
-	double total_t = 0.0;
-	for (auto tt : timings) total_t += tt;
-	
+	double total_t = std::accumulate(timings.begin(), timings.end(), 0.0);
 
-	auto print_line = [](double t, double total, const char *txt)
-	                  {
-		                  const char *w = "      ";
-		                  double prct = 100.0*t/total;
-		                  std::cerr << w << txt << std::setw(7) << t
-		                            << " | " << std::setprecision(3)
-		                            << prct << "\n";
-	                  };
-	
+	auto print_line = [&out](double t, double total, const char *txt)
+	{
+		const char *w = "      ";
+		double prct = 100.0*t/total;
+	        out << w << txt << std::setw(7) << t
+	            << " | " << std::setprecision(3)
+	            << prct << "\n";
+	};
 
-	std::cerr << "    Rehuel: IRK done solving, timings (ms | %):\n";
+	// Determine time unit:
+	std::string time_unit = "ms";
+	double time_scale = 1.0;
+	if (total_t > 1000) {
+		time_scale = 0.0001;
+		time_unit = " s";
+	}
+	total_t *= time_scale;
+
+	out << "     Rehuel: IRK done solving, timings (" << time_unit << " | %):\n";
 	print_line(total_t,    total_t, "Total time:                  ");
-	print_line(timings[0], total_t, "Vector setup:                ");
-	print_line(timings[1], total_t, "Stages update:               ");
-	print_line(timings[2], total_t, "Solution update:             ");
-	print_line(timings[3], total_t, "Store solution:              ");
-	print_line(timings[4], total_t, "Error estimate:              ");
-	print_line(timings[5], total_t, "Calculate optimal step:      ");
+	print_line(time_scale*timings[0], total_t, "Vector setup:                ");
+	print_line(time_scale*timings[1], total_t, "Stages update:               ");
+	print_line(time_scale*timings[2], total_t, "Solution update:             ");
+	print_line(time_scale*timings[3], total_t, "Store solution:              ");
+	print_line(time_scale*timings[4], total_t, "Error estimate:              ");
+	print_line(time_scale*timings[5], total_t, "Calculate optimal step:      ");
 }
 
 
+/**
+   \brief Construct the residual vector of the non-linear systme to solve.
+*/
 template <typename functor_type> inline
 void construct_R(functor_type &func,
                  const vec_type &y, double t, double dt,
@@ -364,7 +376,7 @@ void construct_R(functor_type &func,
 	for (std::size_t i = 0; i < Ns; ++i) {
 		std::size_t i0 = Neq*i;
 		std::size_t i1 = i0 + Neq - 1;
-		
+
 		auto Yi = Y.subvec(i0,i1);
 		F.subvec(i0, i1) = func.fun(t + sc.c(i)*dt, y + Yi);
 	}
@@ -378,8 +390,6 @@ void construct_R(functor_type &func,
 
    Stages are defined by (Y_1, Y_2, ...)^T = dt*(kron(A,I)*(k_1, k_2, ...)^T
    with k_i the original stages.
-   
-
 
    \param Y Contains the stages
 */
@@ -394,9 +404,8 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 	std::size_t Neq = y.size();
 	std::size_t Ns  = sc.b.size();
 	std::size_t NN  = Ns*Neq;
-	
-	mat_type I_neq   = arma::eye(Neq, Neq);
 
+	mat_type I_neq   = arma::eye(Neq, Neq);
 
 	// Construct the initial system:
 	Y = arma::zeros(NN);
@@ -410,18 +419,18 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 		[&func, &J, &J_Y, NN, &L, &U, &P, t, dt, y, sc, &jac_evals]()
 		{
 			J = func.jac(t,y);
-			J_Y = arma::eye(NN,NN);	
+			J_Y = arma::eye(NN,NN);
 			J_Y -= dt*kron(sc.A,J);
-			
+
 			// Since we re-use the same Jacobi matrix,
 			// pre-construct the LU decomposition:
 			assert(arma::lu(L,U,P, J_Y) &&
 			       "LU decomposition of Jacobi matrix failed!");
 			++jac_evals;
 		};
-	
+
 	refresh_jacobi_matrix();
-	
+
 	// Start iterating:
 	double xtol2 = xtol*xtol;
 	double Rtol2 = Rtol*Rtol;
@@ -430,25 +439,22 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 	fun_evals += Ns;
 	double Rnorm2 = arma::dot(R,R);
 	double step = 1.0 / sqrt(1.0 + Rnorm2);
-	double xnorm2_o = 0;
-	double xnorm2   = 0;
-	
+	double xnorm2 = 0;
+
+	// During iteration, we sometimes temporarily increase the
+	// maximum number of allowed iterations when the error is very small.
+	// Therefore, keep a copy of the original value here:
+
 	int status = newton::MAXIT_EXCEEDED;
 	stats.iters = 1;
 	for ( ; stats.iters < maxit; ++stats.iters) {
 		vec_type tmp = arma::solve(arma::trimatl(-L), P*R);
 		vec_type dY  = arma::solve(arma::trimatu(U), tmp);
-		xnorm2_o = xnorm2;
-		xnorm2   = arma::dot(dY,dY);
+		xnorm2 = arma::dot(dY, dY);
 
-		if (stats.iters > 1 && (xnorm2_o < 0.81*xnorm2)) {
-			status = newton::INCREMENT_DIVERGE;
-			break;
-		}
-		
 		Y += step*dY;
 		construct_R(func, y, t, dt, sc, Y, I_neq, R);
-		
+
 		fun_evals += Ns;
 		Rnorm2 = arma::dot(R,R);
 		if (Rnorm2 < Rtol2) {
@@ -467,7 +473,7 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 	}
 	stats.res = Rnorm2;
 	stats.conv_status = status;
-	
+
 	return status;
 }
 
@@ -486,36 +492,37 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
    \returns a struct that contains status, solution, etc. (see irk::rk_output).
 */
 template <typename functor_type> inline
-rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0,
-                    const solver_options &solver_opts, double dt,
-                    const solver_coeffs &sc )
+rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
+                   const solver_options &solver_opts, double dt,
+                   const solver_coeffs &sc, const output_options &output_opts)
 {
-	if( t0 + dt > t1 ){
-		std::cerr << "    Rehuel: Initial dt (" << dt;
+	if (t0 + dt > t1) {
+		output_opts.log_out << "    Rehuel: Initial dt (" << dt;
 		dt = t1 - t0;
-		std::cerr << ") too large for interval! Reducing to "
+		output_opts.log_out << ") too large for interval! Reducing to "
 		          << dt << "\n";
 
 	}
 
-	std::cerr << "    Rehuel: Integrating over interval [ "
-	          << t0 << ", " << t1 << " ]...\n"
-	          << "            Method = " << sc.name << "\n";
+	output_opts.log_out << "    Rehuel: Integrating over interval [ "
+	                    << t0 << ", " << t1 << " ]...\n"
+	                    << "            Method = " << sc.name << "\n";
 
 	const bool time_internals = solver_opts.time_internals;
 	my_timer timer;
 	timeval irk_start = timer.get_tic();
-	
+
 	// This table keeps track of internal timings (in ms):
 	enum timing_entries {
-	                     VECTOR_SETUP = 0,
-	                     UPDATE_STAGES,
-	                     UPDATE_Y,
-	                     STORE_SOL,
-	                     ESTIMATE_ERROR,
-	                     ESTIMATE_DT,
-	                      // Dummy for number of elements:
-	                     N_TIMING_ENTRIES
+		VECTOR_SETUP = 0,
+		UPDATE_STAGES,
+		UPDATE_Y,
+		STORE_SOL,
+		ESTIMATE_ERROR,
+		ESTIMATE_DT,
+		CUSTOM_OUTPUT_CALLBACK,
+		// Dummy for number of elements:
+		N_TIMING_ENTRIES
 	};
 	std::vector<double> timings(N_TIMING_ENTRIES, 0);
 
@@ -527,7 +534,10 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	assert( dt > 0 && "Cannot use time step size <= 0!" );
 
 	const newton::options &newton_opts = *solver_opts.newton_opts;
-	
+	const int newton_maxit0 = newton_opts.maxit;
+	int newton_maxit = newton_maxit0;
+	long long last_maxit_relax_step = 0;
+
 	std::size_t Neq = y0.size();
 	std::size_t Ns  = sc.b.size();
 	std::size_t N   = Neq * Ns;
@@ -548,7 +558,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	errs[0] = errs[1] = errs[2] = 0.9;
 
 	if( solver_opts.out_interval > 0 ){
-		std::cerr  << "    Rehuel: step  t  dt   err   iters\n";
+		output_opts.log_out  << "    Rehuel: step  t  dt   err   iters\n";
 	}
 
 	vec_type err_est = arma::zeros( y.size() );
@@ -574,9 +584,9 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 	mat_type Ai = arma::inv(sc.A);
 	vec_type d_weights  = (Ai.t())*sc.b;
 	vec_type d2_weights = (Ai.t())*sc.b2;
-	
-	
-	while( t < t1 ){
+
+
+	while (t < t1) {
 		// ****************  Calculate stages:   ************
 		// Make sure you stop exactly at t = t1.
 		if( t + dt > t1 ){
@@ -584,19 +594,17 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		}
 		sol.count.attempt++;
 
-		if (solver_opts.max_steps >= 0 &&
-		    step > solver_opts.max_steps) {
-			std::cerr << "    Rehuel: Maximum number of attempts exceeded.\n";
+		if (solver_opts.max_steps >= 0 && step > solver_opts.max_steps) {
+			output_opts.log_out << "    Rehuel: Maximum number of attempts exceeded.\n";
 			sol.status = ERROR_MAX_STEPS_EXCEEDED;
 			return sol;
 		}
 
 		int integrator_status = 0;
-		
-		// Use newton iteration to find the Ks for the next level:
 
+		// Use newton iteration to find the Ks for the next level:
 		int newton_status = newton_solve_stages(func, y, t, dt, sc,
-		                                        newton_opts.maxit,
+		                                        newton_maxit,
 		                                        newton_opts.refresh_jac,
 		                                        xtol, Rtol, Y, J,
 		                                        newton_stats,
@@ -604,34 +612,56 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		                                        sol.count.jac_evals);
 
 
-		
+
 		if (time_internals) timings[UPDATE_STAGES] += timer.toc();
 
 		// *********** Verify Newton iteration convergence ************
-		if( newton_status != newton::SUCCESS ){
-			if( !solver_opts.adaptive_step_size ){
+		if (newton_status != newton::SUCCESS){
+			if (!solver_opts.adaptive_step_size) {
 				// In this case, you can do nothing but error.
 				sol.status = GENERAL_ERROR;
-				std::cerr << "   Rehuel: Newton iteration "
+				output_opts.log_out << "   Rehuel: Newton iteration "
 				          << "failed for constant time step "
 				          << "size! Aborting!\n";
 				return sol;
 			}
 
-			//std::cerr << "   Rehuel: Newton iteration failed! "
-			//          << "Retrying with dt = " << dt << "\n";
-			dt *= 0.5;
+			dt *= 0.7;
+			if (step - last_maxit_relax_step > 15) {
+				newton_maxit += newton_maxit0;
+				last_maxit_relax_step = step;
+			}
+			/*
+			output_opts.log_out << "   Rehuel: step " << step
+			          << ", t = " << t
+			          << ": Newton iteration failed! Status: "
+			          << newton::status_message(newton_status)
+			          << ".\n        Retrying with dt = " << dt
+			          << " and maxit = " << newton_maxit << "\n";
+			*/
 			sol.count.reject_newton++;
-			if( newton_status == newton::INCREMENT_DIVERGE ){
+			if (newton_status == newton::INCREMENT_DIVERGE){
 				sol.count.newton_incr_diverge++;
-			}else if( newton_status == newton::ITERATION_ERROR_TOO_LARGE ){
+			}else if (newton_status == newton::ITERATION_ERROR_TOO_LARGE){
 				sol.count.newton_iter_error_too_large++;
-			}else if( newton_status == newton::MAXIT_EXCEEDED ){
+			}else if (newton_status == newton::MAXIT_EXCEEDED){
 				sol.count.newton_maxit_exceed++;
 			}
 			continue;
-		}else{
+		} else {
 			sol.count.newton_success++;
+
+			// It is possible we incremented dt and maxit
+			// before. We should slowly relax them back...
+			/*
+			if (step - last_maxit_relax_step > 10) {
+				output_opts.log_out << "   Rehuel: step " << step
+				          << ": Resetting maxit from "
+				          << newton_maxit << " to "
+				          << newton_maxit0 << ".\n";
+				newton_maxit = newton_maxit0;
+			}
+			*/
 		}
 
 
@@ -641,31 +671,31 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		// At this point, Y contains the stages defined by
 		// Y_i = dt*(a_i1*k1 + a_i2*k2)...
 		// The update to y is given by d := b*inv(A);
-		
+
 
 		vec_type delta_y, delta_alt;
-		std::size_t Neq = y.size();
 		double gam = sc.gamma*dt;
 
 		// Vectorized version of the loop below:
 		mat_type YYs = arma::reshape(Y, Neq, Ns);
 		delta_y = YYs*d_weights;
-		
+
 		if (solver_opts.adaptive_step_size) {
 			delta_alt = YYs*d2_weights;
 		}
 
 		vec_type dy_alt = gam * func.fun(t,y) + delta_alt;
 		++sol.count.fun_evals;
-		
+
 		vec_type y_n    = y + delta_y;
 		vec_type yp     = y + dy_alt;
 		vec_type delta_delta = dy_alt - delta_y;
-		if (time_internals) timings[UPDATE_Y] += timer.toc();
+		if (time_internals) {
+			timings[UPDATE_Y] += timer.toc();
+			timer.tic();
+		}
 
 		// **************      Estimate error:    **********************
-		if (time_internals) timer.tic();
-
 		// Formula 8.19:
 		// J0 = func.jac( t, y );
 		// J was already calculated for us in newton_solve_stages:
@@ -679,7 +709,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 			// vec_type dy_alt_alt = gamma*func.fun(t, y+err_est);
 			vec_type dy_alt_alt = gam*func.fun(t, y + err_est);
 			++sol.count.fun_evals;
-		
+
 			dy_alt_alt += delta_alt;
 			vec_type err_alt = dy_alt_alt - delta_y;
 			err_est = dt*arma::solve(solve_tmp, err_alt);
@@ -723,8 +753,8 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 
 		// **************      Find new dt:    **********************
 		if (time_internals) timer.tic();
-		double fac = 0.9 * ( newton_opts.maxit + 1.0 );
-		fac /= ( newton_opts.maxit + newton_stats.iters );
+		double fac = 0.9 * (newton_maxit + 1.0);
+		fac /= (newton_maxit + newton_stats.iters);
 
 		double expt = 1.0 / ( 1.0 + min_order );
 		double err_inv = 1.0 / err;
@@ -738,7 +768,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		double scale_28 = scale_27 * dt_rat * err_rat;
 
 		/*
-		std::cerr << "    Rehuel: Time step controller:\n"
+		output_opts.log_out << "    Rehuel: Time step controller:\n"
 		          << "            err      = " << err << "\n"
 		          << "            err_inv  = " << err_inv << "\n"
 		          << "            dt_rat   = " << dt_rat << "\n"
@@ -759,34 +789,54 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		// **************    Update y and time   ********************
 		if( solver_opts.out_interval > 0 &&
 		    (step % solver_opts.out_interval == 0) ){
-			std::cerr  << "    Rehuel: " << step << " " << t
-			           << " " <<  dt << " " << err << " "
-			           << newton_stats.iters << "\n";
+			output_opts.log_out  << "    Rehuel: " << step << " " << t
+			                     << " " <<  dt << " " << err << " "
+			                     << newton_stats.iters << "\n";
 		}
 
 
-		if( !solver_opts.adaptive_step_size || integrator_status == 0 ){
+		if (!solver_opts.adaptive_step_size || integrator_status == 0) {
 			if (time_internals) timer.tic();
 			yo = y;
 			y  = y_n;
 			t += dt;
 			++step;
-			
+
 			if (time_internals) {
 				timings[UPDATE_Y] += timer.toc();
 				timer.tic();
 			}
-			
-			sol.t_vals.push_back(t);
-			sol.y_vals.push_back(y_n);
-			sol.stages.push_back(K_np);
-			sol.err_est.push_back( err_est );
-			sol.err.push_back( err );
-			if (time_internals) timings[STORE_SOL] += timer.toc();
-			
+
+			if (step % output_opts.output_interval == 0) {
+				if (output_opts.store_in_vectors()) {
+					sol.t_vals.push_back(t);
+					sol.y_vals.push_back(y_n);
+					sol.stages.push_back(K_np);
+					sol.err_est.push_back( err_est );
+					sol.err.push_back( err );
+
+					if (time_internals) {
+						timings[STORE_SOL] += timer.toc();
+					}
+				}
+				if (output_opts.write_to_file()) {
+					*output_opts.output_stream << t;
+					for (std::size_t y_idx = 0; y_idx < y_n.size(); ++y_idx) {
+						*output_opts.output_stream << " " << y_n[y_idx];
+					}
+					*output_opts.output_stream << "\n";
+				}
+				if (output_opts.solution_output) {
+					if (time_internals) timer.tic();
+					output_opts.solution_output(step, t, y_n);
+					if (time_internals) {
+						timings[CUSTOM_OUTPUT_CALLBACK] += timer.toc();
+					}
+				}
+			}
 			alternative_error_formula = false;
 		}
-		
+
 		// **************      Actually set the new dt:    **********************
 
 		if( solver_opts.adaptive_step_size ) {
@@ -796,7 +846,7 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
 		dts[1] = dts[0];
 		dts[0] = dt;
 
-		if( solver_opts.extrapolate_stage && (integrator_status == 0) ){
+		if (solver_opts.extrapolate_stage && (integrator_status == 0)) {
 			// TODO
 		}
 	}
@@ -824,19 +874,19 @@ rk_output irk_guts( functor_type &func, double t0, double t1, const vec_type &y0
    \returns a struct with the solution and info about the solution quality.
 */
 template <typename functor_type> inline
-rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
-                  solver_options solver_opts,
-                  int method = irk::RADAU_IIA_53, double dt = 1e-6 )
+rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
+                 solver_options solver_opts, const output_options &output_opts,
+                 int method = irk::RADAU_IIA_53, double dt = 1e-6)
 {
 	solver_coeffs sc = get_coefficients( method );
 	if (solver_opts.adaptive_step_size && sc.b2.size() == 0) {
-		std::cerr << "    Rehuel: WARNING: Cannot have adaptive time "
+		output_opts.log_out << "    Rehuel: WARNING: Cannot have adaptive time "
 		          << "step with non-embedding method! Disabling "
 		          << "adaptive time step size!\n";
 		solver_opts.adaptive_step_size = false;
 	}
 	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
-	return irk_guts( func, t0, t1, y0, solver_opts, dt, sc );
+	return irk_guts(func, t0, t1, y0, solver_opts, dt, sc, output_opts);
 }
 
 
@@ -855,11 +905,12 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0,
    \returns a struct with the solution and info about the solution quality.
 */
 template <typename functor_type> inline
-rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
+rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0)
 {
 	solver_options s_opts = default_solver_options();
 	newton::options n_opts;
 	n_opts.tol = 0.1*std::min(s_opts.abs_tol, s_opts.rel_tol);
+
 	s_opts.newton_opts = &n_opts;
 	return odeint(func, t0, t1, y0, s_opts);
 }

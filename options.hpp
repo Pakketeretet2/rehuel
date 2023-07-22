@@ -85,5 +85,60 @@ struct common_solver_options
 };
 
 
+/**
+   \brief Specifies how the user wants output. Default is
+   for the solver to populate the t_vals and y_vals vectors in a basic_output
+   struct.
+*/
+struct output_options {
+
+	output_options(){}
+	enum output_bits
+	{
+		NO_OUTPUT = 0,
+		STORE_IN_VECTORS = 1,
+		WRITE_TO_FILE = 2,
+		FUNCTION_CALLBACK = 3
+	};
+
+	typedef void (*output_callback)(const std::size_t step, const double t, const vec_type &y);
+
+	std::size_t output_mode = STORE_IN_VECTORS;
+	std::size_t output_interval = 1;
+	std::ostream &log_out = std::cerr;
+	std::ostream *output_stream;
+	output_callback solution_output = nullptr;
+
+	bool store_in_vectors() const
+	{
+		return output_mode & (1 << (STORE_IN_VECTORS - 1));
+	}
+	bool write_to_file() const
+	{
+		return output_mode & (1 << (WRITE_TO_FILE - 1));
+	}
+
+	void register_output_callback(output_callback callback)
+	{
+		solution_output = callback;
+		output_mode |= (1 << (FUNCTION_CALLBACK - 1));
+	}
+	void unregister_output_calback()
+	{
+		solution_output = nullptr;
+		output_mode &= ~(1 << (FUNCTION_CALLBACK - 1));
+	}
+
+	void set_output_stream(std::ostream &out_stream)
+	{
+		output_stream = &out_stream;
+		output_mode |= (1 << (WRITE_TO_FILE - 1));
+	}
+};
+
+
+
+
+
 
 #endif // OPTIONS_HPP

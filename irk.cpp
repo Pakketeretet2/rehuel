@@ -40,7 +40,7 @@ coeff_list expand( const coeff_list &c1,
 	// { {1,4}, {2,4}, {3,4}, {1,5}, {2,5}, {2,6} }
 	//
 	coeff_list c3;
-	
+
 	for( std::size_t i = 0; i < c1.size(); ++i ){
 		for( std::size_t j = 0; j < c2.size(); ++j ){
 			std::vector<int> vij( c1[i].begin(), c1[i].end() );
@@ -50,8 +50,8 @@ coeff_list expand( const coeff_list &c1,
 	}
 	return c3;
 }
-	
-	
+
+
 /**
    \brief Output operator for a coefficient list.
 */
@@ -69,12 +69,12 @@ std::ostream &operator<<( std::ostream &o, const coeff_list &c )
 	o << " }";
 	return o;
 }
-	
+
 
 /**
    \brief Simple calculation of the factorial of n.
 */
-int factorial( int n )
+int factorial(int n)
 {
 	if( n <= 1 ) return 1;
 
@@ -91,7 +91,7 @@ int factorial( int n )
 */
 int binom_coeff( int n, int b )
 {
-	return factorial( n ) / ( factorial(b)*factorial(n-b) );
+	return factorial(n) / (factorial(b)*factorial(n-b));
 }
 
 
@@ -141,7 +141,7 @@ mat_type collocation_interpolate_coeffs( const vec_type& c )
 
 	std::size_t Ns = c.size();
 	vec_type d(Ns);
-	
+
 	for( std::size_t i = 0; i < Ns; ++i ){
 		double cfacs = 1.0;
 		for( std::size_t j = 0; j < Ns; ++j ){
@@ -195,13 +195,13 @@ mat_type collocation_interpolate_coeffs( const vec_type& c )
 					coeff *= -c[j];
 				}
 			}
-			
+
 			int b_interp_idx = Ns - order - 1;
 			int Ns_nosign = Ns;
 			assert( (b_interp_idx >= 0) && "index out of range" );
 			assert( (b_interp_idx < Ns_nosign) &&
 			        "index out of range" );
-			
+
 			b_interp(i, b_interp_idx) += coeff;
 		}
 	}
@@ -285,7 +285,7 @@ solver_coeffs get_coefficients( int method )
 		          (47.0  - 15*sqrt21)/315.0,
 		          (203.0 - 30*sqrt21)/1260.0,
 		          -3.0/140.0},
-		         
+
 		         {1.0/20.0,
 		          (329.0 + 105.0*sqrt21)/2880.0,
 		          73.0/360.0,
@@ -315,7 +315,7 @@ solver_coeffs get_coefficients( int method )
 		sc.order2 = 5;
 
 		sc.b_interp = collocation_interpolate_coeffs( sc.c );
-		
+
 		break;
 	case GAUSS_LEGENDRE_42:
 
@@ -338,15 +338,15 @@ solver_coeffs get_coefficients( int method )
 
 		sc.A = { {5.0/12.0, -1.0/12.0},
 		         {3.0/4.0, 1.0/4.0 } };
-		
+
 		sc.gamma = 1.0/3.0;
-		
+
 		sc.c  = { 1.0/3.0, 1.0 };
 		sc.b  = { 3.0/4.0, 1.0/4.0 };
-		
+
 		sc.b2 = { (-6*sc.gamma + 3.0) / 4.0,
 		          ( 2*sc.gamma + 1.0) / 4.0 };
-		
+
 		sc.order = 3;
 		sc.order2 = 2;
 
@@ -371,11 +371,11 @@ solver_coeffs get_coefficients( int method )
 		sc.b  = {  (16 - sqrt6)/36.0,
 		           (16 + sqrt6)/36.0,
 		           1.0 / 9.0 };
-		
+
 		sc.b2 = { -((18*sqrt6 + 12)*sc.gamma - 16 + sqrt6)/36.0,
 		          ((18*sqrt6 - 12)*sc.gamma + 16 + sqrt6)/36.0,
 		          -(3*sc.gamma - 1) / 9.0 };
-		
+
 		sc.order = 5;
 		sc.order2 = 3;
 
@@ -441,7 +441,7 @@ solver_coeffs get_coefficients( int method )
 		            0.006388413879534684943755951486405680409,
 		            -0.004602326779148655499352025854768521774,
 		            0.001828942561470643704035856835298607816 },
-		                  
+
 		         {  0.080147596515618967795215595316188773479,
 		            0.081062063985891536679584719357221980975,
 		            -0.021237992120711034937085469604419103837,
@@ -449,7 +449,7 @@ solver_coeffs get_coefficients( int method )
 		            -0.010234185730090163829199816607636044634,
 		            0.007153465151364590498062382166962141175,
 		            -0.002812639372406723340342762967473461717 },
-		                  
+
 		         {  0.072063846941881902113362526561137596780,
 		            0.171068354983886619424352504009050302800,
 		            0.109614564040072109233220407461845690823,
@@ -457,7 +457,7 @@ solver_coeffs get_coefficients( int method )
 		            0.014760377043950817073195348981742706482,
 		            -0.009575259396791400556328724726641713431,
 		            0.003672678397138305671569774234741682832 },
-		                  
+
 		         {  0.075705125819824420424641229496338921970,
 		            0.154090155142171144646331682046482915172,
 		            0.227107736673202386411281287949366350098,
@@ -465,7 +465,7 @@ solver_coeffs get_coefficients( int method )
 		            -0.023810827153044173582047929325774334376,
 		            0.012709985533661205633610757619788395065,
 		            -0.004608844281289633440336366654612469297 },
-		                  
+
 		         {  0.073912342163191846540806321243016399213,
 		            0.161355607615942432186220145903094810374,
 		            0.206867241552104197819578846437670730910,
@@ -473,7 +473,7 @@ solver_coeffs get_coefficients( int method )
 		            0.103086793533813446624105845745721640646,
 		            -0.018854139152580448840052190417863035125,
 		            0.005858900974888791823977618246677391072 },
-		                  
+
 		         {  0.074705562059796230172292559361766628756,
 		            0.158307223872468700658479384514628716574,
 		            0.214153423267200031108697457856861396619,
@@ -481,7 +481,7 @@ solver_coeffs get_coefficients( int method )
 		            0.198752121680635269801826469184534504760,
 		            0.069265501605509133230972165761976742365,
 		            -0.008116008197728290107881426350852749124 },
-		                  
+
 		         {  0.074494235556010317933248780209166920975,
 		            0.159102115733650740872435217234934182108,
 		            0.212351889502977804199154019575104122356,
@@ -507,7 +507,7 @@ solver_coeffs get_coefficients( int method )
 		         0.926945671319741114851873965819682011056,
 		         1 };
 
-		
+
 		sc.gamma =  0.111896465300035075935905337180769194745;
 
 
@@ -635,7 +635,7 @@ solver_coeffs get_coefficients( int method )
 		          0.215872690604931312, 0.243809523809523810,
 		          0.215872690604931312, 0.138413023680782974,
 		          0.0238095238095238095 } };
-		
+
 		sc.c = { 0,
 		         0.0848880518607165351,
 		         0.265575603264642893,
@@ -643,7 +643,7 @@ solver_coeffs get_coefficients( int method )
 		         0.734424396735357107,
 		         0.915111948139283465,
 		         1 };
-		
+
 		sc.b = { 0.0238095238095238095,
 		         0.138413023680782974,
 		         0.215872690604931312,
@@ -730,7 +730,7 @@ vec_type project_b( double theta, const irk::solver_coeffs &sc )
 
 	std::size_t Ns = sc.b.size();
         vec_type ts(Ns);
-	
+
 	// ts will contain { t, t^2, t^3, ..., t^{Ns} }
 	double tt = theta;
 	for( std::size_t i = 0; i < Ns; ++i ){
