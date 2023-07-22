@@ -46,19 +46,19 @@
  */
 namespace erk {
 
-	
+
 #ifdef DEBUG_OUTPUT
 constexpr const bool debug = true;
 #else
 constexpr const bool debug = false;
 #endif // DEBUG_OUTPUT
 
-	
+
 typedef arma::mat mat_type;
 typedef arma::vec vec_type;
 
 
-	
+
 /**
    Contains the Butcher tableau plus time step size.
 */
@@ -171,7 +171,7 @@ solver_coeffs get_coefficients( int method );
 */
 solver_options default_solver_options();
 
-	
+
 /**
    \brief Checks if all options are set to sane values.
 
@@ -263,7 +263,7 @@ void no_apply_fsal_dummy(mat_type &Ks, std::size_t Ns)
 template <typename functor_type> inline
 rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
                    const solver_options &solver_opts, double dt,
-                   const solver_coeffs &sc )
+                   const solver_coeffs &sc)
 {
 	if( t0 + dt > t1 ){
 		std::cerr << "    Rehuel: Initial dt (" << dt;
@@ -279,13 +279,13 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 
 	// Explicit RK methods are a lot simpler.
 	// First you compute the k stages explicitly:
-	
+
 	my_timer timer;
 	double t = t0;
 	rk_output sol;
 	sol.status = SUCCESS;
 
-	assert(dt > 0 && "Cannot use time step size <= 0!");
+	assert (dt > 0 && "Cannot use time step size <= 0!");
 	std::size_t Neq = y0.size();
 	std::size_t Ns  = sc.b.size();
 
@@ -296,7 +296,7 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 	// For time step size control.
 	double dts[3] = {dt, dt, dt}, errs[3] = {0.9,0.9,0.9};
 
-	if( solver_opts.out_interval > 0 ){
+	if (solver_opts.out_interval > 0){
 		std::cerr  << "    Rehuel: step  t  dt   err\n";
 	}
 
@@ -326,7 +326,7 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 		fsal_hook_fptr = apply_fsal;
 	}
 
-	while( t < t1 ) {
+	while (t < t1) {
 		// ****************  Calculate stages:   ************
 		// Make sure you stop exactly at t = t1.
 		if( t + dt > t1 ){
@@ -352,17 +352,17 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			}
 			Ks.col(i) = eval_fun(t + sc.c(i)*dt, tmp);
 		}
-	
+
 		// ************* Form solution at t + dt: ***********
 		vec_type delta_y = Ks*sc.b;
 		vec_type y_n     = y + dt*delta_y;
 		double new_dt    = dt;
-		
+
 		// If you have no adaptive step size, error calculation
 		// might not be very sensible.
 		if (solver_opts.adaptive_step_size) {
 			vec_type delta_alt = Ks*sc.b2;
-		
+
 			// ************* Error estimate: ***********
 			double err_tot = 0.0;
 			double atol = solver_opts.abs_tol, rtol = solver_opts.rel_tol;
@@ -379,7 +379,7 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			}
 			err = std::sqrt(err_tot / n);
 			assert( err_tot >= 0.0 && "Error cannot be negative!" );
-			
+
 			if (err < machine_precision) {
 				err = machine_precision;
 			}
@@ -395,7 +395,7 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 				integrator_status = 1;
 				sol.count.reject_err++;
 			}
-			
+
 			double fac  = 0.9;
 			double expt = 1.0 / (1.0 + min_order);
 			double err_inv = 1.0 / err;
@@ -413,20 +413,20 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 				new_dt = std::min(solver_opts.max_dt, new_dt);
 			}
 		}
-		
+
 		// ********************* Output if user requested **************
 		if (solver_opts.out_interval > 0 &&
 		    (step % solver_opts.out_interval == 0) ) {
 			std::cerr << "    Rehuel: " << step << " " << t
 			          << " " <<  dt << " " << err << "\n";
 		}
-		
+
 		// ********************* Update y and time ***************
 		if (!solver_opts.adaptive_step_size || integrator_status == 0) {
 			y  = y_n;
 			t += dt;
 			++step;
-			
+
 			sol.t_vals.push_back(t);
 			sol.y_vals.push_back(y_n);
 			// Since K is a matrix, it needs to be flattened:
@@ -454,7 +454,7 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 	return sol;
 }
 
-	
+
 /**
    \brief Time-integrate a given ODE from t0 to t1, starting at y0
 
@@ -482,11 +482,11 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
 		solver_opts.adaptive_step_size = false;
 	}
 
-	assert( verify_solver_coeffs( sc ) && "Invalid solver coefficients!" );
+	assert (verify_solver_coeffs(sc) && "Invalid solver coefficients!");
 	return erk_guts(func, t0, t1, y0, solver_opts, dt, sc);
 }
 
-	
+
 /**
    \brief Time-integrate a given ODE from t0 to t1, starting at y0.
 
@@ -508,7 +508,7 @@ rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 }
 
 
-	
+
 } // namespace erk
 
 

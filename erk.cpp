@@ -1,9 +1,6 @@
 #include "erk.hpp"
 
 
-
-
-
 using namespace erk;
 
 
@@ -44,48 +41,48 @@ solver_coeffs get_coefficients( int method )
 		sc.order = 4;
 		sc.order2 = 0;
 		break;
-		
-		
+
+
 	case BOGACKI_SHAMPINE_32:
 		sc.A  = { {  0.0,  0.0, 0.0, 0.0 },
 		          {  0.5,  0.0, 0.0, 0.0 },
 		          {  0.0, 0.75, 0.0, 0.0 },
 		          { 2.0/9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0 } };
 		sc.b  =   { 2.0/9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0 };
-		
+
 		sc.b2 = { 7.0/24.0, 0.25, 1.0/3.0, 1.0/8.0 };
-		
+
 		sc.c  = { 0.0, 0.5, 0.75, 1.0 };
-		
+
 		sc.FSAL = true;
 		sc.order  = 3;
 		sc.order2 = 2;
-		
+
 		break;
-		
+
 	case CASH_KARP_54:
 		sc.A.zeros( 6,6 );
-		
+
 		sc.A(1,0) =  1.0/5.0;
 		sc.A(2,0) =  3.0/40.0;
 		sc.A(3,0) =  3.0/10.0;
 		sc.A(4,0) = -11.0/54.0;
 		sc.A(5,0) =  1631.0/55296.0;
-		
+
 		sc.A(2,1) =  9.0/40.0;
 		sc.A(3,1) = -9.0/10.0;
 		sc.A(4,1) =  5.0/2.0;
 		sc.A(5,1) =  175.0/512.0;
-		
+
 		sc.A(3,2) =  6.0/5.0;
 		sc.A(4,2) = -70.0/27.0;
 		sc.A(5,2) =  575.0 / 13824.0;
-		
+
 		sc.A(4,3) =  35.0 / 27.0;
 		sc.A(5,3) =  44275.0 / 110592.0;
-		
+
 		sc.A(5,4) =  253.0 / 4096.0;
-		
+
 		sc.b = {37.0 / 378.0,
 		        0.0,
 		        250.0 / 621.0,
@@ -98,28 +95,28 @@ solver_coeffs get_coefficients( int method )
 		         13525.0 / 55296.0,
 		         277.0 / 14336.0,
 		         1.0/4.0 };
-		
+
 		sc.c = { 0.0,
 		         0.2,
 		         0.3,
 		         0.6,
 		         1.0,
 		         7.0/8.0 };
-		
+
 		sc.order = 5;
 		sc.order2 = 4;
-		
+
 		break;
 	case DORMAND_PRINCE_54:
 		sc.A.zeros( 7,7 );
-		
+
 		sc.A(1,0) =  1.0/5.0;
 		sc.A(2,0) =  3.0/40.0;
 		sc.A(3,0) =  44.0/45.0;
 		sc.A(4,0) =  19372.0 / 6561.0;
 		sc.A(5,0) =  9017.0 / 3168.0;
 		sc.A(6,0) =  35.0/384.0;
-			
+
 		sc.A(2,1) =  9.0/40.0;
 		sc.A(3,1) = -56.0/15.0;
 		sc.A(4,1) = -25360.0/2187.0;
@@ -219,12 +216,9 @@ solver_coeffs get_coefficients( int method )
 			          << method_to_name( method ) << "!\n";
 		}
 	}
-	
+
 	return sc;
 }
-
-
-
 
 
 solver_options default_solver_options()
@@ -234,10 +228,8 @@ solver_options default_solver_options()
 }
 
 
-
-bool verify_solver_options( solver_options &opts )
+bool verify_solver_options(solver_options &opts)
 {
-
 	return true;
 }
 
@@ -279,12 +271,11 @@ int name_to_method( const std::string &name )
 std::vector<std::string> all_method_names()
 {
 	std::vector<std::string> methods;
-	for( auto pair : rk_string_to_method ){
-		methods.push_back( pair.first );
+	for (auto pair : rk_string_to_method){
+		methods.push_back(pair.first);
 	}
 	return methods;
 }
-
 
 
 vec_type project_b( double theta, const erk::solver_coeffs &sc )
