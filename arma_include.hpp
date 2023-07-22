@@ -30,10 +30,8 @@
 #define ARMA_INCLUDE_HPP
 
 #define ARMA_USE_CXX11
-#define ARMA_USE_LAPACK
+#define ARMA_USE_OPENBLAS
 #define ARMA_USE_SUPERLU
-#define ARMA_USE_BLAS
-#define ARMA_USE_OPENMP
 
 #include <armadillo>
 
