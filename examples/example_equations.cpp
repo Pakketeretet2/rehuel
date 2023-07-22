@@ -20,7 +20,7 @@
 
 /**
    \file example_equations.cpp
-   
+
    \brief contains some example code that integrates various equations.
 
    The main function is a simple driver that a user can supply an equation with
@@ -48,6 +48,8 @@ struct user_options {
 
 	bool time_internals;
 	int out_interval;
+
+	std::string output_fname;
 };
 
 
@@ -60,11 +62,12 @@ void print_usage()
 	          << w << " --time-span <t0> <t1> --dt <dt>\n"
 	          << w << " --rel-tol <rtol> --abs-tol <atol>\n"
 	          << w << " --out-interval <interval> --time-internals <0/1>,\n"
+	          << w << " --output-file <fname>\n"
 	          << "with\n"
 	          << "\t<equation>: Equation to solve. Possible values:\n"
 	          << "\t            values: exponential, stiff-equation,\n"
 	          << "\t            robertson, three-body, van-der-pol,\n"
-	          << "\t            brusselator.\n\n"
+	          << "\t            brusselator, lorenz\n\n"
 	          << "\t<method>:   Time integration method. See Doxygen\n"
 	          << "\t            documentation for supported methods.\n"
 	          << "\t            Default is LOBATTO_IIIC_85\n\n"
@@ -74,7 +77,8 @@ void print_usage()
 	          << "\t<rtol>:     Relative error tolerance for integration\n\n"
 	          << "\t<atol>:     Absolute error tolerance for integration\n\n"
 	          << "\t<interval>: Output interval.\n\n"
-	          << "\t<0/1>:      0 or 1 (for booleans)\n\n";
+	          << "\t<0/1>:      0 or 1 (for booleans)\n\n"
+	          << "\t<fname>:    Output file name\n\n";
 }
 
 
@@ -145,7 +149,7 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 			u_opts.out_interval = std::stoi(argv[i+1]);
 			i += 2;
 		} else if (arg == "--time-internals") {
-					if (i+1 == argc) {
+			if (i+1 == argc) {
 				std::cerr << "Option \"" << arg
 				          << "\" needs 0 or 1.\n";
 				return -1;
@@ -158,12 +162,20 @@ int parse_opts(int argc, char **argv, user_options &u_opts)
 				return -2;
 			}
 			u_opts.time_internals = val;
+		} else if (arg == "--output-file") {
+			if (i+1 == argc) {
+				std::cerr << "Option \"" << arg
+				          << "\" needs an output file name!\n";
+				return -1;
+			}
+			u_opts.output_fname = argv[i+1];
+			i += 2;
 		} else {
 			std::cerr << "Unrecognized arg \"" << arg << "\"!\n";
 			return -1;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -236,9 +248,18 @@ void print_fun_jac_counters(const erk::rk_output &sol)
 template <typename rk_output>
 void print_performance(const rk_output &sol)
 {
-	double n_steps = sol.t_vals.size();
+	std::size_t n_steps = sol.t_vals.size();
+	double elapsed_time = sol.elapsed_time;
+	std::string time_units = "ms";
+	if (elapsed_time > 1000) {
+		elapsed_time /= 1000;
+		time_units = "s";
+	} else if (elapsed_time < 1e-3) {
+		elapsed_time *= 1000;
+		time_units = "us";
+	}
 	std::cerr << "Solved equation with " << n_steps << " time steps in "
-	          << sol.elapsed_time << " ms.\n";
+	          << elapsed_time << " " << time_units << ".\n";
 	std::cerr << "Accepted " << 100*sol.accept_frac << "% of the steps\n";
 	print_fun_jac_counters(sol);
 }
@@ -247,14 +268,23 @@ void print_performance(const rk_output &sol)
 template <typename functor_type>
 int int_equation(functor_type &F, const user_options &u_opts, vec_type Y0)
 {
+	output_options output_opts;
+	std::ofstream output_file_stream;
+	if (!u_opts.output_fname.empty()) {
+		std::cerr << "Writing to file\n";
+		output_file_stream.open(u_opts.output_fname);
+		output_opts.set_output_stream(output_file_stream);
+	}
 	int method = irk::name_to_method(u_opts.method);
 	if (method) {
 		// This means the user-supplied solver is indeed an IRK.
 		irk::solver_options s_opts = irk::default_solver_options();
+
 		newton::options n_opts;
 		set_irk_options(s_opts, n_opts, u_opts);
 		irk::rk_output sol = irk::odeint(F, u_opts.t0, u_opts.t1, Y0,
-		                                 s_opts, method, u_opts.dt);
+		                                 s_opts, output_opts, method,
+		                                 u_opts.dt);
 		if (sol.status) {
 			std::cerr << "Got an error integrating ODE. :/\n";
 			return 2;
@@ -385,11 +415,50 @@ int solve_lorenz(const user_options &opts)
 }
 
 
+int run_batch()
+{
+	test_equations::rober R;
+
+	vec_type Y0 = { 1.0, 0.0,  3.0, 2.0,  0.0, 3.0,
+		0.0, 2.0, -1.0, 0.0, -1.0, 0.0};
+	test_equations::three_body TB;
+	TB.set_m1(1.0);
+	TB.set_m2(1.0);
+	TB.set_m3(1000.0);
+
+	test_equations::vdpol V;
+	V.mu = 1e-4;
+
+	test_equations::lorenz L;
+	L.r = 1;
+	L.s = 1;
+	L.b = 1;
+
+	user_options opts;
+	opts.method = "LOBATTO_IIIC_85";
+	opts.out_interval = 1000;
+
+	int status_TB = int_equation(TB, opts, Y0);
+	int status_L = int_equation(L, opts, {1.0, 1.0, 1.0});
+	int status_R = int_equation(R, opts, {1.0, 0.0, 0.0});
+	int status_V = int_equation(V, opts, {1.0, 0.0, 0.0});
+
+	std::cerr << "Status for three-body:  " << status_TB << "\n"
+	          << "       for Lorenz:      " << status_L << "\n"
+	          << "       for Robertson:   " << status_R << "\n"
+	          << "       for Van der Pol: " << status_V << "\n";
+	return (status_TB & status_L & status_R & status_V);
+}
+
+
+
 int main(int argc, char **argv)
 {
+
 	std::cerr << "Welcome to the Rehuel example program.\n";
+
 	user_options u_opts;
-	
+
 	if (argc <= 1) {
 		std::cerr << "\n";
 		print_usage();
@@ -407,9 +476,9 @@ int main(int argc, char **argv)
 	if (u_opts.eq == "exponential") {
 		return solve_exponential(u_opts);
 	} else if (u_opts.eq == "stiff-equation") {
-		return solve_stiff_equation(u_opts);		
+		return solve_stiff_equation(u_opts);
 	} else if (u_opts.eq == "robertson") {
-		return solve_robertson(u_opts);	
+		return solve_robertson(u_opts);
 	} else if (u_opts.eq == "three-body") {
 		return solve_three_body(u_opts);
 	} else if (u_opts.eq == "three-body-resume") {
@@ -429,7 +498,7 @@ int main(int argc, char **argv)
 		          << "\" not recognized!\n";
 		return -1;
 	}
-	
+
 
 	return 0;
 }

@@ -1,9 +1,9 @@
 CC = clang++
-FLAGS = -O3 -std=c++11 -pedantic -g -fopenmp \
+FLAGS = -O3 -std=c++11 -pedantic -g \
         -Werror=return-type -Werror=uninitialized -Wall
 
-LNK = -L./ -lrehuel -larmadillo
-INC = -I./ -I../ 
+LNK = -L./ -lrehuel -larmadillo -llapack -lopenblas_64 -lblas
+INC = -I./ -I../
 
 COMP = $(CC) $(FLAGS) $(INC)
 LINK = $(CC) $(FLAGS) $(INC) $(LNK)
