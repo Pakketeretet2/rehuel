@@ -1,8 +1,8 @@
 CC = g++
-FLAGS = -std=c++11 -pedantic -g -O3 -ffast-math -fopenmp -march=native \
-        -Werror=return-type -Werror=uninitialized -Wall 
+FLAGS = -std=c++11 -pedantic -g -O3  -fopenmp -march=native \
+        -Werror=return-type -Werror=uninitialized -Wall
 
-CATCH_DIR = /home/stefan/projects/Catch/single_include/catch2/
+CATCH_DIR = /usr/include/catch2/
 REHUEL_DIR="../"
 TIMER_DIR="../my_timer/"
 

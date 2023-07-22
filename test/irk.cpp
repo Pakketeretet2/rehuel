@@ -184,6 +184,7 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 
 TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 {
+        output_options output_opts;
 	using namespace irk;
 	rk_output sol1;
 	rk_output sol2;
@@ -222,13 +223,13 @@ TEST_CASE( "Test if merging two solution objects works.", "[sol_merge]" )
 		test_equations::exponential func( -0.4 );
 		so.out_interval = 1;
 		so.newton_opts = &opts;
-		rk_output soltmp1 = irk::odeint( func, 0.0, 2.0, Y0, so );
+		rk_output soltmp1 = irk::odeint( func, 0.0, 2.0, Y0, so, output_opts );
 		std::size_t nsol1 = soltmp1.t_vals.size();
 	        vec_type Y1 = soltmp1.y_vals[nsol1-1];
 		double dt = soltmp1.t_vals[nsol1-1] - soltmp1.t_vals[nsol1-2];
 		std::cerr << "Integrating second leg.\n";
 		rk_output soltmp2 = irk::odeint( func, 2.0, 4.0, Y1, so,
-		                                 irk::RADAU_IIA_53, dt );
+		                                 output_opts, irk::RADAU_IIA_53, dt );
 
 		auto merge = merge_rk_output( soltmp1, soltmp2 );
 
@@ -278,15 +279,18 @@ TEST_CASE("Calculate stages for the robertson problem.", "[irk_calc_stages]")
 	arma::mat YYs = arma::reshape(Y, Neq, Ns);
 
 	mat_type Ai = arma::inv(sc.A);
-	std::cerr << "A:\n" << sc.A << "\nAi:\n" << Ai << "\n";
-	std::cerr << "y1 = \n" << y1 << "\nTrue y1 = \n" << true_y1 << "\n";
+
 	vec_type d_weights  = (Ai.t())*sc.b;
 	vec_type d2_weights = (Ai.t())*sc.b2;
 	arma::vec delta_y = YYs*d_weights;
 	arma::vec y1 = y + delta_y;
+
+	std::cerr << "A:\n" << sc.A << "\nAi:\n" << Ai << "\n";
+	std::cerr << "y1 = \n" << y1 << "\nTrue y1 = \n" << true_y1 << "\n";
+
 	REQUIRE(y1(0) == Approx(true_y1(0)).epsilon(1e-2));
 	REQUIRE(y1(1) == Approx(true_y1(1)).epsilon(1e-2));
 	REQUIRE(y1(2) == Approx(true_y1(2)).epsilon(1e-2));
-	
+
 
 }
