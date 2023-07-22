@@ -32,7 +32,7 @@
 \section{The idea}
 Runge-Kutta methods are multi-stage, single-step methods aimed towards solving (systems of) ODEs.
 They work by constructing at each time step approximations to the derivative of the function in between the current time level $t$ and the next $t + \Delta t,$ after which a linear combination of these stages is used to advance the numerical approximation to $y$ to the next level.
-That is, if we have $\dd t/ \dd t = f(t,y),$ and $y_n$ is the numerical approximation to $y$ at $t_n = n \Delta t,$ then we have
+That is, if we have $\dd y/ \dd t = f(t,y),$ and $y_n$ is the numerical approximation to $y$ at $t_n,$ then we have
 \begin{equation*}
   k_i = f\left( t + c_i \Delta t, y_n + \Delta t \sum_{j=0}^{N-1} \alpha_{i,j} k_j \right), \qquad y_{n+1} = y_n + \Delta t \sum_{i=0}^{N-1} b_i k_i.
 \end{equation*}
@@ -67,7 +67,7 @@ If the ODE has $N_{ode}$ equations and the RK method has $N_s$ stages then the t
 To ease implementation of a general implicit RK method we deduce the general form of the system of equations to solve for a general number of stages and ODEs.
 If we denote $\bvec{f}(t,\bvec{y}) = (\bvec{f}_0, \bvec{f}_1, \hdots, \bvec{f}_{N-1})^T$ then we have
 \begin{align*}
-  \bvec{F} = 
+  \bvec{F} =
   \begin{pmatrix}
     \bvec{f}\left( t + c_0\Delta t, \bvec{y} + \Delta t \sum_{j=0}^{N_s-1} \alpha_{0,j} \bvec{k}_j \right) - \bvec{k}_0 \\
     \vdots \\
@@ -110,7 +110,7 @@ Note that we only need $N_s$ evaluations of the Jacobi matrix of $f$ and not $N_
 If we have a more general system of ODEs
 \begin{equation*}
   \bvec{f}(t,\bvec{y}) = \begin{pmatrix} f_1( t, \bvec{y} ) \\
-    f_2( t, \bvec{y} ) 
+    f_2( t, \bvec{y} )
   \end{pmatrix}, \qquad \left(\frac{\partial f_k}{\partial z}\right)_i := \frac{ \partial f}{\partial z}\left(t + c_i \Delta t, \bvec{y} + \Delta t \sum_{j=0}^{N_s-1}\alpha_{i,j} \bvec{k}_j\right)
 \end{equation*}
 with $z = x,y$ and $k = 1,2$ then the total Jacobi matrix system becomes
@@ -121,7 +121,7 @@ with $z = x,y$ and $k = 1,2$ then the total Jacobi matrix system becomes
     \alpha_{1,0} \left( \frac{\partial f_1}{\partial x} \right)_1 & \alpha_{1,0} \left( \frac{\partial f_1}{\partial y} \right)_1 &  \alpha_{1,1} \left( \frac{\partial f_1}{\partial x} \right)_1 & \alpha_{1,1} \left( \frac{\partial f_1}{\partial y} \right)_1 &  \alpha_{1,2} \left( \frac{\partial f_1}{\partial x} \right)_1 & \alpha_{1,2} \left( \frac{\partial f_1}{\partial y} \right)_1 \\
     \alpha_{1,0} \left( \frac{\partial f_2}{\partial x} \right)_1 & \alpha_{1,0} \left( \frac{\partial f_2}{\partial y} \right)_1 &  \alpha_{1,1} \left( \frac{\partial f_2}{\partial x} \right)_1 & \alpha_{1,1} \left( \frac{\partial f_2}{\partial y} \right)_1 &  \alpha_{1,2} \left( \frac{\partial f_2}{\partial x} \right)_1 & \alpha_{1,2} \left( \frac{\partial f_2}{\partial y} \right)_1 \\
     \alpha_{2,0} \left( \frac{\partial f_1}{\partial x} \right)_2 & \alpha_{2,0} \left( \frac{\partial f_1}{\partial y} \right)_2 &  \alpha_{2,1} \left( \frac{\partial f_1}{\partial x} \right)_2 & \alpha_{2,1} \left( \frac{\partial f_1}{\partial y} \right)_2 &  \alpha_{2,2} \left( \frac{\partial f_1}{\partial x} \right)_2 & \alpha_{2,2} \left( \frac{\partial f_1}{\partial y} \right)_2 \\
-    \alpha_{2,0} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,0} \left( \frac{\partial f_2}{\partial y} \right)_2 &  \alpha_{2,1} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,1} \left( \frac{\partial f_2}{\partial y} \right)_2 &  \alpha_{2,2} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,2} \left( \frac{\partial f_2}{\partial y} \right)_2 \\    
+    \alpha_{2,0} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,0} \left( \frac{\partial f_2}{\partial y} \right)_2 &  \alpha_{2,1} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,1} \left( \frac{\partial f_2}{\partial y} \right)_2 &  \alpha_{2,2} \left( \frac{\partial f_2}{\partial x} \right)_2 & \alpha_{2,2} \left( \frac{\partial f_2}{\partial y} \right)_2 \\
    \end{pmatrix} - \bvec{I}
 \end{align*}
 which, in ``prettier'' notation, is
@@ -135,6 +135,67 @@ which, in ``prettier'' notation, is
 
 Since we have now deduced a general form for the non-linear function that defines all the stages as well as its Jacobi matrix, we can use Newton iteration to solve the system of equations.
 For explicit methods, we will of course not resort to Newton iteration because the stages can be computed in a single step.
+
+Instead of calculating the stages using the aforementioned formula, we calculate the following related quantities as per Hairer, N\o rsett and Wanner (Solving Differential Equations II):
+\begin{align*}
+  \bvec{Y} := \begin{pmatrix}
+    \bvec{Y}_1 \\
+    \bvec{Y}_2 \\
+    \hdots \\
+    \bvec{Y}_s
+  \end{pmatrix} :=& \Delta t \begin{pmatrix}
+    a_{11} \bvec{k}_1 + a_{12}\bvec{k}_2 + \hdots + a_{1s}\bvec{k}_s \\
+    a_{21} \bvec{k}_1 + a_{22}\bvec{k}_2 + \hdots + a_{2s}\bvec{k}_s \\
+    \vdots \\
+    a_{s1} \bvec{k}_1 + a_{s2}\bvec{k}_2 + \hdots + a_{ss}\bvec{k}_s \\
+  \end{pmatrix} \\
+  =& \Delta t (\bvec{A}\otimes \bvec{I}) ( \bvec{k}_1, \bvec{k}_2, \hdots, \bvec{k}_s)^T \\
+  =& \Delta t \begin{pmatrix}
+    a_{11}\bvec{I}  & a_{12}\bvec{I} & \hdots & a_{1s}\bvec{I} \\
+    a_{21}\bvec{I}  & a_{22}\bvec{I} & \hdots & a_{2s}\bvec{I} \\
+    \vdots & \vdots & \ddots & \vdots \\
+    a_{s1}\bvec{I}  & a_{s2}\bvec{I} & \hdots & a_{ss}\bvec{I}
+  \end{pmatrix} \begin{pmatrix}
+    \bvec{k}_1 \\
+    \bvec{k}_2 \\
+    \vdots \\
+    \bvec{k}_s
+  \end{pmatrix}
+\end{align*}
+Since $\bvec{Y} = \Delta t (\bvec{A}\otimes\bvec{I})\bvec{K}$ we have $\bvec{K} = (\Delta t \bvec{A}\otimes\bvec{I})^{-1}\bvec{Y}$ and hence
+\begin{equation}
+  (\Delta t \bvec{A}\otimes\bvec{I})^{-1}\bvec{Y} = \begin{pmatrix}
+    (\bvec{f}(t+c_1\Delta t, \bvec{y} + \bvec{Y}_1)) \\
+    (\bvec{f}(t+c_2\Delta t, \bvec{y} + \bvec{Y}_2)) \\
+    \vdots \\
+    (\bvec{f}(t+c_s\Delta t, \bvec{y} + \bvec{Y}_s))
+  \end{pmatrix}
+  \label{eqn:system-solve-1}
+\end{equation}
+Therefore the non-linear system we have to solve each step is given by
+\begin{equation}
+  \bvec{R} := \bvec{Y} - \Delta t (\bvec{A}\otimes\bvec{I}) \begin{pmatrix}
+    (\bvec{f}(t+c_1\Delta t, \bvec{y} + \bvec{Y}_1)) \\
+    (\bvec{f}(t+c_2\Delta t, \bvec{y} + \bvec{Y}_2)) \\
+    \vdots \\
+    (\bvec{f}(t+c_s\Delta t, \bvec{y} + \bvec{Y}_s))
+  \end{pmatrix} = 0
+  \label{eqn:system-solve-2}
+\end{equation}
+and its Jacobi matrix is given by
+\begin{equation}
+  \bvec{J} := \bvec{I}_{Ns\times Ns} - \Delta t (\bvec{A}\otimes\bvec{I}) \begin{pmatrix}
+    \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_1) & \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_2) & \hdots & \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_s) \\
+    \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_1) & \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_2) & \hdots & \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_s) \\
+    \vdots & \vdots & \ddots & \vdots \\
+        \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_1) & \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_2) & \hdots & \bvec{J}_\bvec{f}(\bvec{y} + \bvec{Y}_s)
+  \end{pmatrix}
+  \label{eqn:system-solve-3},
+\end{equation}
+where we have omitted the time-dependence of the Jacobi matrix $\bvec{J}_\bvec{f}$ of $\bvec{f}.$
+
+For some equations the success of Newton iteration is not impacted much by the Jacobi matrix and for those
+cases we can replace $\bvec{J}_\bvec{f}(t + c_i\Delta t, \bvec{y} + \bvec{Y}_i)$ with simply $\bvec{J}_\bvec{f}(t, \bvec{y}).$
 
 \section{A test case}
 A simple way to test the integrators is to apply them to an ODE whose solution is known.
@@ -157,7 +218,7 @@ To find $\bvec{A}_1$ and $\bvec{A}_2$, we apply the initial value $(x,y) = (1,0)
 
 \section{Adaptive time step control and embedding methods}
 
-Given a Runge-Kutta method, it is sometimes possible to find a second set of weights $\hat{\bvec{b}}$ in such a way that the approximation $\hat{\bvec{y}} = $
+Given a Runge-Kutta method, it is sometimes possible to find a second set of weights $\hat{\bvec{b}}$ in such a way that the approximation $\hat{\bvec{y}} = \bvec{y}_n + \Delta t_n \sum_{i=1}^{N_S} \hat{b}_i\bvec{k}_i$
 
 \section{Stability regions}
 
@@ -168,7 +229,7 @@ For a general Runge-Kutta method, the stages are implicitly defined as
   \begin{pmatrix} \bvec{k}_0 \\
     \bvec{k}_1 \\
     \vdots \\
-    \bvec{k}_{N-1} 
+    \bvec{k}_{N-1}
   \end{pmatrix}
   =& \lambda \begin{pmatrix} \bvec{y}_0 \\
     \bvec{y}_0 \\
@@ -194,7 +255,7 @@ For a general Runge-Kutta method, the stages are implicitly defined as
     \bvec{k}_0 \\
     \bvec{k}_1 \\
     \vdots \\
-    \bvec{k}_{N-1} 
+    \bvec{k}_{N-1}
   \end{pmatrix}
 \end{align*}
 and hence are given by
@@ -207,7 +268,7 @@ and hence are given by
   \end{pmatrix}\right] \begin{pmatrix} \bvec{k}_0 \\
     \bvec{k}_1 \\
     \vdots \\
-    \bvec{k}_{N-1} 
+    \bvec{k}_{N-1}
   \end{pmatrix} = \lambda
   \begin{pmatrix}
     \bvec{y}_0 \\
@@ -272,7 +333,7 @@ Applying some linear algebra we can write the stage values the following way:
     Y_1 \\
     Y_2 \\
     \vdots \\
-    Y_{s-1} 
+    Y_{s-1}
   \end{pmatrix} = z \bvec{A} \bvec{Y} + \bvec{U}\begin{pmatrix}
     y_n \\
     y_{n-1} \\
@@ -300,6 +361,226 @@ If we have $y(t_n) = 1$ and divide by it, we recover the stability function:
   y(t_{n+1})/y(t_n) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}(1,1,1,\hdots,1)^T + 1,
 \end{equation*}
 which indeed is the stability function for RK methods.
+
+
+\section{Multistep methods}
+Another approach to solving ODEs is to use multistep methods.
+The most sensible methods for solving stiff equations are backward-differentiation formula methods.
+The idea is straight-forward: We can integrate an ODE with RHS $\bvec{y}' = f(t, \bvec{y})$ by applying a finite difference method to the LHS. The most straightforward
+\begin{equation*}
+  \bvec{y}_{n+1} - \bvec{y}_n = \Delta t\cdot f(t_n + \Delta t, \bvec{y}_{n+1}).
+\end{equation*}
+This is clearly just a first-order finite difference approximation to $\Delta t \cdot f(t_n + \Delta t, \bvec{y}_{n+1}.$
+The idea behind BDFs is to replace the right-hand-side with an interpolation polynomial rather than only the time derivative at $n+1$.
+We can e.g. use Lagrange polynomials for the last four points. If the points are also equidistant, we have $t_n - t_m=(n-m)\Delta t:$
+\begin{align*}
+  p_1(t) =& \frac{t - t_n}{t_{n+1}-t_{n}} \frac{t - t_{n-1}}{t_{n+1} - t_{n-1}} \frac{t - t_{n-2}}{t_{n+1} - t_{n-2}} = \frac{(t-t_n)(t-t_{n-1})(t-t_{n-2})}{6(\Delta t)^3} \\
+  p_2(t) =& \frac{t - t_{n+1}}{t_{n}-t_{n+1}} \frac{t - t_{n-1}}{t_{n} - t_{n-1}} \frac{t - t_{n-2}}{t_{n} - t_{n-2}} = -\frac{(t - t_{n-1})(t-t_{n-2})(t-t_{n+1})}{2(\Delta t)^3} \\
+  p_3(t) =& \frac{t - t_{n+1}}{t_{n-1}-t_{n+1}} \frac{t - t_{n-2}}{t_{n-1} - t_{n-2}} \frac{t - t_{n}}{t_{n-1} - t_{n}} = \frac{(t - t_{n+1})(t-t_{n-2})(t-t_{n})}{2 (\Delta t)^3} \\
+  p_4(t) =& -\frac{t - t_{n-1}}{t_{n-2}-t_{n-1}} \frac{t - t_{n}}{t_{n-2} - t_{n}} \frac{t - t_{n+1}}{t_{n-2} - t_{n+1}} = \frac{(t - t_{n-1})(t - t_{n})(t-t_{n+1})}{6 (\Delta t)^3}
+\end{align*}
+We construct a linear combination of these polynomials to go through $\bvec{y}_{n+1},~\bvec{y}_n,~\bvec{y}_{n-1}$ and $\bvec{y}_{n-2}:$
+\begin{equation*}
+  P(t) = \bvec{y}_{n+1}p_1(t) + \bvec{y}_{n}p_2(t) + \bvec{y}_{n-1}p_3(t) + \bvec{y}_{n-2}p_4(t).
+\end{equation*}
+The derivative of this polynomial is
+\begin{equation*}
+P(t) = \bvec{y}_{n+1}p_1'(t) + \bvec{y}_{n}p_2'(t) + \bvec{y}_{n-1}p_3'(t) + \bvec{y}_{n-2}p_4'(t).
+\end{equation*}
+The derivatives of each polynomial separately are
+\begin{align*}
+  p_1'(t) =& \frac{(t-t_{n-1})(t-t_{n-2}) + (t-t_n)(t-t_{n-2}) + (t-t_n)(t-t_{n-1})}{6(\Delta t)^3} \\
+  p_2'(t) =& -\frac{(t-t_{n-2})(t-t_{n+1}) + (t - t_{n-1})(t-t_{n+1}) + (t - t_{n-1})(t-t_{n-2})}{2(\Delta t)^3} \\
+  p_3'(t) =& \frac{(t-t_{n-2})(t-t_{n}) + (t - t_{n+1})(t-t_{n}) + (t - t_{n+1})(t-t_{n-2})}{2 (\Delta t)^3} \\
+  p_4'(t) =& -\frac{(t - t_{n})(t-t_{n+1}) + (t - t_{n-1})(t-t_{n+1}) + (t - t_{n-1})(t - t_{n})}{6 (\Delta t)^3}
+\end{align*}
+Evaluating them at $t_{n+1}$ allows us to evaluate $P'(t)$ at $t_{n+1}:$
+\begin{align*}
+    p_1'(t_{n+1}) =& \frac{6(\Delta t)^2 + 3(\Delta t)^2 + 2(\Delta t)^2}{6(\Delta t)^3} = \frac{11}{6\Delta t} \\
+  p_2'(t_{n+1}) =& -\frac{0(\Delta t)^2 + 0(\Delta t)^2 + 6(\Delta t)^2}{2(\Delta t)^3} = -\frac{6}{2\Delta t} \\
+  p_3'(t_{n+1}) =& \frac{3(\Delta t)^2 + 0(\Delta t)^2 + 0(\Delta t)^2}{2 (\Delta t)^3} = \frac{3}{2 \Delta t} \\
+  p_4'(t_{n+1}) =& -\frac{0(\Delta t)^2 + 0(\Delta t)^2 + 2(\Delta t)^2}{6 (\Delta t)^3} = -\frac{1}{3\Delta t}
+\end{align*}
+From this we can construct a method to approximate $\bvec{y}_{n+1}$ which we equate with $f(t_{n+1},\bvec{y}_{n+1}):$
+\begin{equation*}
+P'(t_{n+1}) = \bvec{y}_{n+1}\frac{11}{6\Delta t} - \bvec{y}_{n}\frac{3}{\Delta t} + \bvec{y}_{n-1}\frac{3}{2\Delta t} - \bvec{y}_{n-2}\frac{1}{3\Delta t} = f(t_{n+1},\bvec{y}_{n+1})
+\end{equation*}
+We divide out $11/(6\Delta t)$ to isolate the $y_{n+1}$-term and obtain the final form of the BDF3-formula:
+\begin{equation*}
+  \bvec{y}_{n+1} - \bvec{y}_{n}\frac{18}{11} + \bvec{y}_{n-1}\frac{ 9}{11} - \bvec{y}_{n-2}\frac{2}{11} = \frac{6\Delta t}{11}f(t_{n+1},\bvec{y}_{n+1})
+\end{equation*}
+While this provides a great way to obtain higher order accurate solutions at the expense of only storage, not computational effort, we are tied to a fixed step size of $\Delta t$ for any of the formulas to be consistent.
+
+However, sometimes we might want to change the time step size because it is much smaller than the relevant scale of the solution. One way to alleviate expanding too much computational effort is to scale up or down the order of the BDF formula. This saves some computations, but the real bottle-neck will always come from having to solve the non-linear system involving $\bvec{y}_{n+1} - c_{n+1}\Delta t f(t_{n+1}, \bvec{y}_{n+1}) + \sum_{i=0}^{N}c_{n-i} \bvec{y}_{n-i}=0.$
+Fewer solutions to this system can only be made possible by making $\Delta t$ larger, so ideally we would like a way to change the time step size without ruining the complete method.
+One idea is the following. When we reach a stage where we want to change the time step size and have memory of the points $\bvec{y}_{n+1},\bvec{y}_n,\bvec{y}_{n-1}$ and $\bvec{y}_{n-2},$ we construct a fourth-degree interpolation polynomial as we did before:
+\begin{align*}
+  P(t) = \bvec{y}_{n+1}p_1(t) + \bvec{y}_{n}p_2(t) + \bvec{y}_{n-1}p_3(t) + \bvec{y}_{n-2}p_4(t).
+\end{align*}
+We then determine time step size we want based on some criteria. We probably should cap it to some maximum increase, e.g. $\Delta t^{new} \leq 1.2 \Delta t$. This creates a new grid of time points:
+\begin{equation*}
+  t_{n+1}^{new} = t_{n+1}, \quad t_n^{new} = t_{n+1}-\Delta t^{new}, \quad t_{n-1}^{new} = t_{n+1}- 2\Delta t^{new},\quad t_{n-2}^{new} = t_{n+1}- 3\Delta t^{new}.
+\end{equation*}
+We can evaluate $P(t)$ on each of these points to find new approximations to $\bvec{y}_n^{new}=P(t_n^{new}), \bvec{y}_{n-1}=P(t_{n-1}^{new})$ and $\bvec{y}_{n-2}=P(t_{n-2}^{new}).$
+Since the interpolation polynomial is of degree 3, our approximation will be third-order consistent, just like our BDF-3 method.
+
+\subsection{consistency of BDF method}
+If $f(t, y) = -\lambda y,$ and our first 3 solutions are exact, then we have e.g.
+\begin{equation*}
+  y_{n} = \exp(-\lambda 4 \Delta t), \quad   y_{n-1} = \exp(-\lambda 3 \Delta t), \quad   y_{n-2} = \exp(-\lambda 2 \Delta t).
+\end{equation*}
+Clearly the next point should be $\exp(-\lambda 5 \Delta t).$ The BDF method we discovered previously gives us
+
+\begin{equation*}
+  y_{n+1} - \frac{18}{11}\exp(-4\lambda \Delta t) + \frac{ 9}{11}\exp(-3\lambda \Delta t) - \frac{2}{11}\exp(-2\lambda \Delta t) = -\frac{6\Delta t}{11}\lambda y_{n+1}
+\end{equation*}
+Isolating for $y_{n+1}$ gives us
+\begin{equation*}
+  y_{n+1} = \frac{\frac{18}{11}\exp(-4\lambda \Delta t) - \frac{ 9}{11}\exp(-3\lambda \Delta t) + \frac{2}{11}\exp(-2\lambda \Delta t)}{1 + \frac{6 \lambda\Delta t}{11}}
+\end{equation*}
+To analyze the consistency further, we need to Taylor-expand the exponentials:
+\begin{equation*}
+  \exp(-n\lambda \Delta t) \approx 1 - n\lambda \Delta t + \frac{1}{2}(n\lambda \Delta t)^2 - \frac{1}{6}(n\lambda \Delta t)^3 + \frac{1}{24}(n\lambda \Delta t)^4 + \mathcal{O}(\Delta t)^5
+\end{equation*}
+Tallying all the contributions leads to
+\begin{align*}
+  y_{n+1} = (1+\frac{6\lambda \Delta t}{11})^{-1}&\left[+\frac{18}{11}\left(1 - 4\lambda \Delta t + 8(\lambda \Delta t)^2 - \frac{64}{6}(\lambda \Delta t)^3 + \frac{256}{24}(\lambda \Delta t)^4)\right)\right. \\
+                                                 &\left.-\frac{9}{11}\left(1 - 3\lambda \Delta t + \frac{9}{2}(\lambda \Delta t)^2 - \frac{27}{6}(\lambda \Delta t)^3 + \frac{81}{24}(\lambda \Delta t)^4\right) \right. \\
+  &+\left.\frac{2}{11}\left( 1 - 2\lambda \Delta t + 2(\lambda \Delta t)^2 - \frac{8}{6}(\lambda \Delta t)^3 + \frac{16}{24}(\lambda \Delta t)^4 \right)\right] + \mathcal{O}(\Delta t)^5
+\end{align*}
+We first collect all terms of equal order on the RHS inside square brackets:
+\begin{align*}
+  &(18 - 9 + 2)/11 = 11/11 = 1\\
+  &(-72 + 27 - 4)/11 = -49/11 \\
+  &(144 - 81/2 + 4) = 107.5/11 = 215/22\\
+  &(-1152+243-16)/66 = -925/66 \\
+  &(4608 - 729 + 32)/264 = 3911/264
+\end{align*}
+We also need to approximate $(1+6\lambda \Delta t/11)^{-1}$ up to fifth order:
+\begin{equation*}
+  \left(1+\frac{6}{11}\lambda \Delta t\right)^{-1} = 1 - \frac{6}{11}\lambda \Delta t + \left(\frac{6}{11}\lambda \Delta t\right)^2 - \left(\frac{6}{11}\lambda \Delta t\right)^3 + \left(\frac{6}{11}\lambda \Delta t\right)^4 + \mathcal{O}(\Delta t)^5
+\end{equation*}
+Multiplying these two leads to
+\begin{align*}
+  &\left[1 - \frac{6}{11}\lambda \Delta t + \left(\frac{6}{11}\lambda \Delta t\right)^2 - \left(\frac{6}{11}\lambda \Delta t\right)^3 + \left(\frac{6}{11}\lambda \Delta t\right)^4 + \mathcal{O}(\Delta t)^5\right]\cdot \\
+  &\left[1 - \frac{49}{11}\lambda \Delta t + \frac{215}{22}(\lambda \Delta t)^2 - \frac{925}{66}(\lambda \Delta t)^3 + \frac{3911}{264}(\lambda \Delta t)^4 + \mathcal{O}(\Delta t)^5\right] \\
+  &= 1 + (\lambda \Delta t)\left(\frac{-6-49}{11}\right) + (\lambda \Delta t)^2\left(\frac{6^2}{11^2} + \frac{215}{22} + \frac{294}{11^2}\right) \\
+  &+ (\lambda \Delta t)^3\left(-\frac{216}{11^3} - \frac{36\cdot 49}{11^3} - \frac{215\cdot 6}{22\cdot 11} - \frac{925}{66}\right) \\
+  &+ (\lambda \Delta t)^4\left(\frac{6^4}{11^4} + \frac{49\cdot 6^3}{11^4} + \frac{6^2\cdot 215}{11^2\cdot 22}+\frac{925\cdot 6}{66\cdot 11} + \frac{3911}{264}\right) + \mathcal{O}(\Delta t)^5
+\end{align*}
+Simplifying the terms leads to
+\begin{align*}
+  &= 1 - (\lambda \Delta t)\left(\frac{55}{11}\right) + (\lambda \Delta t)^2\left(\frac{3025}{242} \right) - (\lambda \Delta t)^3\left(\frac{166375}{66\cdot 11^2} \right) \\
+  &+ (\lambda \Delta t)^4\left( \frac{55191246}{2108304}\right) + \mathcal{O}(\Delta t)^5
+\end{align*}
+We can simplify the fractions down to
+\begin{align*}
+  &= 1 - 5(\lambda \Delta t) + \frac{1}{2}(5\lambda \Delta t)^2 - \frac{1}{6}(5 \lambda \Delta t)^3  + \mathcal{O}(\Delta t)^4
+\end{align*}
+The first four terms match the Taylor series of $\exp(-5\lambda \Delta t)$ but the fifth term is off. We expect $5^4/24$ for the final term but have instead $6911/(11\cdot 24).$ In other words, we obtained the approximation $5^4 = 625 \approx 628.27 = 6911/11.$
+This means our BDF-3 formula is third-order consistent.
+
+\subsection{Solving BDF equations}
+To solve a system like the BDF equations, we perform the following steps. Consider again the BDF-3 method:
+\begin{equation*}
+  \bvec{y}_{n+1} - \frac{18}{11}\bvec{y}_n + \frac{9}{11}\bvec{y}_{n-1} - \frac{2}{11}\bvec{y}_{n-2} = \frac{6 \Delta t}{11}f(t_{n+1}, \bvec{y}_{n+1})
+\end{equation*}
+which we can rewrite as
+\begin{equation*}
+  \bvec{y}_{n+1} - \frac{18}{11}\bvec{y}_n + \frac{9}{11}\bvec{y}_{n-1} - \frac{2}{11}\bvec{y}_{n-2} - \frac{6 \Delta t}{11}\bvec{f}(t_{n+1}, \bvec{y}_{n+1}) = \bvec{0}.
+\end{equation*}
+We can straightforwardly apply Newton's method to this since we see that
+\begin{equation*}
+  \bvec{I}  - \frac{6 \Delta t}{11}\bvec{J}(t_{n+1}, \bvec{y}_{n+1})
+\end{equation*}
+is the full Jacobi matrix of the BDF method, where $\bvec{J}$ is the Jacobi matrix of the ODE. The Newton type iterations therefore become
+\begin{equation*}
+  \bvec{y}_{n+1}^{k+1} = \bvec{y}_{n+1}^k + \left(\bvec{I}  - \frac{6 \Delta t}{11}\bvec{J}(t_{n+1}, \bvec{y}^{k}_{n+1})\right)^{-1}\left( \bvec{y}^{k}_{n+1} - \frac{18}{11}\bvec{y}_n + \frac{9}{11}\bvec{y}_{n-1} - \frac{2}{11}\bvec{y}_{n-2} - \frac{6 \Delta t}{11}\bvec{f}(t_{n+1}, \bvec{y}_{n+1}^{k}) \right)
+\end{equation*}
+
+
+
+\section{Optimizations in implementing IRK methods}
+Consider again a three-stage IRK method, e.g. a three-stage Radau method.
+We have
+\begin{align*}
+  \bvec{Y} :=& \Delta t
+  \begin{pmatrix}
+    a_{11}\bvec{k}_1 + a_{12}\bvec{k}_2 + a_{13}\bvec{k}_3 \\
+    a_{21}\bvec{k}_1 + a_{22}\bvec{k}_2 + a_{23}\bvec{k}_3 \\
+    a_{31}\bvec{k}_1 + a_{32}\bvec{k}_2 + a_{33}\bvec{k}_3
+  \end{pmatrix} \\
+  =& \Delta t \begin{pmatrix}
+    a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 & 0 \\
+    0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 \\
+    0 & 0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} \\
+    a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 & 0 \\
+    0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 \\
+    0 & 0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} \\
+    a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 & 0 \\
+    0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 \\
+    0 & 0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33}
+     \end{pmatrix}
+     \begin{pmatrix}
+       k_{11} \\
+       k_{12} \\
+       k_{13} \\
+       k_{21} \\
+       k_{22} \\
+       k_{23} \\
+       k_{31} \\
+       k_{32} \\
+       k_{33} \\
+     \end{pmatrix}
+\end{align*}
+With this we solved the equation
+\begin{align*}
+  (\Delta t \bvec{A}\otimes \bvec{I})^{-1}\bvec{Y} = \begin{pmatrix}
+  \bvec{f}(t + c_1\Delta t, \bvec{y} + \bvec{Y}_1) \\
+  \bvec{f}(t + c_2\Delta t, \bvec{y} + \bvec{Y}_2) \\
+  \bvec{f}(t + c_3\Delta t, \bvec{y} + \bvec{Y}_3) \\
+  \end{pmatrix}
+\end{align*}
+which written out explicitly is
+\begin{align*}
+  \Delta t \begin{pmatrix}
+    a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 & 0 \\
+    0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 \\
+    0 & 0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} \\
+    a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 & 0 \\
+    0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 \\
+    0 & 0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} \\
+    a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 & 0 \\
+    0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 \\
+    0 & 0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33}
+     \end{pmatrix}^{-1}
+     \begin{pmatrix}
+       Y_{11} \\
+       Y_{12} \\
+       Y_{13} \\
+       Y_{21} \\
+       Y_{22} \\
+       Y_{23} \\
+       Y_{31} \\
+       Y_{32} \\
+       Y_{33} \\
+     \end{pmatrix} = \\
+  \begin{pmatrix}
+      f_1(t+c_1\Delta t, y_1+Y_{11}+Y_{12}+Y_{13}) \\
+      f_2(t+c_1\Delta t, y_2+Y_{11}+Y_{12}+Y_{13}) \\
+      f_3(t+c_1\Delta t, y_3+Y_{11}+Y_{12}+Y_{13}) \\
+      f_1(t+c_2\Delta t, y_1+Y_{21}+Y_{22}+Y_{23}) \\
+      f_2(t+c_2\Delta t, y_2+Y_{21}+Y_{22}+Y_{23}) \\
+      f_3(t+c_2\Delta t, y_3+Y_{21}+Y_{22}+Y_{23}) \\
+      f_1(t+c_3\Delta t, y_1+Y_{31}+Y_{32}+Y_{33}) \\
+      f_2(t+c_3\Delta t, y_2+Y_{31}+Y_{32}+Y_{33}) \\
+      f_3(t+c_3\Delta t, y_3+Y_{31}+Y_{32}+Y_{33}) \\
+  \end{pmatrix}
+\end{align*}
+Now, suppose we can find a transformation for the matrix $\bvec{A}$ such that
+\begin{equation*}
+  \bvec{A} = \bvec{T}^{-1}\bvec{U}\bvec{T}
+\end{equation*}
 
 
 
