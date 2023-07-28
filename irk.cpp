@@ -257,8 +257,6 @@ solver_coeffs get_coefficients( int method )
 		sc.FSAL = true;
 		break;
 
-		// case LOBATTO_IIIA_85:
-
 
 	case LOBATTO_IIIC_43:
 
@@ -330,9 +328,6 @@ solver_coeffs get_coefficients( int method )
 
 
 		break;
-
-		// case GAUSS_LEGENDRE_84:
-		// case GAUSS_LEGENDRE_126:
 
 	case RADAU_IIA_32:{
 

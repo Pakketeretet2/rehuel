@@ -97,17 +97,13 @@ struct output_options {
 	{
 		NO_OUTPUT = 0,
 		STORE_IN_VECTORS = 1,
-		WRITE_TO_FILE = 2,
-		FUNCTION_CALLBACK = 3
+		WRITE_TO_FILE = 2
 	};
-
-	typedef void (*output_callback)(const std::size_t step, const double t, const vec_type &y);
 
 	std::size_t output_mode = STORE_IN_VECTORS;
 	std::size_t output_interval = 1;
-	std::ostream &log_out = std::cerr;
+	std::ostream &log_out = std::cout;
 	std::ostream *output_stream;
-	output_callback solution_output = nullptr;
 
 	bool store_in_vectors() const
 	{
@@ -118,22 +114,22 @@ struct output_options {
 		return output_mode & (1 << (WRITE_TO_FILE - 1));
 	}
 
-	void register_output_callback(output_callback callback)
-	{
-		solution_output = callback;
-		output_mode |= (1 << (FUNCTION_CALLBACK - 1));
-	}
-	void unregister_output_calback()
-	{
-		solution_output = nullptr;
-		output_mode &= ~(1 << (FUNCTION_CALLBACK - 1));
-	}
-
 	void set_output_stream(std::ostream &out_stream)
 	{
 		output_stream = &out_stream;
 		output_mode |= (1 << (WRITE_TO_FILE - 1));
 	}
+
+
+	void enable_store_in_vectors()
+	{
+		output_mode |= (1 << (STORE_IN_VECTORS - 1));
+	}
+	void disable_store_in_vectors()
+	{
+		output_mode &= ~(1 << (STORE_IN_VECTORS - 1));
+	}
+
 };
 
 

@@ -394,7 +394,9 @@ arma::vec construct_R(functor_type &func,
 
    \param Y Contains the stages
 */
-template <typename functor_type, bool adaptive_step=true> inline
+template <typename functor_type,
+          bool adaptive_step=true,
+          bool PLU_decomposition=false> inline
 int newton_solve_stages(functor_type &func, const vec_type &y, double t,
                         double dt, const solver_coeffs &sc,
                         int maxit, int refresh_jac,
@@ -425,8 +427,10 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 
 			// Since we re-use the same Jacobi matrix,
 			// pre-construct the LU decomposition:
-			assert(arma::lu(L,U,P, J_Y) &&
-			       "LU decomposition of Jacobi matrix failed!");
+			if (PLU_decomposition) {
+				assert(arma::lu(L,U,P, J_Y) &&
+				       "LU decomposition of Jacobi matrix failed!");
+			}
 			++jac_evals;
 		};
 
@@ -451,8 +455,13 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 	int status = newton::MAXIT_EXCEEDED;
 	stats.iters = 1;
 	for ( ; stats.iters < maxit; ++stats.iters) {
-		vec_type tmp = arma::solve(arma::trimatl(-L), P*R);
-		vec_type dY  = arma::solve(arma::trimatu(U), tmp);
+		vec_type dY;
+		if (PLU_decomposition) {
+			vec_type tmp = arma::solve(arma::trimatl(-L), P*R);
+			dY  = arma::solve(arma::trimatu(U), tmp);
+		} else {
+			dY  = -arma::solve(J_Y, R);
+		}
 		xnorm2 = arma::dot(dY, dY);
 
 		Y += step*dY;
@@ -608,7 +617,8 @@ rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 		int integrator_status = 0;
 
 		// Use newton iteration to find the Ks for the next level:
-		int newton_status = newton_solve_stages<functor_type, false>(
+		int newton_status = newton_solve_stages<functor_type,
+		                                        false, true>(
 			func, y, t, dt, sc,
 			newton_maxit,
 			newton_opts.refresh_jac,
@@ -676,7 +686,7 @@ rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 
 		// At this point, Y contains the stages defined by
 		// Y_i = dt*(a_i1*k1 + a_i2*k2)...
-		// The update to y is given by d := b*inv(A);
+		// The update to y is given by d := b*inv(A)*Y;
 
 
 		vec_type delta_y, delta_alt;
@@ -832,13 +842,6 @@ rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 					}
 					*output_opts.output_stream << "\n";
 				}
-				if (output_opts.solution_output) {
-					if (time_internals) timer.tic();
-					output_opts.solution_output(step, t, y_n);
-					if (time_internals) {
-						timings[CUSTOM_OUTPUT_CALLBACK] += timer.toc();
-					}
-				}
 			}
 			alternative_error_formula = false;
 		}
@@ -915,6 +918,7 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0)
 {
 	solver_options s_opts = default_solver_options();
 	newton::options n_opts;
+	n_opts.refresh_jac = 25;
 	n_opts.tol = 0.1*std::min(s_opts.abs_tol, s_opts.rel_tol);
 
 	s_opts.newton_opts = &n_opts;
