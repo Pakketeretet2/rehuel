@@ -363,16 +363,16 @@ inline void print_timing_breakdown(const std::vector<double> &timings,
    \brief Construct the residual vector of the non-linear systme to solve.
 */
 template <typename functor_type> inline
-void construct_R(functor_type &func,
-                 const vec_type &y, double t, double dt,
-                 const solver_coeffs &sc, const vec_type &Y,
-                 const mat_type &I_neq, vec_type &R)
+arma::vec construct_R(functor_type &func,
+                      const vec_type &y, double t, double dt,
+                      const solver_coeffs &sc, const vec_type &Y,
+                      const mat_type &I_neq)
 {
 	vec_type F(Y.size());
 	std::size_t Ns = sc.b.size();
 	std::size_t Neq = y.size();
 	vec_type e = arma::ones(Ns);
-	R = Y;
+	arma::vec R = Y;
 	for (std::size_t i = 0; i < Ns; ++i) {
 		std::size_t i0 = Neq*i;
 		std::size_t i1 = i0 + Neq - 1;
@@ -381,6 +381,7 @@ void construct_R(functor_type &func,
 		F.subvec(i0, i1) = func.fun(t + sc.c(i)*dt, y + Yi);
 	}
 	R -= dt*arma::kron(sc.A, I_neq)*F;
+	return R;
 }
 
 
@@ -393,7 +394,7 @@ void construct_R(functor_type &func,
 
    \param Y Contains the stages
 */
-template <typename functor_type> inline
+template <typename functor_type, bool adaptive_step=true> inline
 int newton_solve_stages(functor_type &func, const vec_type &y, double t,
                         double dt, const solver_coeffs &sc,
                         int maxit, int refresh_jac,
@@ -401,11 +402,11 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
                         newton::status &stats,
                         std::size_t &fun_evals, std::size_t &jac_evals)
 {
-	std::size_t Neq = y.size();
-	std::size_t Ns  = sc.b.size();
-	std::size_t NN  = Ns*Neq;
+	const std::size_t Neq = y.size();
+	const std::size_t Ns  = sc.b.size();
+	const std::size_t NN  = Ns*Neq;
 
-	mat_type I_neq   = arma::eye(Neq, Neq);
+	const mat_type I_neq   = arma::eye(Neq, Neq);
 
 	// Construct the initial system:
 	Y = arma::zeros(NN);
@@ -434,11 +435,13 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 	// Start iterating:
 	double xtol2 = xtol*xtol;
 	double Rtol2 = Rtol*Rtol;
-	vec_type R(Y.size());
-	construct_R(func, y, t, dt, sc, Y, I_neq, R);
+	vec_type R = construct_R(func, y, t, dt, sc, Y, I_neq);
 	fun_evals += Ns;
-	double Rnorm2 = arma::dot(R,R);
-	double step = 1.0 / sqrt(1.0 + Rnorm2);
+	double step = 1.0;
+	double Rnorm2 = arma::dot(R, R);;
+	if (adaptive_step) {
+		step /= sqrt(1.0 + Rnorm2);
+	}
 	double xnorm2 = 0;
 
 	// During iteration, we sometimes temporarily increase the
@@ -453,7 +456,7 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 		xnorm2 = arma::dot(dY, dY);
 
 		Y += step*dY;
-		construct_R(func, y, t, dt, sc, Y, I_neq, R);
+		R = construct_R(func, y, t, dt, sc, Y, I_neq);
 
 		fun_evals += Ns;
 		Rnorm2 = arma::dot(R,R);
@@ -465,7 +468,9 @@ int newton_solve_stages(functor_type &func, const vec_type &y, double t,
 			status = newton::SUCCESS;
 			break;
 		}
-		step = 1.0 / sqrt(1.0 + Rnorm2);
+		if (adaptive_step) {
+			step = 1.0 / sqrt(1.0 + Rnorm2);
+		}
 
 		if (stats.iters % refresh_jac == 0) {
 			refresh_jacobi_matrix();
@@ -603,13 +608,14 @@ rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 		int integrator_status = 0;
 
 		// Use newton iteration to find the Ks for the next level:
-		int newton_status = newton_solve_stages(func, y, t, dt, sc,
-		                                        newton_maxit,
-		                                        newton_opts.refresh_jac,
-		                                        xtol, Rtol, Y, J,
-		                                        newton_stats,
-		                                        sol.count.fun_evals,
-		                                        sol.count.jac_evals);
+		int newton_status = newton_solve_stages<functor_type, false>(
+			func, y, t, dt, sc,
+			newton_maxit,
+			newton_opts.refresh_jac,
+			xtol, Rtol, Y, J,
+			newton_stats,
+			sol.count.fun_evals,
+			sol.count.jac_evals);
 
 
 
