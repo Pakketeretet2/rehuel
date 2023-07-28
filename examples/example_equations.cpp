@@ -248,7 +248,6 @@ void print_fun_jac_counters(const erk::rk_output &sol)
 template <typename rk_output>
 void print_performance(const rk_output &sol)
 {
-	std::size_t n_steps = sol.t_vals.size();
 	double elapsed_time = sol.elapsed_time;
 	std::string time_units = "ms";
 	if (elapsed_time > 1000) {
@@ -258,7 +257,7 @@ void print_performance(const rk_output &sol)
 		elapsed_time *= 1000;
 		time_units = "us";
 	}
-	std::cerr << "Solved equation with " << n_steps << " time steps in "
+	std::cerr << "Solved equation in "
 	          << elapsed_time << " " << time_units << ".\n";
 	std::cerr << "Accepted " << 100*sol.accept_frac << "% of the steps\n";
 	print_fun_jac_counters(sol);
@@ -274,6 +273,7 @@ int int_equation(functor_type &F, const user_options &u_opts, vec_type Y0)
 		std::cerr << "Writing to file\n";
 		output_file_stream.open(u_opts.output_fname);
 		output_opts.set_output_stream(output_file_stream);
+		output_opts.disable_store_in_vectors();
 	}
 	int method = irk::name_to_method(u_opts.method);
 	if (method) {
@@ -289,7 +289,6 @@ int int_equation(functor_type &F, const user_options &u_opts, vec_type Y0)
 			std::cerr << "Got an error integrating ODE. :/\n";
 			return 2;
 		}
-		print_output(sol);
 		print_performance(sol);
 		return 0;
 	}
@@ -304,7 +303,7 @@ int int_equation(functor_type &F, const user_options &u_opts, vec_type Y0)
 			std::cerr << "Got an error integrating ODE. :/\n";
 			return 2;
 		}
-		print_output(sol);
+
 		print_performance(sol);
 		return 0;
 	}

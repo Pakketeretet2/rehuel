@@ -18,20 +18,23 @@ For a quick tutorial/guide, see the guide in \ref guide.md
 Recommended solvers
 ---------------
 
-<b>Non-stiff:</b>  
-    DORMAND_PRINCE_54    (A good default explicit RK method (think ode45))  
+<b>Non-stiff:</b>
+    DORMAND_PRINCE_54    (A good default explicit RK method (think ode45))
     CASH_KARP_54         (Ditto, might be optimized later to "fail early"
-                         on moderately stiff systems)  
-<b>Moderately stiff</b>:  
+                         on moderately stiff systems)
+    BOGACKI_SHAMPINE_32  (If you need less accuracy and more speed)
+
+<b>Moderately stiff</b>:
     It depends really. Try DORMAND_PRINCE_54, and monitor your RAM. If you are
 running out of RAM and/or the solution takes forever, integrate over a
-shorter interval. If the solution still takes too long, try a stiff solver.  
-<b>Very stiff</b>:  
-    RADAU_IIA_53     (this should probably be your default stiff solver)  
-    RADAU_IIA_95     (if you need more strict tolerance or a lot of steps)  
-    LOBATTO_IIIC_43  (similar to RADAU_IIA_53)  
-    LOBATTO_IIIC_85  (similar to RADAU_IIA_85)  
-  
+shorter interval. If the solution still takes too long, try a stiff solver.
+    Alternatively, you can just try an IRK method and benefit from its higher accuracy too.
+
+<b>Very stiff</b>:
+    LOBATTO_IIIC_85  (this should probably be your default stiff solver)
+    LOBATTO_IIIC_43  (might be faster than the 85 method but seems to have trouble with some problems)
+    RADAU_IIA_53     (should work decently well too)
+
 In examples/example_equations.cpp we provide a small driver program that can
 apply various methods to various problems so you can get a feel for the
 strengths and weaknesses of each method.
@@ -58,5 +61,3 @@ by Ernst Hairer and Gerhard Wanner:
  - Stiff differential equations solved by Radau methods
  - Solving Ordinary Differential Equations I
  - Solving Ordinary Differential Equations II
-
-
