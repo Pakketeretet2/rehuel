@@ -264,7 +264,7 @@ solver_coeffs get_coefficients( int method )
 		         { 1.0/6.0, 5.0/12.0, -1.0/12.0 },
 		         { 1.0/6.0, 2.0/3.0, 1.0/6.0 } };
 		sc.b  = { 1.0/6.0, 2.0/3.0, 1.0/6.0 };
-		sc.b2 = { -0.5, 2.0, -0.5 };
+		sc.b2 = { -0.5, 2.0, -0.5 };  // Need a better set because these are not L-stable
 		sc.c  = { 0.0, 0.5, 1.0 };
 		sc.order = 4;
 		sc.order2 = 2;

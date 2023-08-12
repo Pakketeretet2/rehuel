@@ -1,6 +1,6 @@
 /*
    Rehuel: a simple C++ library for solving ODEs
- 
+
 
    Copyright 2017-2019, Stefan Paquay (stefanpaquay@gmail.com)
 
@@ -256,7 +256,7 @@ struct three_body : public functor
 	typedef mat_type jac_type;
 
 	three_body() : m1(1.0), m2(1.0), m3(1.0), m1r(1.0), m2r(1.0) {}
-	
+
 	three_body( double m1, double m2, double m3 )
 		: m1(m1), m2(m2), m3(m3), m1r(m1/m3), m2r(m2/m3) {}
 
@@ -475,7 +475,7 @@ struct three_body : public functor
 		m1r = m1 / m3;
 		m2r = m2 / m3;
 	}
-	
+
 	double m1, m2, m3;
 	double m1r, m2r;
 };
@@ -519,7 +519,7 @@ struct kinetic_4 : public functor
 struct lorenz : public functor
 {
 	typedef mat_type jac_type;
-	
+
 	lorenz(double sigma = 10, double rho = 28, double beta = 8.0/3.0)
 		: s(sigma), r(rho), b(beta) {}
 
@@ -543,7 +543,9 @@ struct lorenz : public functor
 };
 
 
-	
+// TODO: Discretization of a PDE:
+
+
 
 } // test_equations
 

@@ -216,10 +216,6 @@ To find $\bvec{A}_1$ and $\bvec{A}_2$, we apply the initial value $(x,y) = (1,0)
   \begin{pmatrix} 0 \\ 1 \end{pmatrix} \sin( \omega t ) \right]e^{-\alpha t}
 \end{equation*}
 
-\section{Adaptive time step control and embedding methods}
-
-Given a Runge-Kutta method, it is sometimes possible to find a second set of weights $\hat{\bvec{b}}$ in such a way that the approximation $\hat{\bvec{y}} = \bvec{y}_n + \Delta t_n \sum_{i=1}^{N_S} \hat{b}_i\bvec{k}_i$
-
 \section{Stability regions}
 
 For a given Runge-Kutta method, the stability region can be determined by applying the method to a
@@ -277,7 +273,7 @@ and hence are given by
     \bvec{y}_0 \\
   \end{pmatrix},
 \end{align*}
-where $\bvec{I}_{MN\times MN}$ is a $MN$ ny $MN$ identity matrix, as opposed to $\bvec{I}$, which is an $N\times N$ identity matrix, with $M$ the number of equations (1 for our problem) and $N$ the number of stages.
+where $\bvec{I}_{MN\times MN}$ is a $MN$ by $MN$ identity matrix, as opposed to $\bvec{I}$, which is an $N\times N$ identity matrix, with $M$ the number of equations (1 for our problem) and $N$ the number of stages.
 From the solution of this system the new value of $\bvec{y}$ is computed as
 \begin{equation*}
   \bvec{y}_1 = \bvec{y}_0 + \Delta t
@@ -306,6 +302,127 @@ and so
 \begin{equation*}
   y_1/y_0 = 1 + \lambda \Delta t \left(b_0, b_1, \hdots, b_{N-1}\right)\left[\bvec{I} - \lambda \Delta t \bvec{A}\right]^{-1}\left(1, 1, \hdots, 1\right)^T
 \end{equation*}
+
+
+\section{Adaptive time step control and embedding methods}
+
+Given a Runge-Kutta method, it is sometimes possible to find a second set of weights $\hat{\bvec{b}}$ in such a way that the approximation $\hat{\bvec{y}} = \bvec{y}_n + \Delta t_n \sum_{i=1}^{N_S} \hat{b}_i\bvec{k}_i$ is also a valid implicit Runge-Kutta method, but with a different order of consistency.
+Then, the difference $\bvec{y} - \hat{\bvec{y}}$ is an estimate for the error, since if the original method is of order $m_1$ and the embedded method of order $m_2 < m_1$, then we have
+\begin{align*}
+  \bvec{y} - \hat{\bvec{y}} =& \bvec{y}_{n+1}^{exact} + \epsilon_1 (\Delta t)^{m_1} - \bvec{y}_{n+1}^{exact} - \epsilon_2 (\Delta t)^{m_2} + \mathcal{O}((\Delta t)^{m_2+1}) \\
+  =& \epsilon_{2}(\Delta t)^{m_2} + \mathcal{O}((\Delta t)^{m_2+1})
+\end{align*}
+in which we recognize that $\bvec{y}-\hat{\bvec{y}}$ is an $m_2$-order consistent approximation to the error in $\hat{\bvec{y}}.$
+
+However, for this type of scheme to work for arbitrary step sizes, it is important that the method given by the coefficients $\hat{\bvec{b}}$ is also L-stable or A-stable. In general, we would like it to have stability characteristics similar to the original method.
+To guarantee this we need to go over the same stability checks as the original method.
+
+For example, for the three-stage Lobatto-IIIC method we have
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c|ccc}
+    0 & $\frac{1}{6}$ & $-\frac{1}{3}$ & $\frac{1}{6}$ \\
+    $\half$ & $\frac{1}{6}$ & $\frac{5}{12}$ & $-\frac{1}{12}$ \\
+    1 & $\frac{1}{6}$ & $\frac{2}{3}$ & $\frac{1}{6}$ \\
+\hline
+    {} & $\frac{1}{6}$ & $\frac{2}{3}$ & $\frac{1}{6}$ \\
+  \end{tabular}
+\end{table}
+from which we can find that
+\begin{equation*}
+  \bvec{I} - \lambda \Delta t \bvec{A} =
+  \begin{pmatrix}
+    1 - \lambda \Delta t/6 & \lambda \Delta t/3 & -\lambda \Delta t/6 \\
+    -\lambda \Delta t/6 & 1 - 5\lambda \Delta t/12 & \lambda \Delta t/12 \\
+    -\lambda \Delta t/6 & -2\lambda \Delta t/3 & 1 - \lambda \Delta t/6
+  \end{pmatrix}
+\end{equation*}
+% TODO: THIS INVERSE IS NOT CORRECT I THINK!
+which we can, with some hassle and writing $z:=\lambda \Delta t$, invert to find
+\begin{equation*}
+  (\bvec{I} - \lambda \Delta t \bvec{A})^{-1} =
+  \frac{1}{-\frac{z^3}{24} + \frac{z^2}{4}-\frac{3z}{4}+1}
+  \begin{pmatrix}
+    \frac{z^2}{8} - \frac{7z}{12}+1 & \frac{z^2}{6} - \frac{z}{3} & \frac{z}{6} - \frac{z^2}{24} \\
+    \frac{z}{6} - \frac{z^2}{24} & -\frac{z}{3} + 1 & \frac{z^2}{24} - \frac{z}{12} \\
+    \frac{z^2}{24} + \frac{z}{6} & \frac{2z}{3} - \frac{z^2}{6} & \frac{z^2}{8} - \frac{7z}{12} + 1
+  \end{pmatrix}
+\end{equation*}
+This is indeed the inverse, because we have
+\begin{align*}
+  &\begin{pmatrix}
+     \frac{z^2}{8} - \frac{7z}{12}+1 & \frac{z^2}{6} - \frac{z}{3} & \frac{z}{6} - \frac{z^2}{24} \\
+    \frac{z}{6} - \frac{z^2}{24} & -\frac{z}{3} + 1 & \frac{z^2}{24} - \frac{z}{12} \\
+    \frac{z^2}{24} + \frac{z}{6} & \frac{2z}{3} - \frac{z^2}{6} & \frac{z^2}{8} - \frac{7z}{12} + 1
+  \end{pmatrix}
+  \begin{pmatrix}
+    1 - z/6 & z/3 & -z/6 \\
+    -z/6 & 1-5z/12 & z/12 \\
+    -z/6 & -2z/3 & 1 - z/6
+  \end{pmatrix}
+\end{align*}
+which we can compute.
+The top left entry is given by
+\begin{align*}
+  &\frac{z^2}{8} - \frac{7z}{12}+1 - \frac{z^3}{48} + \frac{7z^2}{72} - \frac{z}{6} - \frac{z^3}{36} + \frac{z^2}{18} - \frac{z^2}{36} + \frac{z^3}{144} \\
+  =& z^3\left(\frac{1}{144} - \frac{1}{48} - \frac{1}{36}\right) + z^2\left(\frac{1}{8} + \frac{7}{72} + \frac{1}{18} - \frac{1}{36}\right) + z \left(-\frac{1}{6} - \frac{7}{12}\right) + 1 \\
+  =& -\frac{z^3}{24} + \frac{z^2}{4} - \frac{3z}{4} + 1
+\end{align*}
+For the other two diagonal terms we get the same result, and for all off-diagonals we end up with 0, for example for the entry in the top right:
+\begin{align*}
+  &-\frac{z}{6}\left(\frac{z^2}{8}-\frac{7z}{12} + 1\right) + \frac{z}{12}\left(\frac{z^2}{6} - \frac{z}{3}\right) + \left(\frac{z}{6} - \frac{z^2}{24}\right)\left(1 - \frac{z}{6}\right) \\
+  =& -\frac{z}{6} + \frac{7z^2}{72} - \frac{z^3}{48} + \frac{z^3}{72} - \frac{z^2}{36} + \frac{z}{6} - \frac{z^2}{24} - \frac{z^2}{36} + \frac{z^3}{144} \\
+  =& z^3\left(-\frac{1}{48} + \frac{1}{72} + \frac{1}{144}\right) + z^2\left(\frac{7}{72} - \frac{1}{36} - \frac{1}{24} - \frac{1}{36}\right) + z\left(-\frac{1}{6} + \frac{1}{6}\right) + 0 \\
+  =& z^3\left(\frac{-3}{144} + \frac{2}{144} + \frac{1}{144}\right) + z^2\left(\frac{7}{72} - \frac{2}{72} - \frac{3}{72} - \frac{2}{72}\right) + z\cdot 0 + 0 = 0
+\end{align*}
+From this we get the full expression for the stability region:
+\begin{align*}
+  &1 + \frac{z (b_1, b_2, b_3)}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}\cdot   \begin{pmatrix}
+    \frac{z^2}{8} - \frac{7z}{12}+1 & \frac{z^2}{6} - \frac{z}{3} & \frac{z}{6} - \frac{z^2}{24} \\
+    \frac{z}{6} - \frac{z^2}{24} & -\frac{z}{3} + 1 & \frac{z^2}{24} - \frac{z}{12} \\
+                                                                                           \frac{z^2}{24} + \frac{z}{6} & \frac{2z}{3} - \frac{z^2}{6} & \frac{z^2}{8} - \frac{7z}{12} + 1
+                                                                                         \end{pmatrix}
+  \begin{pmatrix}
+    1 \\
+    1 \\
+    1
+  \end{pmatrix} \\
+  =&
+  1 + \frac{z (b_1, b_2, b_3)}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}
+  \begin{pmatrix}
+    \frac{z^2}{8}-\frac{7z}{12}+1 + \frac{z^2}{6} - \frac{z}{3} + \frac{z}{6} - \frac{z^2}{24} \\
+    \frac{z}{6} - \frac{z^2}{24} - \frac{z}{3} + 1 + \frac{z^2}{24} - \frac{z}{12} \\
+    \frac{z^2}{24} + \frac{z}{6} + \frac{2z}{3} - \frac{z^2}{6} + \frac{z^2}{8} - \frac{7z}{12} + 1
+  \end{pmatrix} \\
+  =&
+   1 + \frac{z (b_1, b_2, b_3)}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}
+   \begin{pmatrix}
+     1 + \frac{3z^2}{24}-\frac{7z}{12} + \frac{4z^2}{24} - \frac{4z}{12} + \frac{2z}{12} - \frac{z^2}{24} \\
+     1 + \frac{2z}{12} - \frac{z^2}{24} - \frac{4z}{12} + \frac{z^2}{24} - \frac{z}{12} \\
+     1 + \frac{z^2}{24} + \frac{2z}{12} + \frac{8z}{12} - \frac{4z^2}{24} + \frac{3z^2}{24} - \frac{7z}{12}
+   \end{pmatrix} \\
+     =&
+   1 + \frac{z (b_1, b_2, b_3)}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}
+   \begin{pmatrix}
+     1 - \frac{9}{12} z + \frac{6}{24}z^2 \\
+     1 - \frac{3}{12} z \\
+     1 - \frac{1}{12} z
+   \end{pmatrix}
+\end{align*}
+Further simplification leads to
+\begin{align*}
+  1 + \frac{z (b_1 + b_2 + b_3) + \frac{z^2}{12}\left(-9b_1 - 3b_2 - b_3\right) +  b_1\frac{6z^3}{24}}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}
+\end{align*}
+For the given method we have $b_1 = b_3 = 1/6$ and $b_2 = 2/3 = 4/6$ so we obtain
+\begin{equation*}
+  \left(1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}\right)^{-1}\left(1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24} + z - \frac{22 z^2}{12} + \frac{z^3}{24} \right)
+\end{equation*}
+which finally reduces to
+\begin{equation*}
+  \frac{1 + \frac{z}{4} - \frac{1}{12}z^2}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}
+\end{equation*}
+From this expression, we see that the method is L-stable, because in the limit of $z\downarrow -\infty$, clearly the denominator dominates and we obtain 0.
+To determine A-stability, we need to find the contours where the stability function is equal to 1.
 
 \section{General linear methods}
 A generalization to Runge-Kutta methods is the family of so-called general linear methods (GLM).
@@ -581,6 +698,41 @@ Now, suppose we can find a transformation for the matrix $\bvec{A}$ such that
 \begin{equation*}
   \bvec{A} = \bvec{T}^{-1}\bvec{U}\bvec{T}
 \end{equation*}
+
+
+\section{Some more test equations}
+Other good tests for our solver would be the systems of equations obtained after discretizing a PDE. This wll also provide a good way to make sure sparse matrix support is working.
+Consider the homogeneous heat equation
+\begin{equation*}
+  \frac{\partial u}{\partial t} = \kappa \left[ \frac{\partial^2u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}\right]
+\end{equation*}
+subject to boundary conditions $u(x, 0) = u_0,$ $u(x, L_y)=u_0$, $u(0, y) = u_0$ and $\partial u/\partial x(L_x, y) = -\Gamma.$
+
+We can discretize by means of finite (central) differences, but of course we can also directly compute the solution if we are given an initial value.
+To find an exact solution we apply separation of variables and obtain
+\begin{equation*}
+  T'/T = \kappa (X''/X + Y''/Y) = const. := -\lambda
+\end{equation*}
+and we find $T(t) = A \exp(-\lambda t).$
+Similarly, we find
+\begin{equation*}
+  \kappa X''/X = -\lambda - \kappa Y''/Y = const.
+\end{equation*}
+and so $X(x) =  A \cos(kx) + B \sin(kx)$ and $Y(y) = A \cos(ky) + B \sin(ky).$
+Substituting all this back into the PDE gives us
+\begin{align*}
+  -\lambda &\exp(-\lambda t) \left[A\cos(kx) + B\sin(kx) + C\cos(ky) + D\sin(ky)\right] \\
+  =&\kappa \exp(-\lambda t) \left[ -k_x^2 A\cos(k_xx)  -k_x^2B\cos(k_xx)\right]\left[by +  C\cos(k_yy) + D\sin(k_yy)\right] \\
+           &+ \kappa \exp(-\lambda t) \left[ ax +  A\cos(k_xx)  + B\cos(k_xx)\right]\left[-k_y^2C\cos(k_yy) - k_y^2 D\sin(k_yy)\right] \\
+  =& -\kappa (k_x^2  + k_y^2) u = -\lambda u
+\end{align*}
+For this to be equal we clearly must have $k_x^2  + k_y^2 = \lambda.$
+Both $k_x$ and $k_y$ can only take on specific values which follow from the boundary conditions.
+For $y=0$ we have $u(x,0) = u_0$ and for $y = L_y$ we have $u(x,L_y) = u_0.$ This means that $k_y= n \pi$ with $n \in \mathbb{R}$ and we can write
+\begin{equation*}
+  Y(y) = \sum_{n=0}^\infty (A_n\cos(n \pi y) + B_n \sin(n\pi y))
+\end{equation*}
+and $A_0 = u_0.$
 
 
 
