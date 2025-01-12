@@ -1,5 +1,5 @@
 CC = clang++
-FLAGS = -O3 -std=c++11 -pedantic -g \
+FLAGS = -O0 -std=c++11 -pedantic -g \
         -Werror=return-type -Werror=uninitialized -Wall
 
 LNK = -L./ -lrehuel -larmadillo
