@@ -300,7 +300,7 @@ Since we only have one equation, the solution for $\bvec{K} := \left(k_0, k_1, \
 \end{equation*}
 and so
 \begin{equation*}
-  y_1/y_0 = 1 + \lambda \Delta t \left(b_0, b_1, \hdots, b_{N-1}\right)\left[\bvec{I} - \lambda \Delta t \bvec{A}\right]^{-1}\left(1, 1, \hdots, 1\right)^T
+  R(\lambda \Delta t) = y_1/y_0 = 1 + \lambda \Delta t \left(b_0, b_1, \hdots, b_{N-1}\right)\left[\bvec{I} - \lambda \Delta t \bvec{A}\right]^{-1}\left(1, 1, \hdots, 1\right)^T
 \end{equation*}
 
 
@@ -337,44 +337,95 @@ from which we can find that
     -\lambda \Delta t/6 & -2\lambda \Delta t/3 & 1 - \lambda \Delta t/6
   \end{pmatrix}
 \end{equation*}
-% TODO: THIS INVERSE IS NOT CORRECT I THINK!
-which we can, with some hassle and writing $z:=\lambda \Delta t$, invert to find
+Now, we are interested in the quantity $\bvec{b}^T(\bvec{I}-z\bvec{A})^{-1}\bvec{e},$ where $z:=\lambda\Delta t$ and $\bvec{e} := (1, 1, 1).$
+However, directly computing $(\bvec{I}-z\bvec{A})^{-1}$ is tedious, so we instead determine the $LU$-decomposition first:\\
+\begin{align*}
+  \bvec{LU} :=&
+  \begin{pmatrix}
+    1 & 0 & 0 \\
+    l_{21} & 1 & 0 \\
+    l_{31} & l_{32} & 1
+  \end{pmatrix}
+  \begin{pmatrix}
+    u_{11} & u_{12} & u_{13} \\
+    0 & u_{22} & u_{23} \\
+    0 & 0 & u_{33}
+  \end{pmatrix} \\
+  =&\begin{pmatrix}
+    u_{11} & u_{12} & u_{13} \\
+    l_{21}u_{11} & l_{21}u_{12} + u_{22} & l_{21}u_{13} + u_{23} \\
+    l_{31}u_{11} & l_{31}u_{12} + l_{32}u_{22} & l_{31}u_{13} + l_{32}u_{23} + u_{33}
+  \end{pmatrix}
+\end{align*}
+We immediately find the top row of $\bvec{U}$ and first column of $\bvec{L}:$
+\begin{align*}
+  u_{11} &= 1 - z/6 \qquad u_{12} = z/3 \qquad u_{13} = -z/6 \\
+  l_{21} &= -\frac{z/6}{1-z/6} \qquad l_{31} = -\frac{z/6}{1 - z/6}
+\end{align*}
+To find $u_{22}$ we consider the center equation and find
 \begin{equation*}
-  (\bvec{I} - \lambda \Delta t \bvec{A})^{-1} =
-  \frac{1}{-\frac{z^3}{24} + \frac{z^2}{4}-\frac{3z}{4}+1}
-  \begin{pmatrix}
-    \frac{z^2}{8} - \frac{7z}{12}+1 & \frac{z^2}{6} - \frac{z}{3} & \frac{z}{6} - \frac{z^2}{24} \\
-    \frac{z}{6} - \frac{z^2}{24} & -\frac{z}{3} + 1 & \frac{z^2}{24} - \frac{z}{12} \\
-    \frac{z^2}{24} + \frac{z}{6} & \frac{2z}{3} - \frac{z^2}{6} & \frac{z^2}{8} - \frac{7z}{12} + 1
-  \end{pmatrix}
+  -\frac{z^2/18}{1-z/6} + u_{22} = 1 - 5z/12 = \frac{(1 - \frac{5}{12}z)(1 - z/6)}{1 - z/6}
 \end{equation*}
-This is indeed the inverse, because we have
+from which we isolate
+\begin{equation*}
+  u_{22} = (1 - z/6)^{-1}\left(1 - \frac{7}{12}z + \frac{5}{72}z^2 + \frac{1}{18}z^2\right) = \frac{1 - \frac{7}{12}z + \frac{1}{8}z^2}{1 - z/6}
+\end{equation*}
+Now we can substitute this into the third equation of the second column to obtain $l_{32}:$
 \begin{align*}
-  &\begin{pmatrix}
-     \frac{z^2}{8} - \frac{7z}{12}+1 & \frac{z^2}{6} - \frac{z}{3} & \frac{z}{6} - \frac{z^2}{24} \\
-    \frac{z}{6} - \frac{z^2}{24} & -\frac{z}{3} + 1 & \frac{z^2}{24} - \frac{z}{12} \\
-    \frac{z^2}{24} + \frac{z}{6} & \frac{2z}{3} - \frac{z^2}{6} & \frac{z^2}{8} - \frac{7z}{12} + 1
-  \end{pmatrix}
-  \begin{pmatrix}
-    1 - z/6 & z/3 & -z/6 \\
-    -z/6 & 1-5z/12 & z/12 \\
-    -z/6 & -2z/3 & 1 - z/6
-  \end{pmatrix}
+  l_{31}u_{12} + l_{32}u_{22} =& \frac{-z^2/18}{1 - z/6} + l_{32}\frac{1 - \frac{7}{12}z + \frac{1}{8}z^2}{1 - z/6} = -\frac{2z}{3} \\
+  l_{32}\frac{1 - \frac{7}{12}z + \frac{1}{8}z^2}{1 - z/6} =& -\frac{2z}{3} + \frac{z^2/18}{1-z/6} = \frac{-2z/3 + 2z^2/18 + z^2/18}{1-z/6} \\
+  \rightarrow l_{32} =& \frac{1 - z/6}{1 - \frac{7}{12}z + \frac{1}{8}z^2}\frac{-2z/3 + z^2/6}{1 - z/6} = -\frac{2z}{3}\frac{1 - z/4}{1 - \frac{7}{12}z + \frac{1}{8}z^2}
 \end{align*}
-which we can compute.
-The top left entry is given by
+To verify correctness, we pause at this point and recompute the first two columns of the product $\bvec{LU}.$ The top rows are trivial, while for the other components we find
 \begin{align*}
-  &\frac{z^2}{8} - \frac{7z}{12}+1 - \frac{z^3}{48} + \frac{7z^2}{72} - \frac{z}{6} - \frac{z^3}{36} + \frac{z^2}{18} - \frac{z^2}{36} + \frac{z^3}{144} \\
-  =& z^3\left(\frac{1}{144} - \frac{1}{48} - \frac{1}{36}\right) + z^2\left(\frac{1}{8} + \frac{7}{72} + \frac{1}{18} - \frac{1}{36}\right) + z \left(-\frac{1}{6} - \frac{7}{12}\right) + 1 \\
-  =& -\frac{z^3}{24} + \frac{z^2}{4} - \frac{3z}{4} + 1
+  l_{21}u_{11} =& -z/6, \qquad l_{31}u_{11} = -z/6\\
+  l_{21}u_{12} + u_{22} =& \frac{-z/6}{1-z/6}(z/3) + \frac{1 - \frac{7}{12}z + \frac{1}{8}z^2}{1-z/6} = \frac{1 - \frac{7}{12}z + \frac{1}{8}z^2 - \frac{1}{18}z^2}{1-z/6}
 \end{align*}
-For the other two diagonal terms we get the same result, and for all off-diagonals we end up with 0, for example for the entry in the top right:
+Since $\frac{1}{8}=\frac{18}{12^2}$ and $\frac{1}{18}=\frac{8}{12^2}$ we end up with
+\begin{equation*}
+  l_{21}u_{12} + u_{22} = \frac{1 - \frac{7}{12}z + \frac{10}{12^2}z^2}{1-z/6}.
+\end{equation*}
+The numerator factorizes into $(1-z/6)(1-5z/12)$ so we indeed have $l_{21}u_{12} + u_{22} = 1 - 5z/12.$
+Similarly, for the last expression of column 2 we find
 \begin{align*}
-  &-\frac{z}{6}\left(\frac{z^2}{8}-\frac{7z}{12} + 1\right) + \frac{z}{12}\left(\frac{z^2}{6} - \frac{z}{3}\right) + \left(\frac{z}{6} - \frac{z^2}{24}\right)\left(1 - \frac{z}{6}\right) \\
-  =& -\frac{z}{6} + \frac{7z^2}{72} - \frac{z^3}{48} + \frac{z^3}{72} - \frac{z^2}{36} + \frac{z}{6} - \frac{z^2}{24} - \frac{z^2}{36} + \frac{z^3}{144} \\
-  =& z^3\left(-\frac{1}{48} + \frac{1}{72} + \frac{1}{144}\right) + z^2\left(\frac{7}{72} - \frac{1}{36} - \frac{1}{24} - \frac{1}{36}\right) + z\left(-\frac{1}{6} + \frac{1}{6}\right) + 0 \\
-  =& z^3\left(\frac{-3}{144} + \frac{2}{144} + \frac{1}{144}\right) + z^2\left(\frac{7}{72} - \frac{2}{72} - \frac{3}{72} - \frac{2}{72}\right) + z\cdot 0 + 0 = 0
+  l_{31}u_{12} + l_{32}u_{22} =& -\frac{z^2/18}{1-z/6} - \frac{2z}{3}\frac{1 - z/4}{1 - \frac{7}{12}z + \frac{1}{8}z^2}\frac{1 - \frac{7}{12}z + \frac{1}{8}z^2}{1 - z/6} \\
+  =& \frac{-z^2/18 - 2z/3 + z^2/6}{1-z/6} = \frac{-2z/3 -z^2/9}{1 - z/6} = -\frac{2z}{3}\frac{1-z/6}{1 - z/6} = -2z/3,
 \end{align*}
+reassuring us that we made no mistake in any of the terms so far.
+The last two terms to find are $u_{23}$ and $u_{33}.$
+We have
+\begin{align*}
+  l_{21}u_{13}  + u_{23} =& \frac{+(z/6)^2}{1-z/6} + u_{23} = \frac{z}{12} \\
+  u_{23} =& \frac{z}{12} - \frac{z^2/36}{1-z/6}  = \frac{z/12 - z^2/72 - z^2/36}{1-z/6} = \frac{z}{12}\frac{1-z/2}{1-z/6}
+\end{align*}
+and finally to find $u_{33}$ we solve
+\begin{align*}
+  l_{31}u_{13} + l_{32}u_{23} + u_{33} =& \frac{z^2/36}{1 - z/6} - \frac{2z}{3}\frac{z}{12} \frac{1 - z/4}{1 - \frac{7}{12}z + \frac{1}{8}z^2}\frac{1 - z/2}{1 - z/6} + u_{33} = 1 - z/6 \\
+  u_{33} =& 1 - \frac{z}{6} - \frac{z^2/36}{1-z/6} + \frac{2z^2}{36}\frac{(1 - z/4)(1-z/2)}{(1-z/6)(1 - \frac{7}{12}z + \frac{1}{8}z^2)}
+\end{align*}
+The easiest way forward is to combine everything into one fraction. The numerator becomes
+\begin{align*}
+  & \frac{2z^2}{36}(1-z/4)(1-z/2) + (1 - \frac{z}{6})^2(1-\frac{7}{12}z + \frac{1}{8}z^2) - \frac{z^2}{36}(1-\frac{7}{12}z + \frac{1}{8}z^2) \\
+  =& \frac{z^2}{18}\left(1 - \frac{3z}{4} + \frac{z^2}{8}\right) + \left(1 - \frac{z}{3} + \frac{z^2}{36} - \frac{z^2}{36}\right)\left(1 - \frac{7}{12}z + \frac{z^2}{8}\right)  \\
+  =& \frac{z^2}{18} - \frac{3z^3}{72} + \frac{z^4}{12^2} + \left(1 - \frac{7}{12}z + \frac{z^2}{8}\right) - \frac{z}{3}\left(1 - \frac{7}{12}z + \frac{z^2}{8}\right) \\
+  =& \frac{z^2}{18} - \frac{3z^3}{72} + \frac{z^4}{12^2} + 1 - \frac{7}{12}z + \frac{z^2}{8} - \frac{z}{3} + \frac{7z^2}{36} - \frac{z^3}{24} \\
+  =& 1 + z\left(-\frac{7}{12} - \frac{1}{3}\right) + z^2\left(\frac{1}{18} + \frac{1}{8} + \frac{7}{36}\right) + z^3\left(-\frac{3}{72} - \frac{1}{24}\right) + \frac{z^4}{12^2} \\
+  =& 1 - \frac{11}{12}z + \frac{3}{8}z^2 - \frac{1}{12}z^3 + \frac{1}{12^2}z^4
+\end{align*}
+This expression has two real roots, one at $z=6$ and one at around $z\approx 2.6.$
+We factorize it as $(1 - z/6)(6z^3 - 36z^2 + 108z - 24)$ so we can cancel one term against the denominator and we finally get
+\begin{equation*}
+  u_{33} = \frac{6z^3 - 36z^2 + 108z - 24}{1 - \frac{7}{12}z + \frac{1}{8}z^2}
+\end{equation*}
+
+Now that we found all coefficients, we can again make sure they are correct. The final equation is
+\begin{align*}
+  &l_{31}u_{13} + l_{32}u_{23} + u_{33} \\
+  &= \frac{+(z/6)^2}{1-z/6} - \frac{2z}{3}\frac{1-z/4}{1 - \frac{7}{12}z + \frac{1}{8}z^2} \frac{z}{12}\frac{1-z/2}{1-z/6} + \frac{6z^3 - 36z^2 + 108z - 24}{1 - \frac{7}{12}z + \frac{1}{8}z^2}
+\end{align*}
+We combine everything again under the same denominator of $(1-\frac{7}{12}z+\frac{1}{8}z^2)(1-z/6)$
+
+
 From this we get the full expression for the stability region:
 \begin{align*}
   &1 + \frac{z (b_1, b_2, b_3)}{1 - \frac{3z}{4} + \frac{z^2}{4} - \frac{z^3}{24}}\cdot   \begin{pmatrix}
@@ -424,61 +475,429 @@ which finally reduces to
 From this expression, we see that the method is L-stable, because in the limit of $z\downarrow -\infty$, clearly the denominator dominates and we obtain 0.
 To determine A-stability, we need to find the contours where the stability function is equal to 1.
 
-\section{General linear methods}
-A generalization to Runge-Kutta methods is the family of so-called general linear methods (GLM).
-They can be thought of as a combination of RK and multistep methods.
-A GLM consists of $s$ stages and $r$ history points. For $r=1$ we recover normal Runge-Kutta methods.
-The $s$ stage points $Y_i,~0<i<s-1$ and stage derivatives $F_i$ are defined as follows:
-\begin{align*}
-  Y_i = \sum_{j=0}^{s-1} a_{ij}\Delta t F_j + \sum_{j=0}^{r-1}u_{ij} y_{n-j}, \qquad F_j := f(t+\Delta t c_i, Y_j).
-\end{align*}
-As one can see, we now have two matrices $\bvec{A} = (a_{ij})$ and $\bvec{U} = (u_{ij})$ that define the stages.
-For the update to the numerical solution we similarly have two vectors $\bvec{b}$ and $\bvec{v}$:
-\begin{align*}
-  y_{n+1} = \sum_{i=0}^{s-1} b_i\Delta t F_i + \sum_{i=0}^{r-1}v_i y_{n-i}.
-\end{align*}
-Applying a GLM to the test problem $f(t,y) = \lambda y$ leads to the following:
-\begin{align*}
-  Y_i =& \sum_{j=0}^{s-1} z a_{ij} Y_j + \sum_{j=0}^{r-1} u_{ij}y_{n-j} \\
-  y_{n+1} =& \sum_{i=0}^{s-1} z b_i Y_i + \sum_{i=0}^{r-1} v_iy_{n-i},
-\end{align*}
-where $z:=\lambda \Delta t.$
-Applying some linear algebra we can write the stage values the following way:
-\begin{align*}
-  \bvec{Y} := \begin{pmatrix}
-    Y_0 \\
-    Y_1 \\
-    Y_2 \\
-    \vdots \\
-    Y_{s-1}
-  \end{pmatrix} = z \bvec{A} \bvec{Y} + \bvec{U}\begin{pmatrix}
-    y_n \\
-    y_{n-1} \\
-    y_{n-2} \\
-    \vdots \\
-    y_{n-r+1}
-  \end{pmatrix},
-\end{align*}
-which can be compacted into $(\bvec{I} - z \bvec{A})\bvec{Y} = \bvec{U} \bvec{y},$ with $\bvec{y} = (y_n, y_{n-1}, y_{n-2}, \hdots, y_{n-r+1})^T.$
-Thus, for the stage points we simply find
-\begin{equation*}
-  \bvec{Y} = (\bvec{I} - z\bvec{A})^{-1}\bvec{Uy}
-\end{equation*}
-and hence the update becomes
-\begin{equation*}
-  \bvec{y}(t_{n+1}) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}\bvec{Uy} + \bvec{v}\cdot\bvec{y}.
-\end{equation*}
-As a check, consider $\bvec{U}=1$ and $\bvec{v} = 1$ and $r=1,$ in which case we should recover the result for RK methods.
-We see that in this case
-\begin{equation*}
-  \bvec{y}(t_{n+1}) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}\bvec{y}(t_n) + \bvec{y}(t_n).
-\end{equation*}
-If we have $y(t_n) = 1$ and divide by it, we recover the stability function:
-\begin{equation*}
-  y(t_{n+1})/y(t_n) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}(1,1,1,\hdots,1)^T + 1,
-\end{equation*}
-which indeed is the stability function for RK methods.
+Even this simple 3-stage method was a pain, so it would be great if there was a more straightforward way to go about determining the stability region of the method. In particular, it would be helpful to be able to find $\bvec{b}$ so that the method is L-stable or at least A-stable.
 
+If the absolute value of all eigenvalues of $\bvec{A}$ are less than 1, we can for example use the identity
+\begin{equation*}
+  (\bvec{I}-z\bvec{A})^{-1} = \sum_{n=0}^{\infty} z^n \bvec{A}^n
+\end{equation*}
+If we decompose $\bvec{A}$ into its eigenvalues and eigenvectors this furthermore becomes
+\begin{equation*}
+  (\bvec{I}-z\bvec{A})^{-1} = \sum_{n=0}^{\infty} z^n \bvec{P}\bvec{D}^n \bvec{P}^{-1}
+\end{equation*}
+where $\bvec{P}$ is a matrix containing the eigenvectors of $\bvec{A}$ and $\bvec{D}$ is a diagonal matrix with the eigenvalues of $\bvec{A}$ on its diagonal.
+
+Multiplying left and right with $\bvec{b}$ and $\bvec{e}$ gives us
+\begin{equation*}
+  \bvec{b}^T(\bvec{I}-z\bvec{A})^{-1}\bvec{e} = \bvec{b}^T\bvec{P}  \sum_{n=0}^{\infty} z^n \bvec{D}^n  (\bvec{P}^{-1}\bvec{e})
+\end{equation*}
+This means we can in principle just evaluate $\bvec{b}^{T}\bvec{P}$ once and $\bvec{P}^{-1}\bvec{e}$ and we can generate the full stability polynomial.
+
+As proof of concept, we consider the two-stage Lobatto-IIIC method with
+\begin{equation*}
+  \bvec{A} = \begin{pmatrix}
+    \half & -\half \\
+    \half & \half
+  \end{pmatrix}
+\end{equation*}
+This matrix has characteristic polynomial $\rho(\lambda) = (\lambda - \half)^2 + \frac{1}{4} = \lambda^2 - \lambda + \half.$ from which we find eigenvalues $\lambda = (1 \pm i)/2.$ To verify, $(1 \pm i)^2/4 = (1 \pm 2i + i^2)/4 = \pm i/2.$ Therefore, substituting the eigenvalue back in $\rho(\lambda)$ gives us $\pm i/2 - \half \mp i/2 + \half=0$ so we indeed have the proper roots.
+
+To find the eigenvectors, we solve
+\begin{equation*}
+  \begin{pmatrix}
+    \frac{1 \pm i}{2} - \half & \half \\
+    -\half & \frac{1 \pm i}{2} - \half
+  \end{pmatrix}
+  \begin{pmatrix}
+    x \\ y
+  \end{pmatrix} =
+  \begin{pmatrix}
+    \pm \frac{i}{2} & \half \\
+    -\half & \pm \frac{i}{2}
+  \end{pmatrix}
+  \begin{pmatrix}
+    x \\ y
+  \end{pmatrix} =
+  \half
+  \begin{pmatrix}
+    \pm i x + y \\
+    -x \pm i y
+  \end{pmatrix}
+  = \bvec{0}.
+\end{equation*}
+For the $+$ we find $\frac{1}{\sqrt{2}}(i, 1)^T$ as eigenvector and for $-$ we obtain $\frac{1}{\sqrt{2}}(-i, 1)^T.$ The eigenvectors are already normalized and we find that
+\begin{align*}
+  \bvec{P}\bvec{P}^{-1} =
+  \half \begin{pmatrix}
+    i & -i \\
+    1 & 1
+  \end{pmatrix}
+  \begin{pmatrix}
+   -i & 1 \\
+    i & 1
+  \end{pmatrix} = \half
+  \begin{pmatrix}
+    -i^2 - i^2 & i - i \\
+     -i + i  & 1 + 1
+  \end{pmatrix} = \bvec{I}
+\end{align*}
+Therefore, we also know that
+\begin{align*}
+  \bvec{P}\bvec{D}\bvec{P}^{-1} &=
+  \frac{1}{4} \begin{pmatrix}
+    i & -i \\
+    1 &  1
+  \end{pmatrix}
+  \begin{pmatrix}
+    1 + i & \\
+    & 1 - i
+  \end{pmatrix}
+  \begin{pmatrix}
+    -i & 1 \\
+    i &  1
+  \end{pmatrix} = \frac{1}{4}
+  \begin{pmatrix}
+    i & -i \\
+    1 & 1
+  \end{pmatrix}
+  \begin{pmatrix}
+    -i - i^2 & 1 + i \\
+    i - i^2 & 1 - i
+  \end{pmatrix} \\
+  =& \frac{1}{4}
+  \begin{pmatrix}
+    i & -i \\
+    1 &  1
+  \end{pmatrix}
+  \begin{pmatrix}
+   1 - i & 1 + i \\
+   1 + i & 1 - i \\
+  \end{pmatrix} = \frac{1}{4}
+  \begin{pmatrix}
+    i - i^2 - i - i^2 & i + i^2 -i + i^2 \\
+    1 - i + 1 + i & 1 + i + 1 - i
+  \end{pmatrix} \\
+  =& \frac{1}{4}\begin{pmatrix}
+    2 & -2 \\
+    2 & 2
+  \end{pmatrix} =
+  \begin{pmatrix}
+    \half & -\half \\
+    \half & \half
+  \end{pmatrix} = \bvec{A}
+\end{align*}
+Using this decomposition it is also straightforward to determine $(\bvec{I}-z\bvec{A})^{-1},$ since we can write
+\begin{align*}
+  (\bvec{I} - z\bvec{A})^{-1} =&   (\bvec{P}\bvec{P}^{-1} - z\bvec{P}\bvec{D}\bvec{P}^{-1})^{-1} = \left(\bvec{P}\left(\bvec{I} - z\bvec{D}\right)\bvec{P}^{-1}\right)^{-1} = \\
+  =& \bvec{P}\left(\bvec{I} - z\bvec{D}\right)^{-1}\bvec{P}^{-1}
+\end{align*}
+We already know what $\bvec{D}$ is so we can simply write
+\begin{align*}
+  (\bvec{I} - z\bvec{D})^{-1}
+  \begin{pmatrix}
+    1 - \half z(1 + i) & \\
+    & 1 - \half z(1 - i)
+  \end{pmatrix}^{-1} =
+  2\begin{pmatrix}
+    \frac{1}{2 - z(1 + i)} & \\
+    & \frac{1}{2 - z(1 - i)}
+  \end{pmatrix}
+\end{align*}
+Reconstructing the inverse matrix is now simply evaluating
+\begin{align*}
+  (\bvec{I} - z\bvec{A})^{-1} =&
+  \half\cdot2 \begin{pmatrix}
+    i & -i \\
+    1 &  1
+  \end{pmatrix}
+  \begin{pmatrix}
+    \frac{1}{2 - z(1 + i)} & \\
+    & \frac{1}{2 - z(1 - i)}
+  \end{pmatrix}
+  \begin{pmatrix}
+   -i & 1 \\
+    i & 1
+  \end{pmatrix}
+\end{align*}
+but it's even more convenient to directly use the expression for the stability region and compute directly:
+\begin{align*}
+  R(Z) = y(t_{n+1})/y(t_n) =& 1 + z \bvec{b}\cdot(\bvec{I}-z\bvec{A})^{-1} \bvec{e} \\
+  =& 1 + z \bvec{b}\cdot \bvec{P}(\bvec{I}-z\bvec{D})^{-1} \bvec{P^{-1}e}
+\end{align*}
+We can easily compute the outermost terms to obtain
+\begin{align*}
+  R(z) =& 1 + z\begin{pmatrix}
+    b_1i + b_2 \\
+   -b_1i + b_2
+  \end{pmatrix} \begin{pmatrix}
+    \frac{1}{2 - z(1+i)} & \\
+    & \frac{1}{2 - z(1-i)}
+  \end{pmatrix}
+  \begin{pmatrix}
+    1 - i \\
+    1 + i
+  \end{pmatrix}
+\end{align*}
+The right-most product becomes $\left((1-i)/(2-z - iz), (1+i)/(2 - z + iz)\right)^T$ and therefore
+\begin{align*}
+  R(z) =& 1 + z \begin{pmatrix}
+    b_2 + b_1i  \\
+   b_2 - b_1i
+  \end{pmatrix}^T\begin{pmatrix}
+    \frac{1-i}{2-z - iz} \\
+    \frac{i+1}{2 - z + iz}
+  \end{pmatrix} = 1 + z \left[ \frac{(b_2+ib_1)(1-i)}{2 -z - iz} + \frac{(b_2- ib_1)(1+i)}{2-z+iz}\right] \\
+  =& 1 + \frac{z[(b_2 + ib_1 - ib_2 + b_1)(2 - z + iz) + (b_2 - ib_1 + ib_2 + b_1)(2 - z - iz)]}{(2-z)^2 + z^2} \\
+  =& 1 + \frac{z[(b_1 + b_2 + i(b_1 - b_2))(2 - z + iz) + (b_2(1 + i) + b_1(1 - i))(2 - z - iz)]}{(2-z)^2 + z^2} \\
+  =& 1 + \frac{z(2-z)\left[b_1 + b_2 + ib_1 - ib_2 + b_2 + ib_2 + b_1 - ib_1\right]}{(2-z)^2 + z^2}  \\
+        &+ \frac{iz^2 \left[  (b_1 + b_2 + ib_1 - ib_2 - b_2 - ib_2 - b_1 + ib_1)\right]  }{(2-z)^2 + z^2} \\
+  =& 1 + \frac{z(2-z)\left(2b_1 + 2b_2\right) + iz^2\left(2i(b_1 - b_2)\right)}{4 - 4z + 2z^2} \\
+  =& 1 + \frac{4(b_1+b_2)z - 2(b_1+b_2)z^2 - 2z^2 (b_1-b_2)}{4 - 4z + 2z^2} = 1 + \frac{4(b_1+b_2)z - 4 b_1 z^2}{4 - 4z + 2z^2} \\
+  =& 1 + \frac{(b_1+b_2)z - b_1z^2}{1 - z + \half z^2} = \frac{1 + (b_1+b_2 - 1)z + (\half - b_1) z^2}{1 - z + \half z^2}
+\end{align*}
+Choosing $b_1 = b_2 = \half$ clearly recovers the Pad\'{e} approximant $P(n-2, n)$ and the method is L-stable.
+
+Applying the method directly leads to the following:
+\begin{align*}
+  \begin{pmatrix}
+    k_1 \\ k_2
+  \end{pmatrix} =  \begin{pmatrix} (\lambda y_0 + z (\half k_1 - \half k_2) \\
+    (\lambda y_0 + z(\half k_1 + \half k_2))
+    \end{pmatrix}
+\end{align*}
+From the first equation we have $k_1(1 - \half z) = \lambda y_0 - \half z k_2$ and so
+\begin{align*}
+  k_2 \left(1 - \half z\right)^2 =& \lambda y_0\left(1 - \half z\right) + \half z \left(\lambda y_0 - \half z k_2\right) \\
+  k_2\left[(1 - \half z)^2 + \frac{1}{4}z^2\right] =& \lambda y_0 \\
+  k_2 =& \frac{\lambda y_0}{1 - z + \half z^2}, \qquad k_1 = \frac{\lambda y_0(1 - z)}{1 - z + \half z^2} = (1-z)k_2
+\end{align*}
+This means that for the next value for $y$ we have
+\begin{align*}
+  y_1 = y_0 + \Delta t (b_1k_1 + b_2k_2) = y_0 + z y_0 \frac{b_1(1-z)+b_2}{1 - z + \half z^2}
+\end{align*}
+and the stability function becomes
+\begin{align*}
+  R(z) =& y_1/y_0 = 1 + z\frac{b_1(1-z) + b_2}{1 - z + \half z^2} = \frac{1 - z + \half z^2 + (b_1+b_2)z - b_1z^2}{1 - z + \half z^2}
+\end{align*}
+At $b_1=b_2=\half$ we find
+\begin{align*}
+  R(z) =&  \frac{1 - z + \half z^2 + z - \half z^2}{1 - z + \half z^2} = \frac{1}{1 - z + \half z^2}
+\end{align*}
+which is correct since Lobatto IIIC methods of order $n$ correspond to the Pad\'{e} approximant $P(n-2, n).$
+
+
+We now use the above method involving eigenvalues to derive two sets of coefficients for the 3-stage Lobatto IIIC method. We have the following Butcher tableau:
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c|cccc}
+    0 & $\frac{1}{6}$ & $-\frac{1}{3} $ & $\frac{1}{6}$ \\
+    $\half$ & $\frac{1}{6}$ & $\frac{5}{12}$ & $-\frac{1}{12}$ \\
+    1 & $\frac{1}{6}$ & $\frac{2}{3}$ &  $\frac{1}{6}$ \\ \hline
+    {} & $\frac{1}{6}$ & $\frac{2}{3}$ & $\frac{2}{6}$
+  \end{tabular}
+\end{table}
+The inverse is given by
+\begin{align*}
+  \bvec{A}^{-1} =& \begin{pmatrix}
+     3 &  4 & -1 \\
+    -1 &  0 &  1 \\
+     1 & -4 &  3
+  \end{pmatrix} \\
+  \bvec{A}^{-1}\bvec{A} =& \frac{1}{12} \begin{pmatrix}
+     3 &  4 & -1 \\
+    -1 &  0 &  1 \\
+     1 & -4 &  3
+  \end{pmatrix} \begin{pmatrix}
+    2 & -4 & 2 \\
+    2 & 5 & -1 \\
+    2 & 8 & 2
+  \end{pmatrix} \\
+  =& \frac{1}{12}\begin{pmatrix}
+    6 + 8 - 2 & -12 + 20 - 8 & 6 - 4 - 2 \\
+    -2 + 2 & 4 + 8 & -2 + 2 \\
+    2 - 8 + 6 & -4 - 20 + 24 & 2 + 4 + 6
+  \end{pmatrix} = \begin{pmatrix}
+    12 & 0 & 0 \\
+    0 & 12 & 0 \\
+    0 & 0 & 12
+  \end{pmatrix} = \bvec{I}
+\end{align*}
+We can find the eigenvalues from $\det (\lambda \bvec{I} - \bvec{A})) = 0:$
+\begin{align*}
+  \det (\lambda \bvec{I} - \bvec{A}) =& \left| \begin{matrix}
+    \lambda - \frac{1}{6} & \frac{1}{3} & -\frac{1}{6} \\
+    -\frac{1}{6} & \lambda - \frac{5}{12} & \frac{1}{12} \\
+    -\frac{1}{6} & -\frac{2}{3} & \lambda - \frac{1}{6}
+  \end{matrix}
+  \right| = (\lambda - \frac{1}{6}) \left[ (\lambda - \frac{5}{12})(\lambda - \frac{1}{6}) + \frac{1}{18} \right] \\
+                                      & + \frac{1}{6}\left[\frac{\lambda}{3} - \frac{1}{18} - \frac{1}{9}\right] - \frac{1}{6}\left[ \frac{1}{36} + \frac{1}{6}(\lambda - \frac{5}{12}) \right] \\
+  =& (\lambda - \frac{1}{6})^2(\lambda - \frac{5}{12}) + \frac{1}{18}(\lambda - \frac{1}{6}) + \frac{\lambda}{18} - \frac{1}{36} - \frac{1}{6^3} - \frac{1}{6^2}(\lambda - \frac{5}{12}) \\
+  =& (\lambda^2 - \frac{1}{3}\lambda + \frac{1}{36})(\lambda - \frac{5}{12}) + \frac{1}{36}\lambda - \frac{1}{18\cdot 6} - \frac{1}{6^3} + \frac{5}{2\cdot 6^3} \\
+  =& \lambda^3 - \frac{1}{3}\lambda^2 + \frac{1}{36}\lambda - \frac{5}{12}\lambda^2 + \frac{5}{36}\lambda - \frac{5}{12\cdot 36} + \frac{1}{36}\lambda - \frac{1}{2\cdot 6^3} \\
+  =& \lambda^3 - \frac{3}{4}\lambda^2 + \frac{7}{36}\lambda - \frac{1}{2\cdot 6^3} = 0
+\end{align*}
+The solution is quite complicated, we use Maxima to obtain the roots:
+\begin{align*}
+  \lambda =& -ac_+ + \frac{c_-}{48a} + \frac{1}{4}, -ac_- + \frac{c_+}{48a}  + \frac{1}{4}, a - \frac{1}{4a} + \frac{1}{4}, \\
+  a =& \left(\frac{1}{96^{3/2}} + \frac{1}{192}\right)^{1/3}, \qquad
+c_\pm = \half \pm \sqrt{3}i\half
+\end{align*}
+This is also not super handy. More convenient is to let Maxima do some work on the direct equation
+\begin{equation*}
+  R(z) = 1 + z \left(b_0, b_1, b_2\right)\left[\bvec{I} - z \bvec{A}\right]^{-1}\left(1, 1, 1\right)^T
+\end{equation*}
+We can simplify and expand $[\bvec{I}-z\bvec{A}]^{-1}(1,1,1)^T$ to
+\begin{align*}
+  [\bvec{I}-z\bvec{A}]^{-1}(1,1,1)^T = \frac{1}{1 - \frac{3}{4}z + \frac{1}{4}z^2 - \frac{z^3}{24}}\begin{pmatrix}
+    1 - \frac{3}{4}z + \frac{1}{4}z^2 \\
+    1 - \frac{3}{4}z \\
+    1 + \frac{3}{4}z
+    \end{pmatrix}
+\end{align*}
+and obtain
+\begin{align*}
+  &1 + z \bvec{b}\cdot[\bvec{I}-z\bvec{A}]^{-1}(1,1,1)^T \\
+  &= \frac{1 - \frac{3}{4}z + \frac{1}{4}z^2 - \frac{z^3}{24} + b_1z(1 - \frac{3}{4}z + \frac{1}{4}z^2) + b_2z(1 - \frac{1}{4}z) + b_3z(1 + \frac{1}{4}z)}{1 - \frac{3}{4}z + \frac{1}{4}z^2 - \frac{z^3}{24}}
+\end{align*}
+We can collect all terms of equal powers of $z$ in the numerator:
+\begin{align*}
+  \frac{1 + \left(b_1 + b_2 + b_3 - \frac{3}{4}\right)z + \left(\frac{1}{4} - \frac{3}{4}b_1 - \frac{1}{4}b_2 + \frac{1}{4}b_3 \right)z^2 + \left(\frac{1}{4}b_1 - \frac{1}{24}\right)z^3}{1 - \frac{3}{4}z + \frac{1}{4}z^2 - \frac{1}{24}z^3}
+\end{align*}
+To recover the Pad\'{e} approximant $P(1, 3)$ we require
+\begin{align*}
+  b_1+b_2+b_3 - \frac{3}{4} = \frac{1}{4}, \quad 1 + b_3 - b_2 - 3b_1 = 0, \quad b_1 - \frac{1}{6} = 0
+\end{align*}
+Clearly we obtain $b_1 = 1/6,$ $b_2+b_3 = 5/6$ and $b_3-b_2 = -\frac{1}{2}$ and adding the latter two leads to $2b_3 = \frac{5}{6} - \frac{3}{6} = \frac{1}{3}$ so we find $b_3 = \frac{1}{6}$ and $b_2=\frac{2}{3}.$
+
+For an embedded pair, we would still require $b_1=1/6$ because the numerator needs to be a power lower than $z^3.$ A second requirement is always that $b_1=b_2=b_3=1$ or else the method is not consistent.
+This leaves us with only a single unknown, since we have $b_1 = \frac{1}{6}$ and $b_2 = \frac{5}{6} - b_3.$ The 3-stage Lobatto IIIC methods has no $z^2$ term in the numerator, but we can choose an alternate value $b_2$ to keep it.
+For example, we can choose $b_2=\half$ and obtain $b_3 = \frac{5}{6} - \frac{3}{6} = \frac{1}{3}.$
+This means that for the stability region we have
+\begin{equation*}
+  R(z) = \frac{1 + \frac{1}{4}z + \frac{1}{12}z^2}{1 - \frac{3}{4}z + \frac{1}{4}z^2 - \frac{1}{24}z^3}
+\end{equation*}
+Clearly, in the limit of $z\rightarrow -\infty,$ we obtain $R(z) \rightarrow 0.$
+
+We might as well make the choice for $b_2$ optimal in some sense. For example, we could maximize the accuracy/order of consistency of the method, if possible.
+The Taylor series expansion of the stability region is
+\begin{align*}
+  R(z) =& 1 + (b_1+b_2+b_3)z + \half \left(2b_2 + b_3\right)z^2 + \frac{1}{6}\left(\frac{3}{4}b_2 + 6b_3\right)z^3 \\
+  &+ \frac{1}{24}\left(b_1 + \frac{1}{4}b_2 + 4b_3\right)z^4 + \mathcal{O}(z^5)
+\end{align*}
+Substitution of $b_1=\frac{1}{6}$, which is required for L-stability, and $b_2 = \frac{5}{6}-b_3,$ which follows from $b_1+b_2+b_3=1,$ we have
+\begin{align*}
+  R(z) =& 1 + z + \half \left(\frac{5}{3} - b_3\right)z^2 + \frac{1}{6}\left(\frac{3}{4}\left(\frac{5}{6} - b_3\right) + 6b_3\right)z^3 \\
+  &+ \frac{1}{24}\left(\frac{1}{6} + \frac{1}{4}\left(\frac{5}{6} - b_3\right) + 4b_3\right)z^4 + \mathcal{O}(z^5)
+\end{align*}
+The Taylor series for $\exp(z)$ up to fifth order is of course $1 + z + \half z^2 + \frac{1}{6}z^3 + \frac{1}{24}z^4 + \mathcal{O}(z^5)$ so we require $b_3 = 2/3.$
+We summarize the third order Lobatto IIIC method with embedded method in the following Butcher tableau:
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c|ccc}
+    $0$ & $\frac{1}{6}$ & $-\frac{1}{3}$ & $\frac{1}{6}$ \\
+    $\half$ & $\frac{1}{6}$ & $\frac{5}{12}$ & $-\frac{1}{12}$ \\
+    $1$ & $\frac{1}{6}$ & $\frac{2}{3}$  & $\frac{1}{6}$ \\ \hline
+    {} & $\frac{1}{6}$ & $\frac{2}{3}$  & $\frac{1}{6}$ \\
+    {} & $\frac{1}{6}$ & $\frac{1}{6}  $& $\frac{2}{3}$
+  \end{tabular}
+\end{table}
+Interestingly, the coefficients for the embedded $\bvec{b}$ are a cyclic rotation of the original $b.$
+
+
+\subsection{A note on stability of embedded methods}
+In the above section, we looked at Lobatto IIIC methods and saw that because the main Lobatto IIIC method corresponds to a Pad\'{e} $P(n-2, n)$ approximation, we can choose parameters $\bvec{b}$ for the embedded method such that it is of a lower order but still $L$-stable.
+I think that for Radau methods that is, in general, not possible.
+Consider the 2-stage Radau IIA method, given by
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c|ccc}
+    $\frac{1}{3}$ & $\frac{5}{12}$ & $-\frac{1}{12} $ \\
+    $1$ & $\frac{3}{4}$ & $\frac{1}{4}$ \\ \hline
+    {} & $\frac{3}{4}$ & $\frac{1}{4}$
+  \end{tabular}
+\end{table}
+so we have
+\begin{align*}
+  \bvec{I}-z\bvec{A} =& \begin{pmatrix}
+    1 - \frac{5}{12}z & \frac{1}{12}z \\
+    -\frac{3}{4}z & 1 - \frac{1}{4}z
+  \end{pmatrix}, \\
+  (\bvec{I}-z\bvec{A})^{-1} =& \frac{1}{(1-\frac{5}{12}z)(1-\frac{1}{4}z) + \frac{1}{16}z^2}
+  \begin{pmatrix}
+    1 - \frac{1}{4}z & -\frac{1}{12}z \\
+    \frac{3}{4}z & 1 - \frac{5}{12}z
+  \end{pmatrix}
+\end{align*}
+% test
+% \begin{align*}
+%   (\bvec{I}-z\bvec{A})^{-1}(\bvec{I}-z\bvec{A}) =&
+%   \frac{1}{(1-\frac{5}{12}z)(1-\frac{1}{4}z) + \frac{1}{16}}
+%   \begin{pmatrix}
+%     1 - \frac{5}{12}z & -\frac{3}{4} \\
+%     \frac{1}{12} & 1 - \frac{1}{4}z
+%   \end{pmatrix}
+%   \begin{pmatrix}
+%     1 - \frac{1}{4}z & \frac{3}{4} \\
+%     -\frac{1}{12} & 1 - \frac{5}{12}z
+%   \end{pmatrix} \\
+%   =& \frac{1}{(1-\frac{5}{12}z)(1-\frac{1}{4}z) + \frac{1}{16}}
+%      \begin{pmatrix}
+%        (1-\frac{5}{12}z)(1 - \frac{1}{4}z) + \frac{1}{16} & 0 \\
+%        0 & \frac{1}{16} + (1-\frac{1}{4}z)(1-\frac{5}{12}z)
+%      \end{pmatrix} = \bvec{I}
+% \end{align*}
+
+and the stability region is
+\begin{align*}
+  1 + z (b_0, b_1) (\bvec{I}-z\bvec{A})^{-1}(1,1)^T =& 1 + \frac{z}{(1-\frac{5}{12}z)(1-\frac{1}{4}z) + \frac{1}{16}z^2} (b_0, b_1) \begin{pmatrix}
+    1 - \frac{1}{3}z \\
+    1 + \frac{1}{3}z
+  \end{pmatrix} \\
+  =& 1 + z\frac{(b_0 + b_1) - \frac{b_0-b_1}{3}z}{1 - \frac{2}{3}z + \frac{1}{6}z^2}
+\end{align*}
+Simplifying this to one fraction leads to
+\begin{align*}
+  R(z) = \frac{1 + \left(b_0 + b_1 - \frac{2}{3}\right)z + \left(\frac{1}{6}-\frac{1}{3}b_0+\frac{1}{3}b_1\right)z^2}{1 - \frac{2}{3}z + \frac{1}{6}z^2}
+\end{align*}
+Consistency requires $b_0+b_1=1$ and for the Radau IIA method we have $b_1=\frac{1}{4}$ to obtain
+\begin{align*}
+  R(z) = \frac{1 + \frac{1}{3}z}{1 - \frac{2}{3}z + \frac{1}{6}z^2}
+\end{align*}
+We see that in this case, because $L$-stability is guaranteed by virtue of $b_0=3b_1=\frac{3}{4}$, we cannot make another choice for $\bvec{b}$ that will guarantee an $L$-stable embedded method that is still consistent. The best we can do is $A$-stability, for which we might not be able to guarantee in general.
+The natural choice based on the Pad\'{e} approximation is to have the numerator match the Taylor series of $\exp(\frac{1}{3}z)$ up to second degree:
+\begin{equation*}
+  1 + \frac{1}{3}z + \left(\frac{1}{6}-\frac{1}{3}b_0+\frac{1}{3}b_1\right)z^2 := 1 + \frac{1}{3}z + \frac{1}{18}z^2
+\end{equation*}
+
+which leads to $(b_1 - b_0) = -\frac{1}{3}.$ Combining with $b_0+b_1=1$ we find $2b_1 = \frac{2}{3}$ so $b_1=\frac{1}{3}$ and $b_0 = \frac{2}{3}.$ We end up with
+\begin{equation*}
+  R(z) = \frac{1 + \frac{1}{3}z + \frac{1}{18}z^2}{1 - \frac{2}{3}z + \frac{1}{6}z^2}
+\end{equation*}
+In the limit of $z \downarrow -\infty$ we see that $R(z) \rightarrow \frac{1}{3}.$
+Picking $b_0=b_1$ is about the worst we can do, it makes the method marginally $A$-stable with $R(z\downarrow -\infty)=1.$
+For optimal consistency, we can take the product of the Taylor series to find
+\begin{align*}
+  &\left[1 + \frac{1}{3}z + \left(\frac{1}{6} - \frac{1}{3}b_0 + \frac{1}{3}b_1\right)z^2\right]\left[1 + \frac{2}{3}z + \frac{1}{6}z^2\right] \\
+  =& 1 + z + \half z^2\left(\frac{1}{3} - \frac{2b_0}{3} + \frac{2b_1}{3} + \frac{1}{3} + \frac{4}{9}\right) + \frac{1}{6}z^3 \left(\frac{1}{3}  + \frac{2}{3}\left(1 - 2b_0 + 2b_1\right)\right)  + \mathcal{O}(z^4)
+\end{align*}
+Since we only have $b_1-b_0$ appearing in this form, we only have one degree of freedom, and choosing second-order consistency leads to
+\begin{equation*}
+  \frac{10}{9} + \frac{6}{9}(b_1-b_0) = 1
+\end{equation*}
+from which we obtain $b_1-b_0 = -\frac{1}{6}$ which is consistent with our previous choice of $b_0 = \frac{2}{3} = 2b_1.$
+We summarize the third order Radau IIA method with embedded method in the following Butcher tableau:
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c|ccc}
+    $\frac{1}{3}$ & $\frac{5}{12}$ & $-\frac{1}{12} $ \\
+    $1$ & $\frac{3}{4}$ & $\frac{1}{4}$ \\ \hline
+    {} & $\frac{3}{4}$ & $\frac{1}{4}$ \\
+    {} & $\frac{1}{3}$ & $\frac{2}{3}$
+  \end{tabular}
+\end{table}
+
+\clearpage{}
 
 \section{Multistep methods}
 Another approach to solving ODEs is to use multistep methods.
@@ -617,6 +1036,76 @@ is the full Jacobi matrix of the BDF method, where $\bvec{J}$ is the Jacobi matr
 
 
 
+
+
+
+
+
+
+
+
+
+\section{General linear methods}
+A generalization to Runge-Kutta methods is the family of so-called general linear methods (GLM).
+They can be thought of as a combination of RK and multistep methods.
+A GLM consists of $s$ stages and $r$ history points. For $r=1$ we recover normal Runge-Kutta methods.
+The $s$ stage points $Y_i,~0<i<s-1$ and stage derivatives $F_i$ are defined as follows:
+\begin{align*}
+  Y_i = \sum_{j=0}^{s-1} a_{ij}\Delta t F_j + \sum_{j=0}^{r-1}u_{ij} y_{n-j}, \qquad F_j := f(t+\Delta t c_i, Y_j).
+\end{align*}
+As one can see, we now have two matrices $\bvec{A} = (a_{ij})$ and $\bvec{U} = (u_{ij})$ that define the stages.
+For the update to the numerical solution we similarly have two vectors $\bvec{b}$ and $\bvec{v}$:
+\begin{align*}
+  y_{n+1} = \sum_{i=0}^{s-1} b_i\Delta t F_i + \sum_{i=0}^{r-1}v_i y_{n-i}.
+\end{align*}
+Applying a GLM to the test problem $f(t,y) = \lambda y$ leads to the following:
+\begin{align*}
+  Y_i =& \sum_{j=0}^{s-1} z a_{ij} Y_j + \sum_{j=0}^{r-1} u_{ij}y_{n-j} \\
+  y_{n+1} =& \sum_{i=0}^{s-1} z b_i Y_i + \sum_{i=0}^{r-1} v_iy_{n-i},
+\end{align*}
+where $z:=\lambda \Delta t.$
+Applying some linear algebra we can write the stage values the following way:
+\begin{align*}
+  \bvec{Y} := \begin{pmatrix}
+    Y_0 \\
+    Y_1 \\
+    Y_2 \\
+    \vdots \\
+    Y_{s-1}
+  \end{pmatrix} = z \bvec{A} \bvec{Y} + \bvec{U}\begin{pmatrix}
+    y_n \\
+    y_{n-1} \\
+    y_{n-2} \\
+    \vdots \\
+    y_{n-r+1}
+  \end{pmatrix},
+\end{align*}
+which can be compacted into $(\bvec{I} - z \bvec{A})\bvec{Y} = \bvec{U} \bvec{y},$ with $\bvec{y} = (y_n, y_{n-1}, y_{n-2}, \hdots, y_{n-r+1})^T.$
+Thus, for the stage points we simply find
+\begin{equation*}
+  \bvec{Y} = (\bvec{I} - z\bvec{A})^{-1}\bvec{Uy}
+\end{equation*}
+and hence the update becomes
+\begin{equation*}
+  \bvec{y}(t_{n+1}) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}\bvec{Uy} + \bvec{v}\cdot\bvec{y}.
+\end{equation*}
+As a check, consider $\bvec{U}=1$ and $\bvec{v} = 1$ and $r=1,$ in which case we should recover the result for RK methods.
+We see that in this case
+\begin{equation*}
+  \bvec{y}(t_{n+1}) = z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}\bvec{y}(t_n) + \bvec{y}(t_n).
+\end{equation*}
+If we have $y(t_n) = 1$ and divide by it, we recover the stability function:
+\begin{equation*}
+  y(t_{n+1})/y(t_n) = 1 + z \bvec{b} \cdot (\bvec{I} - z\bvec{A})^{-1}(1,1,1,\hdots,1)^T,
+\end{equation*}
+which indeed is the stability function for RK methods.
+
+
+
+
+
+
+
 \section{Optimizations in implementing IRK methods}
 Consider again a three-stage IRK method, e.g. a three-stage Radau method.
 We have
@@ -733,6 +1222,8 @@ For $y=0$ we have $u(x,0) = u_0$ and for $y = L_y$ we have $u(x,L_y) = u_0.$ Thi
   Y(y) = \sum_{n=0}^\infty (A_n\cos(n \pi y) + B_n \sin(n\pi y))
 \end{equation*}
 and $A_0 = u_0.$
+
+
 
 
 
