@@ -298,7 +298,7 @@ int int_equation(functor_type &F, const user_options &u_opts, vec_type Y0)
 		erk::solver_options s_opts = erk::default_solver_options();
 		set_erk_options(s_opts, u_opts);
 		erk::rk_output sol = erk::odeint(F, u_opts.t0, u_opts.t1, Y0,
-		                                 s_opts, method, u_opts.dt);
+		                                 s_opts, output_opts, method, u_opts.dt);
 		if (sol.status) {
 			std::cerr << "Got an error integrating ODE. :/\n";
 			return 2;
