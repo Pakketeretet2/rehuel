@@ -263,7 +263,7 @@ void no_apply_fsal_dummy(mat_type &Ks, std::size_t Ns)
 template <typename functor_type> inline
 rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
                    const solver_options &solver_opts, double dt,
-                   const solver_coeffs &sc)
+                   const solver_coeffs &sc, const output_options &output_opts)
 {
 	if( t0 + dt > t1 ){
 		std::cerr << "    Rehuel: Initial dt (" << dt;
@@ -421,6 +421,14 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			          << " " <<  dt << " " << err << "\n";
 		}
 
+		if (output_opts.write_to_file()) {
+			*output_opts.output_stream << t;
+			for (std::size_t y_idx = 0; y_idx < y_n.size(); ++y_idx) {
+				*output_opts.output_stream << " " << y_n[y_idx];
+			}
+			*output_opts.output_stream << "\n";
+		}
+
 		// ********************* Update y and time ***************
 		if (!solver_opts.adaptive_step_size || integrator_status == 0) {
 			y  = y_n;
@@ -471,19 +479,19 @@ rk_output erk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 */
 template <typename functor_type> inline
 rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0,
-                 solver_options solver_opts,
+                 solver_options solver_opts, const output_options &output_opts,
                  int method = erk::DORMAND_PRINCE_54, double dt = 1e-6)
 {
 	solver_coeffs sc = get_coefficients(method);
 	if (solver_opts.adaptive_step_size && sc.b2.size() == 0) {
-		std::cerr << "    Rehuel: WARNING: Cannot have adaptive time "
+		output_opts.log_out << "    Rehuel: WARNING: Cannot have adaptive time "
 		          << "step with non-embedding method! Disabling "
 		          << "adaptive time step size!\n";
 		solver_opts.adaptive_step_size = false;
 	}
 
 	assert (verify_solver_coeffs(sc) && "Invalid solver coefficients!");
-	return erk_guts(func, t0, t1, y0, solver_opts, dt, sc);
+	return erk_guts(func, t0, t1, y0, solver_opts, dt, sc, output_opts);
 }
 
 
@@ -504,7 +512,8 @@ template <typename functor_type> inline
 rk_output odeint( functor_type &func, double t0, double t1, const vec_type &y0)
 {
 	solver_options s_opts = default_solver_options();
-	return odeint(func, t0, t1, y0, s_opts);
+	output_options output_opts;
+	return odeint(func, t0, t1, y0, s_opts, output_opts);
 }
 
 
