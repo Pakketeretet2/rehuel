@@ -12,6 +12,9 @@ into other projects, similar to Matlab's ode45 and ode15s.
 On the other hand, the project also provides me with an interesting test bed
 for the various methods out there.
 
+Note that the focus is mainly on implicit solvers for stiff problems. We recommend
+the LOBATTO_IIIC methods specifically.
+
 For a quick tutorial/guide, see the guide in \ref guide.md
 
 ---------------
@@ -19,21 +22,14 @@ Recommended solvers
 ---------------
 
 <b>Non-stiff:</b>
-    DORMAND_PRINCE_54    (A good default explicit RK method (think ode45))
-    CASH_KARP_54         (Ditto, might be optimized later to "fail early"
-                         on moderately stiff systems)
-    BOGACKI_SHAMPINE_32  (If you need less accuracy and more speed)
+ -   DORMAND_PRINCE_54    A good default explicit RK method (think Matlab's ode45)
+ -   CASH_KARP_54         Ditto, might be optimized later to "fail early" on moderately stiff systems
+ -   BOGACKI_SHAMPINE_32  If you need less accuracy and more speed
 
-<b>Moderately stiff</b>:
-    It depends really. Try DORMAND_PRINCE_54, and monitor your RAM. If you are
-running out of RAM and/or the solution takes forever, integrate over a
-shorter interval. If the solution still takes too long, try a stiff solver.
-    Alternatively, you can just try an IRK method and benefit from its higher accuracy too.
-
-<b>Very stiff</b>:
-    LOBATTO_IIIC_85  (this should probably be your default stiff solver)
-    LOBATTO_IIIC_43  (faster than the 85 method but less accurate)
-    RADAU_IIA_53     (should work decently well too)
+<b>Stiff</b>:
+ -   LOBATTO_IIIC_85  This should probably be your default stiff solver
+ -   LOBATTO_IIIC_43  Hypothetically faster than the 85 method but less accurate, in practice it's a bit of a wash
+ -   RADAU_IIA_53     Should work decently well too
 
 In examples/example_equations.cpp we provide a small driver program that can
 apply various methods to various problems so you can get a feel for the
@@ -61,3 +57,5 @@ by Ernst Hairer and Gerhard Wanner:
  - Stiff differential equations solved by Radau methods
  - Solving Ordinary Differential Equations I
  - Solving Ordinary Differential Equations II
+
+See also notes.tex for some original derivations and ideas.
