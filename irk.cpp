@@ -339,8 +339,9 @@ solver_coeffs get_coefficients( int method )
 		sc.c  = { 1.0/3.0, 1.0 };
 		sc.b  = { 3.0/4.0, 1.0/4.0 };
 
-		sc.b2 = { (-6*sc.gamma + 3.0) / 4.0,
-		          ( 2*sc.gamma + 1.0) / 4.0 };
+		// sc.b2 = { (-6*sc.gamma + 3.0) / 4.0,
+		//           ( 2*sc.gamma + 1.0) / 4.0 };
+		sc.b2 = {2.0/3.0, 1.0/3.0};
 
 		sc.order = 3;
 		sc.order2 = 2;
@@ -793,4 +794,35 @@ void restore_state( const rk_output &sol, double &t, vec_type &y, vec_type &K,
 
 }
 
+
 } // namespace irk
+
+
+std::ostream &operator<<(std::ostream &o, const irk::solver_coeffs &sc)
+{
+	const int number_width = 6;
+	o << sc.name << '\n';
+	for (std::size_t i = 0; i < sc.c.size(); ++i) {
+		o << std::setw(number_width+4) << std::setprecision(number_width) << sc.c[i] << " | ";
+		for (std::size_t j = 0; j < sc.b.size(); ++j) {
+			o << " " << std::setw(number_width+4) << std::setprecision(number_width) << sc.A(i, j);
+		}
+		o << "\n";
+	}
+	std::string spacer(number_width+4, ' ');
+	o << std::string(number_width+5, '-')  << "+" << std::string((4 + number_width)*sc.b.size(), '-') << "------\n";
+	o << spacer << " | ";
+	for (std::size_t i = 0; i < sc.b.size(); ++i) {
+		o << " " << std::setw(number_width+4) << std::setprecision(number_width) << sc.b(i);
+	}
+	o << "\n";
+
+	if (sc.b2.size() > 0) {
+		o << spacer << " | ";
+		for (std::size_t i = 0; i < sc.b2.size(); ++i) {
+			o << " " << std::setw(number_width+4) << std::setprecision(number_width) << sc.b2(i);
+		}
+		o << "\n";
+	}
+	return o;
+}

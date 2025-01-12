@@ -32,7 +32,7 @@ shorter interval. If the solution still takes too long, try a stiff solver.
 
 <b>Very stiff</b>:
     LOBATTO_IIIC_85  (this should probably be your default stiff solver)
-    LOBATTO_IIIC_43  (might be faster than the 85 method but seems to have trouble with some problems)
+    LOBATTO_IIIC_43  (faster than the 85 method but less accurate)
     RADAU_IIA_53     (should work decently well too)
 
 In examples/example_equations.cpp we provide a small driver program that can

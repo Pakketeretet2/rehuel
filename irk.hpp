@@ -922,15 +922,14 @@ rk_output odeint(functor_type &func, double t0, double t1, const vec_type &y0)
 	n_opts.tol = 0.1*std::min(s_opts.abs_tol, s_opts.rel_tol);
 
 	s_opts.newton_opts = &n_opts;
-	return odeint(func, t0, t1, y0, s_opts);
+	output_options output_opts;
+	return odeint(func, t0, t1, y0, s_opts, output_opts);
 }
-
-/**
-   @}
-*/
 
 
 } // namespace irk
 
+
+std::ostream &operator<<(std::ostream &o, const irk::solver_coeffs &sc);
 
 #endif // IRK_HPP
