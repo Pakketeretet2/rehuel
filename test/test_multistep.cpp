@@ -1,6 +1,6 @@
 #include "multistep.hpp"
 #include "test_equations.hpp"
-#include "catch.hpp"
+#include "catch2/catch_all.hpp"
 
 TEST_CASE("Multistep methods", "[multistep]")
 {

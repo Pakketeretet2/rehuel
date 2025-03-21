@@ -1,4 +1,4 @@
-#include "catch.hpp"
+#include "catch2/catch_all.hpp"
 #include "cyclic_buffer.hpp"
 
 #include <iostream>
