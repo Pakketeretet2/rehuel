@@ -16,3 +16,8 @@ html
 obj
 obj_lib
 
+test/CMakeCache.txt
+test/Makefile
+test/CMakeFiles/
+test/cmake_install.cmake
+test/test

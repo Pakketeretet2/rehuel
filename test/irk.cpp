@@ -2,7 +2,7 @@
 
 #include "../arma_include.hpp"
 
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include "irk.hpp"
 #include "test_equations.hpp"
 
@@ -162,8 +162,8 @@ TEST_CASE( "Test if the product generator works.", "[collocation]" )
 			bb2 += b_interp(1,i);
 		}
 
-		REQUIRE( b1 == Approx(bb1) );
-		REQUIRE( b2 == Approx(bb2) );
+		REQUIRE( b1 == Catch::Approx(bb1) );
+		REQUIRE( b2 == Catch::Approx(bb2) );
 
 	}
 
@@ -288,9 +288,9 @@ TEST_CASE("Calculate stages for the robertson problem.", "[irk_calc_stages]")
 	std::cerr << "A:\n" << sc.A << "\nAi:\n" << Ai << "\n";
 	std::cerr << "y1 = \n" << y1 << "\nTrue y1 = \n" << true_y1 << "\n";
 
-	REQUIRE(y1(0) == Approx(true_y1(0)).epsilon(1e-2));
-	REQUIRE(y1(1) == Approx(true_y1(1)).epsilon(1e-2));
-	REQUIRE(y1(2) == Approx(true_y1(2)).epsilon(1e-2));
+	REQUIRE(y1(0) == Catch::Approx(true_y1(0)).epsilon(1e-2));
+	REQUIRE(y1(1) == Catch::Approx(true_y1(1)).epsilon(1e-2));
+	REQUIRE(y1(2) == Catch::Approx(true_y1(2)).epsilon(1e-2));
 
 
 }
