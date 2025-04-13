@@ -11,7 +11,7 @@
 \usepackage[toc,page]{appendix}
 \usepackage[sort]{cite}
 
-
+\usepackage{gensymb}
 \usepackage{hyperref}
 
 
@@ -41,6 +41,7 @@ The methods can be summarized easily in so-called Butcher tableaus, which conven
 \begin{table}[b]
   \centering
   \caption{Butcher tableaus for some Runge-Kutta methods: The implicit midpoint (left), the classical Runge-Kutta method (center), and the fourth order Gauss-Legendre method (right). \label{tab:butcher}}
+  \def\arraystretch{1.5}%
   \begin{tabular}{c|c}
     $\half$ & $\half$ \\ \hline
     & 1
@@ -805,6 +806,7 @@ We summarize the third order Lobatto IIIC method with embedded method in the fol
 Interestingly, the coefficients for the embedded $\bvec{b}$ are a cyclic rotation of the original $b.$
 
 
+
 \subsection{A note on stability of embedded methods}
 In the above section, we looked at Lobatto IIIC methods and saw that because the main Lobatto IIIC method corresponds to a Pad\'{e} $P(n-2, n)$ approximation, we can choose parameters $\bvec{b}$ for the embedded method such that it is of a lower order but still $L$-stable.
 I think that for Radau methods that is, in general, not possible.
@@ -896,6 +898,9 @@ We summarize the third order Radau IIA method with embedded method in the follow
     {} & $\frac{1}{3}$ & $\frac{2}{3}$
   \end{tabular}
 \end{table}
+
+\subsection{More coefficients}
+In the appendix we derive/show more coefficients for embedded IRK methods that Rehuel supports.
 
 \clearpage{}
 
@@ -1105,88 +1110,87 @@ which indeed is the stability function for RK methods.
 
 
 
-
-\section{Optimizations in implementing IRK methods}
-Consider again a three-stage IRK method, e.g. a three-stage Radau method.
-We have
-\begin{align*}
-  \bvec{Y} :=& \Delta t
-  \begin{pmatrix}
-    a_{11}\bvec{k}_1 + a_{12}\bvec{k}_2 + a_{13}\bvec{k}_3 \\
-    a_{21}\bvec{k}_1 + a_{22}\bvec{k}_2 + a_{23}\bvec{k}_3 \\
-    a_{31}\bvec{k}_1 + a_{32}\bvec{k}_2 + a_{33}\bvec{k}_3
-  \end{pmatrix} \\
-  =& \Delta t \begin{pmatrix}
-    a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 & 0 \\
-    0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 \\
-    0 & 0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} \\
-    a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 & 0 \\
-    0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 \\
-    0 & 0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} \\
-    a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 & 0 \\
-    0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 \\
-    0 & 0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33}
-     \end{pmatrix}
-     \begin{pmatrix}
-       k_{11} \\
-       k_{12} \\
-       k_{13} \\
-       k_{21} \\
-       k_{22} \\
-       k_{23} \\
-       k_{31} \\
-       k_{32} \\
-       k_{33} \\
-     \end{pmatrix}
-\end{align*}
-With this we solved the equation
-\begin{align*}
-  (\Delta t \bvec{A}\otimes \bvec{I})^{-1}\bvec{Y} = \begin{pmatrix}
-  \bvec{f}(t + c_1\Delta t, \bvec{y} + \bvec{Y}_1) \\
-  \bvec{f}(t + c_2\Delta t, \bvec{y} + \bvec{Y}_2) \\
-  \bvec{f}(t + c_3\Delta t, \bvec{y} + \bvec{Y}_3) \\
-  \end{pmatrix}
-\end{align*}
-which written out explicitly is
-\begin{align*}
-  \Delta t \begin{pmatrix}
-    a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 & 0 \\
-    0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 \\
-    0 & 0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} \\
-    a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 & 0 \\
-    0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 \\
-    0 & 0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} \\
-    a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 & 0 \\
-    0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 \\
-    0 & 0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33}
-     \end{pmatrix}^{-1}
-     \begin{pmatrix}
-       Y_{11} \\
-       Y_{12} \\
-       Y_{13} \\
-       Y_{21} \\
-       Y_{22} \\
-       Y_{23} \\
-       Y_{31} \\
-       Y_{32} \\
-       Y_{33} \\
-     \end{pmatrix} = \\
-  \begin{pmatrix}
-      f_1(t+c_1\Delta t, y_1+Y_{11}+Y_{12}+Y_{13}) \\
-      f_2(t+c_1\Delta t, y_2+Y_{11}+Y_{12}+Y_{13}) \\
-      f_3(t+c_1\Delta t, y_3+Y_{11}+Y_{12}+Y_{13}) \\
-      f_1(t+c_2\Delta t, y_1+Y_{21}+Y_{22}+Y_{23}) \\
-      f_2(t+c_2\Delta t, y_2+Y_{21}+Y_{22}+Y_{23}) \\
-      f_3(t+c_2\Delta t, y_3+Y_{21}+Y_{22}+Y_{23}) \\
-      f_1(t+c_3\Delta t, y_1+Y_{31}+Y_{32}+Y_{33}) \\
-      f_2(t+c_3\Delta t, y_2+Y_{31}+Y_{32}+Y_{33}) \\
-      f_3(t+c_3\Delta t, y_3+Y_{31}+Y_{32}+Y_{33}) \\
-  \end{pmatrix}
-\end{align*}
-Now, suppose we can find a transformation for the matrix $\bvec{A}$ such that
-\begin{equation*}
-  \bvec{A} = \bvec{T}^{-1}\bvec{U}\bvec{T}
-\end{equation*}
+%\section{Optimizations in implementing IRK methods}
+%Consider again a three-stage IRK method, e.g. a three-stage Lobatto IIIC method.
+%We have
+%\begin{align*}
+%  \bvec{Y} :=& \Delta t
+%  \begin{pmatrix}
+%    a_{11}\bvec{k}_1 + a_{12}\bvec{k}_2 + a_{13}\bvec{k}_3 \\
+%    a_{21}\bvec{k}_1 + a_{22}\bvec{k}_2 + a_{23}\bvec{k}_3 \\
+%    a_{31}\bvec{k}_1 + a_{32}\bvec{k}_2 + a_{33}\bvec{k}_3
+%  \end{pmatrix} \\
+%  =& \Delta t \begin{pmatrix}
+%    a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 & 0 \\
+%    0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 \\
+%    0 & 0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} \\
+%    a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 & 0 \\
+%    0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 \\
+%    0 & 0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} \\
+%    a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 & 0 \\
+%    0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 \\
+%    0 & 0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33}
+%     \end{pmatrix}
+%     \begin{pmatrix}
+%       k_{11} \\
+%       k_{12} \\
+%       k_{13} \\
+%       k_{21} \\
+%       k_{22} \\
+%       k_{23} \\
+%       k_{31} \\
+%       k_{32} \\
+%       k_{33} \\
+%     \end{pmatrix}
+%\end{align*}
+%With this we solved the equation
+%\begin{align*}
+%  (\Delta t \bvec{A}\otimes \bvec{I})^{-1}\bvec{Y} = \begin{pmatrix}
+%  \bvec{f}(t + c_1\Delta t, \bvec{y} + \bvec{Y}_1) \\
+%  \bvec{f}(t + c_2\Delta t, \bvec{y} + \bvec{Y}_2) \\
+%  \bvec{f}(t + c_3\Delta t, \bvec{y} + \bvec{Y}_3) \\
+%  \end{pmatrix}
+%\end{align*}
+%which written out explicitly is
+%\begin{align*}
+%  \Delta t \begin{pmatrix}
+%    a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 & 0 \\
+%    0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} & 0 \\
+%    0 & 0 & a_{11} & 0 & 0 &  a_{12} & 0 & 0 & a_{13} \\
+%    a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 & 0 \\
+%    0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} & 0 \\
+%    0 & 0 & a_{21} & 0 & 0 &  a_{22} & 0 & 0 & a_{23} \\
+%    a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 & 0 \\
+%    0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33} & 0 \\
+%    0 & 0 & a_{31} & 0 & 0 &  a_{32} & 0 & 0 & a_{33}
+%     \end{pmatrix}^{-1}
+%     \begin{pmatrix}
+%       Y_{11} \\
+%       Y_{12} \\
+%       Y_{13} \\
+%       Y_{21} \\
+%       Y_{22} \\
+%       Y_{23} \\
+%       Y_{31} \\
+%       Y_{32} \\
+%       Y_{33} \\
+%     \end{pmatrix} = \\
+%  \begin{pmatrix}
+%      f_1(t+c_1\Delta t, y_1+Y_{11}+Y_{12}+Y_{13}) \\
+%      f_2(t+c_1\Delta t, y_2+Y_{11}+Y_{12}+Y_{13}) \\
+%      f_3(t+c_1\Delta t, y_3+Y_{11}+Y_{12}+Y_{13}) \\
+%      f_1(t+c_2\Delta t, y_1+Y_{21}+Y_{22}+Y_{23}) \\
+%      f_2(t+c_2\Delta t, y_2+Y_{21}+Y_{22}+Y_{23}) \\
+%      f_3(t+c_2\Delta t, y_3+Y_{21}+Y_{22}+Y_{23}) \\
+%      f_1(t+c_3\Delta t, y_1+Y_{31}+Y_{32}+Y_{33}) \\
+%      f_2(t+c_3\Delta t, y_2+Y_{31}+Y_{32}+Y_{33}) \\
+%      f_3(t+c_3\Delta t, y_3+Y_{31}+Y_{32}+Y_{33}) \\
+%  \end{pmatrix}
+%\end{align*}
+%Now, suppose we can find a transformation for the matrix $\bvec{A}$ such that
+%\begin{equation*}
+%  \bvec{A} = \bvec{T}^{-1}\bvec{U}\bvec{T}
+%\end{equation*}
 
 
 \section{Some more test equations}
@@ -1223,7 +1227,55 @@ For $y=0$ we have $u(x,0) = u_0$ and for $y = L_y$ we have $u(x,L_y) = u_0.$ Thi
 \end{equation*}
 and $A_0 = u_0.$
 
+\clearpage{}
+\begin{appendix}
+  \section{More coefficients for different methods}
+  %recommended methods
+  %LOBATTO_IIIC_85 (FIX)
+  %rest
+  %LOBATTO_IIIA_32
+  %RADAU_IIA_53
+  %RADAU_IIA_95
+  %RADAU_IIA_137
+  %GAUSS_LEGENDRE_147
+  %LOBATTO_IIIA_127
+  %LOBATTO_IIIC_127
 
+  \subsection{Lobatto IIIC methods}
+  For the Lobatto IIIC methods of 4 and 5 stages, we can derive similar embedded pairs.
+  The 4 stage method has Butcher tableau
+  \begin{table}[h]
+    \centering
+    \caption{4-stage Lobatto IIIC method}
+      \def\arraystretch{1.5}%
+  \begin{tabular}{c|cccc}
+    0                             & $\frac{1}{12}$ & $-\frac{\sqrt{5}}{12}$ & $\frac{\sqrt{5}}{12}$ & $-\frac{1}{12}$ \\
+    $\half - \frac{\sqrt{5}}{10}$ & $\frac{1}{12}$ & $\frac{1}{4}$ & $\frac{10-7\sqrt{5}}{60}$ & $\frac{\sqrt{5}}{60} $ \\
+    $\half + \frac{\sqrt{5}}{10}$ & $\frac{1}{12}$ & $\frac{10+7\sqrt{5}}{60}$ & $\frac{1}{4}$ & $-\frac{\sqrt{5}}{60}$ \\
+    1                             & $\frac{1}{12}$ & $\frac{5}{12}$ & $\frac{5}{12}$ & $\frac{1}{12}$ \\ \hline
+    {} & $\frac{1}{12}$ & $\frac{5}{12}$ & $\frac{5}{12}$ & $\frac{1}{12}$ \\
+    {} & $\frac{1}{12}$ & $\frac{1}{12}$ & $\frac{5}{12}$ & $\frac{5}{12}$ \\
+  \end{tabular}
+\end{table}
+
+For the 5-stage, we apply the simple cyclic rotation (each $\bvec{b}$ coefficient shifts one to the right). This leads to a method that is $A(\alpha)$ stable with $\alpha\approx 71\degree,$ which is not spectacular
+  \begin{table}[h]
+    \centering
+    \caption{5-stage Lobatto IIIC method}
+    \def\arraystretch{1.5}%
+  \begin{tabular}{c|ccccc}
+    0                             & $\frac{1}{20}$ & $-\frac{7}{60}$ & $\frac{2}{15}$ & $-\frac{7}{60}$ & $\frac{1}{20}$ \\
+    $\half - \frac{\sqrt{21}}{14}$ & $\frac{1}{20}$ & $\frac{29}{180}$ & $\frac{47-15\sqrt{21}}{315}$ & $\frac{203-30\sqrt{21}}{1260}$ & $-\frac{3}{140}$ \\
+    $\half$ & $\frac{1}{20}$ & $\frac{329+105\sqrt{21}}{2880}$ & $\frac{73}{360}$ & $\frac{329-105\sqrt{21}}{2880}$ & $\frac{3}{160}$ \\
+    $\half + \frac{\sqrt{21}}{14}$ & $\frac{1}{20}$ & $\frac{203+30\sqrt{21}}{1260}$ & $\frac{47+15\sqrt{21}}{315}$ & $\frac{29}{180} $ & $-\frac{3}{140}$ \\
+    $1$ & $\frac{1}{20}$ & $\frac{49}{180}$ & $\frac{16}{45}$ & $\frac{49}{180}$ & $\frac{1}{20}$ \\ \hline
+    {} & $\frac{1}{20}$ & $\frac{49}{180}$ & $\frac{16}{45}$ & $\frac{49}{180}$ & $\frac{1}{20}$ \\
+    {} & $\frac{1}{20}$ & $\frac{1}{20}$ & $\frac{49}{180}$ & $\frac{16}{45}$ & $\frac{49}{180}$
+  \end{tabular}
+\end{table}
+
+  \subsection{Radau IIA methods}
+\end{appendix}
 
 
 
