@@ -48,8 +48,9 @@
 	METHOD(LOBATTO_IIIA_127, 222)     \
 	                                  \
 	METHOD(LOBATTO_IIIC_43,  230)     \
-	METHOD(LOBATTO_IIIC_85,  231)     \
-	METHOD(LOBATTO_IIIC_127, 232)     \
+	METHOD(LOBATTO_IIIC_64,  231)     \
+	METHOD(LOBATTO_IIIC_85,  232)     \
+	METHOD(LOBATTO_IIIC_127, 233)     \
 	                                  \
 	METHOD(GAUSS_LEGENDRE_42,  240)   \
 	METHOD(GAUSS_LEGENDRE_63,  241)   \
@@ -65,7 +66,7 @@
 	                                  \
 	METHOD(CASH_KARP_54,130)          \
 	METHOD(DORMAND_PRINCE_54,131)     \
-	METHOD(FEHLBERG_54,132)           
+	METHOD(FEHLBERG_54,132)
 
 
 
@@ -89,11 +90,11 @@ enum rk_methods {
 
 /// \brief enumerates all implemented explicit RK methods.
 namespace erk {
-	
+
 enum rk_methods {
 	FOREACH_ERK_METHOD(GENERATE_ENUM)
 };
-	
+
 } // namespace erk
 
 
@@ -122,7 +123,7 @@ enum odeint_status_codes {
 	ERROR_LARGER_THAN_ABSTOL = 64,
 
 	ERROR_MAX_STEPS_EXCEEDED = 128
-	
+
 };
 
 static constexpr const double machine_precision = 1e-17;
