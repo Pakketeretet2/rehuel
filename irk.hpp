@@ -326,7 +326,8 @@ mat_type collocation_interpolate_coeffs( const vec_type &c );
 
 
 inline void print_timing_breakdown(const std::vector<double> &timings,
-                                   std::ostream &out = std::cerr)
+                                   std::ostream &out = std::cerr,
+                                   const std::string &method_name = "IRK")
 {
 	double total_t = std::accumulate(timings.begin(), timings.end(), 0.0);
 
@@ -348,7 +349,7 @@ inline void print_timing_breakdown(const std::vector<double> &timings,
 	}
 	total_t *= time_scale;
 
-	out << "     Rehuel: IRK done solving, timings (" << time_unit << " | %):\n";
+	out << "    Rehuel: " << method_name << " done solving, timings (" << time_unit << " | %):\n";
 	print_line(total_t,    total_t, "Total time:                  ");
 	print_line(time_scale*timings[0], total_t, "Vector setup:                ");
 	print_line(time_scale*timings[1], total_t, "Stages update:               ");
@@ -627,8 +628,6 @@ rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 			sol.count.fun_evals,
 			sol.count.jac_evals);
 
-
-
 		if (time_internals) timings[UPDATE_STAGES] += timer.toc();
 
 		// *********** Verify Newton iteration convergence ************
@@ -864,7 +863,7 @@ rk_output irk_guts(functor_type &func, double t0, double t1, const vec_type &y0,
 	sol.elapsed_time = elapsed;
 	sol.accept_frac = static_cast<double>(step) / sol.count.attempt;
 
-	if (time_internals) print_timing_breakdown(timings);
+	if (time_internals) print_timing_breakdown(timings, std::cerr, sc.name);
 
 	return sol;
 }
